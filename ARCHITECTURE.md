@@ -247,6 +247,7 @@ All edge functions run on Supabase Edge Functions (Deno runtime) and are configu
 **Behavior**:
 1. Initialize Supabase client
 2. Fetch workspace details (for `default_system_prompt`)
+   - Uses **Chief Quant system prompt** as base identity if workspace prompt is empty
 3. Load previous messages from `messages` table (limited to last N for context)
 4. **Memory Retrieval**:
    - Generate embedding for user's message using OpenAI embeddings API
@@ -258,7 +259,7 @@ All edge functions run on Supabase Edge Functions (Deno runtime) and are configu
      - "Relevant Rules and Warnings:" (critical/high rules/warnings first)
      - "Other Relevant Insights:" (remaining notes)
 5. Construct message array:
-   - System message: workspace prompt + memory context
+   - System message: **Chief Quant identity** (workspace prompt or fallback) + memory context
    - Previous messages (last N)
    - New user message
 6. Save user message to `messages` table
@@ -266,14 +267,49 @@ All edge functions run on Supabase Edge Functions (Deno runtime) and are configu
 8. Save assistant response to `messages` table
 9. Return assistant content to client
 
+**Chief Quant System Prompt**:
+The chat uses a specialized **Chief Quant Researcher** identity defined in `supabase/functions/_shared/chiefQuantPrompt.ts`:
+- **Role**: Quantitative researcher for convexity-focused options strategies (rotation-engine)
+- **Philosophy**: Structural edge over parameter fitting, regime-aware analysis, anti-overfitting discipline
+- **Capabilities**: Tool-aware (backtests, memory, comparisons), memory-driven reasoning
+- **Style**: Direct, analytical, transparent about uncertainty, proposes concrete experiments
+- This prompt is used as fallback if workspace `default_system_prompt` is empty
+
 **Error Handling**:
-- If memory retrieval fails: log error, skip memory injection, continue with chat
+- If memory retrieval fails: log error, skip memory injection, continue with Chief Quant identity
 - If OpenAI API fails: return 500 with error message
 - If workspace not found: return 404
 
 **CORS**: Enabled with `Access-Control-Allow-Origin: *`
 
 **JWT Verification**: Disabled (`verify_jwt = false` in config)
+
+---
+
+### `workspace-init-prompt`
+
+**Endpoint**: `POST /functions/v1/workspace-init-prompt`
+
+**Request Body**:
+```json
+{
+  "workspaceId": "uuid",
+  "reset": false
+}
+```
+
+**Behavior**:
+1. Initialize Supabase client
+2. Fetch workspace's current `default_system_prompt`
+3. If empty (or `reset=true`): set to Chief Quant prompt
+4. If already set: skip unless `reset=true`
+5. Return action taken (initialized, reset, or skipped)
+
+**Use Case**: Initialize new workspaces with Chief Quant identity or reset existing workspaces
+
+**CORS**: Enabled
+
+**JWT Verification**: Disabled
 
 ---
 
