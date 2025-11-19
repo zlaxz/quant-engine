@@ -7,6 +7,8 @@ import { supabase } from '@/integrations/supabase/client';
 import type { BacktestRun, BacktestParams, BacktestMetrics } from '@/types/backtest';
 import { buildAuditPrompt } from '@/prompts/auditorPrompt';
 import { buildRunSummary, buildMemorySummary, type MemoryNote } from '@/lib/auditSummaries';
+import { buildPatternMinerPrompt } from '@/prompts/patternMinerPrompt';
+import { buildRunsAggregate, buildRelevantMemory } from '@/lib/patternSummaries';
 
 export interface CommandResult {
   success: boolean;
@@ -548,6 +550,112 @@ async function handleAuditRun(args: string, context: CommandContext): Promise<Co
 }
 
 /**
+ * /mine_patterns command - detect recurring patterns across runs and memory
+ * Usage: /mine_patterns [limit]
+ * Examples:
+ *   /mine_patterns
+ *   /mine_patterns 50
+ */
+async function handleMinePatterns(args: string, context: CommandContext): Promise<CommandResult> {
+  const limit = parseInt(args.trim(), 10) || 100;
+
+  if (limit < 10 || limit > 200) {
+    return {
+      success: false,
+      message: 'Limit must be between 10 and 200.',
+    };
+  }
+
+  try {
+    // Fetch recent completed runs
+    const { data: runs, error: runsError } = await supabase
+      .from('backtest_runs')
+      .select('*')
+      .eq('session_id', context.sessionId)
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false })
+      .limit(limit);
+
+    if (runsError) throw runsError;
+
+    if (!runs || runs.length < 5) {
+      return {
+        success: false,
+        message: `❌ Not enough runs to mine patterns. Found ${runs?.length || 0} runs, need at least 5.\n\nUse /backtest to run more tests.`,
+      };
+    }
+
+    // Extract unique strategy keys
+    const strategyKeys = [...new Set(runs.map(r => r.strategy_key))];
+
+    // Fetch relevant memory notes
+    const { data: memoryData, error: memoryError } = await supabase
+      .from('memory_notes')
+      .select('*')
+      .eq('workspace_id', context.workspaceId)
+      .eq('archived', false)
+      .or(`tags.cs.{${strategyKeys.join(',')}},importance.in.(high,critical)`)
+      .order('importance', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    if (memoryError) throw memoryError;
+
+    const memoryNotes = (memoryData || []).map(note => ({
+      id: note.id,
+      content: note.content,
+      memory_type: note.memory_type || 'insight',
+      importance: note.importance || 'normal',
+      tags: note.tags || [],
+      run_id: note.run_id,
+      created_at: note.created_at,
+      source: note.source,
+      archived: note.archived || false,
+    }));
+
+    // Build summaries
+    const runSummary = buildRunsAggregate(runs as BacktestRun[]);
+    const memorySummary = buildRelevantMemory(memoryNotes, strategyKeys);
+
+    // Build pattern mining prompt
+    const patternPrompt = buildPatternMinerPrompt(runSummary, memorySummary);
+
+    // Call chat function
+    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat', {
+      body: {
+        sessionId: context.sessionId,
+        workspaceId: context.workspaceId,
+        content: patternPrompt,
+      },
+    });
+
+    if (chatError) throw chatError;
+
+    if (!chatData || !chatData.message) {
+      throw new Error('No response from chat function');
+    }
+
+    // Return pattern mining analysis
+    return {
+      success: true,
+      message: `🔍 **Pattern Mining Analysis** (${runs.length} runs, ${strategyKeys.length} strategies)\n\n${chatData.message}`,
+      data: {
+        runsAnalyzed: runs.length,
+        strategiesCount: strategyKeys.length,
+        memoryNotesCount: memoryNotes.length,
+        analysis: chatData.message,
+      },
+    };
+  } catch (error: any) {
+    console.error('Mine patterns command error:', error);
+    return {
+      success: false,
+      message: `❌ Failed to mine patterns: ${error.message || 'Unknown error'}`,
+    };
+  }
+}
+
+/**
  * /help command - show available commands
  */
 async function handleHelp(): Promise<CommandResult> {
@@ -566,6 +674,9 @@ async function handleHelp(): Promise<CommandResult> {
       `🔍 /audit_run N or /audit_run id:<runId>\n` +
       `   Perform deep Strategy Auditor analysis of a completed run\n` +
       `   Example: /audit_run 1 or /audit_run id:abc-123-def\n\n` +
+      `🧠 /mine_patterns [limit]\n` +
+      `   Detect recurring patterns across runs and memory (10-200, default: 100)\n` +
+      `   Example: /mine_patterns 50\n\n` +
       `💡 /note <content> [type:TYPE] [importance:LEVEL] [tags:tag1,tag2]\n` +
       `   Create a memory note\n` +
       `   Example: /note This fails in bear markets type:warning importance:high\n\n` +
@@ -601,6 +712,12 @@ const commands: Record<string, Command> = {
     description: 'Audit a completed backtest run',
     usage: '/audit_run N or /audit_run id:<runId>',
     handler: handleAuditRun,
+  },
+  mine_patterns: {
+    name: 'mine_patterns',
+    description: 'Detect recurring patterns across runs and memory',
+    usage: '/mine_patterns [limit]',
+    handler: handleMinePatterns,
   },
   note: {
     name: 'note',

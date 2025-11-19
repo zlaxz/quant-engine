@@ -48,6 +48,8 @@
 - `/runs [limit]` — List recent runs for current session
 - `/note <content> [type:TYPE] [importance:LEVEL] [tags:tag1,tag2]` — Create memory note from chat
 - `/compare [N]` — Compare N recent completed runs (default 2, max 5)
+- `/audit_run N` or `/audit_run id:<runId>` — Deep analysis of a specific run (Strategy Auditor mode)
+- `/mine_patterns [limit]` — Detect patterns across runs (Pattern Miner mode, default 100 runs)
 
 ---
 
@@ -86,11 +88,26 @@ Version 1.0 is considered complete when:
 
 ### Stage 3: Chief Quant Identity & Agent Modes ✅
 - ✅ **Chief Quant Persona**: Specialized system prompt installed as default workspace identity with quant research expertise, memory awareness, and tool knowledge
-- ⬜ **Audit Mode**: `/audit` command to review recent runs and identify patterns/anomalies
+- ✅ **Audit Mode**: `/audit_run` command to review individual runs with deep structural analysis
 - ⬜ **Curation Mode**: `/curate` command to help organize and consolidate memory notes
 - ⬜ **Experiment Suggestions**: Proactive suggestions for next experiments based on memory and run history
 
-### Stage 4: Thin Local-Code Tools
+### Stage 4: Strategy Auditor Mode ✅
+- ✅ **Single-Run Analysis**: `/audit_run` command implemented with 1-based indexing or direct run ID lookup
+- ✅ **Structured Output**: 6-section analysis (Overview, Structural Edge, Failure Modes, Rule Alignment, Suggested Experiments, Conclusion)
+- ✅ **Memory Integration**: Automatic retrieval of run-linked and strategy-tagged memory notes
+- ✅ **Audit Prompt Template**: `auditorPrompt.ts` with comprehensive analysis framework
+- ✅ **Summary Helpers**: `auditSummaries.ts` with `buildRunSummary` and `buildMemorySummary`
+
+### Stage 5: Pattern Miner Mode ✅
+- ✅ **Multi-Run Analysis**: `/mine_patterns` command analyzes 10-200 completed runs (default 100)
+- ✅ **Aggregation Logic**: `patternSummaries.ts` groups runs by strategy/regime, computes median metrics and failure rates
+- ✅ **Pattern Detection**: Identifies repeated patterns, cross-strategy insights, and conflicting evidence
+- ✅ **Rule Management**: Proposes evidence-backed candidate rules and identifies deprecated rules
+- ✅ **Pattern Mining Prompt**: `patternMinerPrompt.ts` with 6-section structured output
+- ✅ **Evidence Counting**: Emphasis on evidence counts and recurring themes across runs
+
+### Stage 6: Thin Local-Code Tools
 - **Repo Bridge**: Simple API bridge to local rotation-engine repo for reading code/configs
 - **Code Search**: `/code <query>` to search local repo from chat
 - **Config Preview**: Show current rotation-engine config in chat when discussing strategies

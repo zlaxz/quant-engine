@@ -345,6 +345,34 @@ Accessible via `/audit_run` slash command. Performs deep, structured analysis of
 
 ---
 
+### Pattern Miner Mode
+
+Accessible via `/mine_patterns` slash command. Analyzes multiple backtest runs to detect recurring structural patterns.
+
+**Purpose**: Identify patterns across 10-200 runs, cross-strategy insights, contradictions with stored rules, and evidence-backed candidate rules.
+
+**Inputs**:
+- Aggregated run summaries (10-200 completed runs, grouped by strategy and regime)
+- Relevant memory notes (strategy-tagged, high/critical rules/warnings, run-linked)
+
+**Output Structure**:
+1. **Repeated Patterns**: Conditions repeatedly associated with success/failure (with evidence counts)
+2. **Cross-Strategy Insights**: Patterns visible across different strategies and regime-independent factors
+3. **Conflicting Evidence**: Where stored rules contradict empirical results
+4. **Candidate Rules**: Proposed new rules with evidence counts, importance levels, and tags
+5. **Deprecated Rules**: Existing rules contradicted by recent evidence with counter-evidence
+6. **Suggested Experiments**: Concrete tests to confirm/refute detected patterns
+
+**Template**: `src/prompts/patternMinerPrompt.ts` → `buildPatternMinerPrompt(runSummary, memorySummary)`
+
+**Summary Helpers**: `src/lib/patternSummaries.ts`
+- `buildRunsAggregate(runs)`: Groups runs by strategy and regime, computes median metrics, failure rates
+- `buildRelevantMemory(notes, strategyKeys)`: Prioritizes rules/warnings by importance, limits to top 15
+
+**Integration**: Command fetches recent completed runs, aggregates metrics by strategy/regime, fetches relevant memory, builds summaries, calls `chat` edge function with pattern mining prompt → structured multi-section analysis returned
+
+---
+
 ### `backtest-run`
 
 **Endpoint**: `POST /functions/v1/backtest-run`
@@ -632,6 +660,34 @@ All commands are parsed and executed in `ChatArea.tsx` before sending to LLM.
      - Suggested Experiments
      - Conclusion
   8. Display audit result in chat as system message
+
+#### `/mine_patterns [limit]`
+- **Description**: Detect recurring patterns across multiple backtest runs and memory
+- **Usage**:
+  - `/mine_patterns` (default limit=100)
+  - `/mine_patterns 50` (analyze last 50 completed runs)
+- **Behavior**:
+  1. Parse optional limit argument (10-200, default 100)
+  2. Fetch last N completed runs for current session
+  3. Extract unique strategy keys from runs
+  4. Fetch relevant memory notes:
+     - Strategy-tagged notes (tags matching run strategies)
+     - High/critical importance rules/warnings
+     - Limit to 30 most relevant notes
+  5. Build aggregated summaries:
+     - `buildRunsAggregate(runs)`: groups by strategy/regime, computes medians, failure rates
+     - `buildRelevantMemory(notes, strategyKeys)`: prioritizes rules/warnings, limits to top 15
+  6. Build pattern mining prompt using Pattern Miner mode template
+  7. Call `chat` edge function with pattern prompt
+  8. Return structured analysis with sections:
+     - Repeated Patterns (with evidence counts)
+     - Cross-Strategy Insights
+     - Conflicting Evidence
+     - Candidate Rules (proposed new rules)
+     - Deprecated Rules (contradicted by evidence)
+     - Suggested Experiments
+  9. Display pattern mining result in chat as system message
+  10. Minimum 5 completed runs required
 
 ### Command Autocomplete
 
