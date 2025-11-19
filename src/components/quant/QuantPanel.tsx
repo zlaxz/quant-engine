@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { useChatContext } from '@/contexts/ChatContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ExperimentBrowser } from './ExperimentBrowser';
+import { RunComparisonPanel } from './RunComparisonPanel';
 
 interface Strategy {
   id: string;
@@ -52,6 +53,7 @@ export const QuantPanel = ({ selectedRunIdFromMemory }: QuantPanelProps) => {
   const [insightContent, setInsightContent] = useState('');
   const [insightImportance, setInsightImportance] = useState('normal');
   const [isSavingInsight, setIsSavingInsight] = useState(false);
+  const [selectedRunsForComparison, setSelectedRunsForComparison] = useState<string[]>([]);
 
   useEffect(() => {
     loadStrategies();
@@ -70,9 +72,14 @@ export const QuantPanel = ({ selectedRunIdFromMemory }: QuantPanelProps) => {
         .from('backtest_runs')
         .select('*')
         .eq('id', runId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
+
+      if (!data) {
+        toast.error('Run not found');
+        return;
+      }
 
       setCurrentRun(data);
       toast.success('Run loaded from memory');
@@ -284,6 +291,24 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
     }).format(value);
   };
 
+  const handleToggleComparison = (runId: string) => {
+    setSelectedRunsForComparison(prev => {
+      if (prev.includes(runId)) {
+        return prev.filter(id => id !== runId);
+      } else {
+        if (prev.length >= 3) {
+          toast.error('Maximum 3 runs can be selected for comparison');
+          return prev;
+        }
+        return [...prev, runId];
+      }
+    });
+  };
+
+  const handleClearComparisonSelection = () => {
+    setSelectedRunsForComparison([]);
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -298,9 +323,24 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
         sessionId={selectedSessionId}
         onSelectRun={(run) => setCurrentRun(run)}
         selectedRunId={currentRun?.id}
+        selectedForComparison={selectedRunsForComparison}
+        onToggleComparison={handleToggleComparison}
       />
 
       <Separator />
+
+      {/* Run Comparison Panel */}
+      {selectedRunsForComparison.length > 0 && (
+        <>
+          <RunComparisonPanel
+            selectedRunIds={selectedRunsForComparison}
+            runs={[]} // Will be fetched internally
+            strategies={strategies}
+            onClearSelection={handleClearComparisonSelection}
+          />
+          <Separator />
+        </>
+      )}
 
       {/* Strategy Selection */}
       <div className="space-y-2">

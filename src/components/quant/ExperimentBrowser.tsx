@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, FileText, Calendar, TrendingUp, Zap, Activity, AlertCircle, Save } from 'lucide-react';
+import { Loader2, FileText, Calendar, TrendingUp, Zap, Activity, AlertCircle, Save, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -26,9 +26,17 @@ interface ExperimentBrowserProps {
   sessionId: string | null;
   onSelectRun: (run: BacktestRun) => void;
   selectedRunId?: string;
+  selectedForComparison?: string[];
+  onToggleComparison?: (runId: string) => void;
 }
 
-export const ExperimentBrowser = ({ sessionId, onSelectRun, selectedRunId }: ExperimentBrowserProps) => {
+export const ExperimentBrowser = ({ 
+  sessionId, 
+  onSelectRun, 
+  selectedRunId,
+  selectedForComparison = [],
+  onToggleComparison
+}: ExperimentBrowserProps) => {
   const [runs, setRuns] = useState<BacktestRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -180,26 +188,50 @@ export const ExperimentBrowser = ({ sessionId, onSelectRun, selectedRunId }: Exp
             <Card
               key={run.id}
               className={cn(
-                'p-3 cursor-pointer transition-all hover:shadow-md',
+                'p-3 transition-all hover:shadow-md',
                 selectedRunId === run.id && 'ring-2 ring-primary'
               )}
-              onClick={() => onSelectRun(run)}
             >
               {/* Header */}
               <div className="flex items-start justify-between mb-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <h5 className="text-xs font-semibold truncate">
-                      {run.strategy_key.replace(/_/g, ' ').replace(/v\d+$/, '')}
-                    </h5>
-                    <Badge variant="secondary" className="text-[9px] h-4 px-1">
-                      {getEngineIcon(run.engine_source)}
-                      <span className="ml-0.5">{getEngineLabel(run.engine_source)}</span>
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    <Calendar className="h-2.5 w-2.5" />
-                    {formatDate(run.started_at)}
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  {/* Comparison Checkbox */}
+                  {onToggleComparison && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleComparison(run.id);
+                      }}
+                      className={cn(
+                        'flex-shrink-0 w-4 h-4 rounded border-2 transition-colors flex items-center justify-center',
+                        selectedForComparison.includes(run.id)
+                          ? 'bg-primary border-primary'
+                          : 'border-muted-foreground hover:border-primary'
+                      )}
+                    >
+                      {selectedForComparison.includes(run.id) && (
+                        <Check className="h-3 w-3 text-primary-foreground" />
+                      )}
+                    </button>
+                  )}
+                  
+                  <div 
+                    className="flex-1 min-w-0 cursor-pointer" 
+                    onClick={() => onSelectRun(run)}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <h5 className="text-xs font-semibold truncate">
+                        {run.strategy_key.replace(/_/g, ' ').replace(/v\d+$/, '')}
+                      </h5>
+                      <Badge variant="secondary" className="text-[9px] h-4 px-1">
+                        {getEngineIcon(run.engine_source)}
+                        <span className="ml-0.5">{getEngineLabel(run.engine_source)}</span>
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                      <Calendar className="h-2.5 w-2.5" />
+                      {formatDate(run.started_at)}
+                    </div>
                   </div>
                 </div>
               </div>

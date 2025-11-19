@@ -98,7 +98,7 @@ async function handleBacktest(args: string, context: CommandContext): Promise<Co
         .from('backtest_runs')
         .select('*')
         .eq('id', data.runId)
-        .single();
+        .maybeSingle();
 
       if (fetchError) throw fetchError;
 
@@ -305,6 +305,91 @@ async function handleNote(args: string, context: CommandContext): Promise<Comman
 }
 
 /**
+ * /compare command - compare recent backtest runs
+ * Usage: /compare [N]
+ * Examples:
+ *   /compare
+ *   /compare 3
+ */
+async function handleCompare(args: string, context: CommandContext): Promise<CommandResult> {
+  const limit = parseInt(args.trim(), 10) || 2;
+
+  if (limit < 2 || limit > 5) {
+    return {
+      success: false,
+      message: 'Limit must be between 2 and 5.',
+    };
+  }
+
+  try {
+    // Fetch most recent completed runs for this session
+    const { data, error } = await supabase
+      .from('backtest_runs')
+      .select('*, strategies(name)')
+      .eq('session_id', context.sessionId)
+      .eq('status', 'completed')
+      .order('started_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    if (!data || data.length < 2) {
+      return {
+        success: true,
+        message: '❌ Not enough completed runs to compare.\n\nYou need at least 2 completed backtests in this session.\n\nUse /backtest to run more tests, or use /runs to see your current runs.',
+      };
+    }
+
+    // Build comparison summary
+    const runSummaries = data.map((run, idx) => {
+      const metrics = run.metrics;
+      const period = `${run.params.startDate} to ${run.params.endDate}`;
+      const engineLabel = run.engine_source === 'external' ? 'Live' : 
+                         run.engine_source === 'stub_fallback' ? 'Fallback' : 'Stub';
+      
+      return `${idx + 1}. ${run.strategy_key}\n` +
+             `   Period: ${period}\n` +
+             `   Engine: ${engineLabel}\n` +
+             `   • CAGR: ${(metrics.cagr * 100).toFixed(2)}%\n` +
+             `   • Sharpe: ${metrics.sharpe.toFixed(2)}\n` +
+             `   • Max DD: ${(metrics.max_drawdown * 100).toFixed(2)}%\n` +
+             `   • Win Rate: ${(metrics.win_rate * 100).toFixed(1)}%\n` +
+             `   • Trades: ${metrics.total_trades}`;
+    }).join('\n\n');
+
+    // Find best performers
+    const bestCAGR = data.reduce((best, run, idx) => 
+      run.metrics.cagr > data[best].metrics.cagr ? idx : best, 0
+    );
+    const bestSharpe = data.reduce((best, run, idx) => 
+      run.metrics.sharpe > data[best].metrics.sharpe ? idx : best, 0
+    );
+    const bestDrawdown = data.reduce((best, run, idx) => 
+      Math.abs(run.metrics.max_drawdown) < Math.abs(data[best].metrics.max_drawdown) ? idx : best, 0
+    );
+
+    const summary = `📊 Run Comparison (${data.length} runs)\n\n${runSummaries}\n\n` +
+                   `🏆 Best Performers:\n` +
+                   `• Highest CAGR: Run #${bestCAGR + 1} (${(data[bestCAGR].metrics.cagr * 100).toFixed(2)}%)\n` +
+                   `• Best Sharpe: Run #${bestSharpe + 1} (${data[bestSharpe].metrics.sharpe.toFixed(2)})\n` +
+                   `• Lowest Max DD: Run #${bestDrawdown + 1} (${(data[bestDrawdown].metrics.max_drawdown * 100).toFixed(2)}%)\n\n` +
+                   `💡 For visual comparison, select runs in the Quant tab using the checkboxes.`;
+
+    return {
+      success: true,
+      message: summary,
+      data,
+    };
+  } catch (error: any) {
+    console.error('Compare command error:', error);
+    return {
+      success: false,
+      message: `❌ Failed to compare runs: ${error.message || 'Unknown error'}`,
+    };
+  }
+}
+
+/**
  * /help command - show available commands
  */
 async function handleHelp(): Promise<CommandResult> {
@@ -317,6 +402,9 @@ async function handleHelp(): Promise<CommandResult> {
       `📋 /runs [limit]\n` +
       `   List recent backtest runs (default: 5)\n` +
       `   Example: /runs 10\n\n` +
+      `📊 /compare [N]\n` +
+      `   Compare N most recent completed runs (2-5, default: 2)\n` +
+      `   Example: /compare 3\n\n` +
       `💡 /note <content> [type:TYPE] [importance:LEVEL] [tags:tag1,tag2]\n` +
       `   Create a memory note\n` +
       `   Example: /note This fails in bear markets type:warning importance:high\n\n` +
@@ -340,6 +428,12 @@ const commands: Record<string, Command> = {
     description: 'List recent backtest runs',
     usage: '/runs [limit]',
     handler: handleRuns,
+  },
+  compare: {
+    name: 'compare',
+    description: 'Compare recent completed runs',
+    usage: '/compare [N]',
+    handler: handleCompare,
   },
   note: {
     name: 'note',
