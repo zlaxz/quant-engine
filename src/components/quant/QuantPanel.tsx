@@ -6,10 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { Loader2, TrendingUp, Send, Zap, Activity, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatContext } from '@/contexts/ChatContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ExperimentBrowser } from './ExperimentBrowser';
 
 interface Strategy {
   id: string;
@@ -212,6 +214,15 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
           Run quantitative strategy backtests with historical data
         </p>
       </div>
+
+      {/* Experiment Browser */}
+      <ExperimentBrowser
+        sessionId={selectedSessionId}
+        onSelectRun={(run) => setCurrentRun(run)}
+        selectedRunId={currentRun?.id}
+      />
+
+      <Separator />
 
       {/* Strategy Selection */}
       <div className="space-y-2">

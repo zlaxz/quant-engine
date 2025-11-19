@@ -22,6 +22,7 @@ export type Database = {
           error: string | null
           id: string
           metrics: Json | null
+          notes: string | null
           params: Json | null
           raw_results_url: string | null
           session_id: string | null
@@ -36,6 +37,7 @@ export type Database = {
           error?: string | null
           id?: string
           metrics?: Json | null
+          notes?: string | null
           params?: Json | null
           raw_results_url?: string | null
           session_id?: string | null
@@ -50,6 +52,7 @@ export type Database = {
           error?: string | null
           id?: string
           metrics?: Json | null
+          notes?: string | null
           params?: Json | null
           raw_results_url?: string | null
           session_id?: string | null
