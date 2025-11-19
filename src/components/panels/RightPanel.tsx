@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileText, TrendingUp, Brain } from 'lucide-react';
+import { QuantPanel } from '@/components/quant/QuantPanel';
 
 export const RightPanel = () => {
   return (
@@ -42,21 +43,7 @@ export const RightPanel = () => {
 
       <TabsContent value="quant" className="flex-1 mt-0">
         <ScrollArea className="h-full p-4">
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold font-mono mb-2">Quant Analysis</h3>
-              <p className="text-xs text-muted-foreground">
-                Strategy metrics and backtest results will display here
-              </p>
-            </div>
-            <div className="space-y-2">
-              <div className="p-3 bg-muted rounded-md">
-                <div className="text-xs font-mono text-muted-foreground">
-                  No active backtests
-                </div>
-              </div>
-            </div>
-          </div>
+          <QuantPanel />
         </ScrollArea>
       </TabsContent>
 

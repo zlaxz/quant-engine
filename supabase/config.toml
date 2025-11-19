@@ -2,3 +2,9 @@ project_id = "ynaqtawyynqikfyranda"
 
 [functions.chat]
 verify_jwt = false
+
+[functions.backtest-run]
+verify_jwt = false
+
+[functions.backtest-get]
+verify_jwt = false
