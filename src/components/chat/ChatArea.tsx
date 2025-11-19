@@ -1,12 +1,13 @@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, Command } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useChatContext } from '@/contexts/ChatContext';
 import { cn } from '@/lib/utils';
+import { executeCommand, parseCommand, getCommandSuggestions } from '@/lib/slashCommands';
 
 interface Message {
   id: string;
@@ -21,6 +22,7 @@ export const ChatArea = () => {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingMessages, setIsFetchingMessages] = useState(false);
+  const [commandSuggestions, setCommandSuggestions] = useState<string[]>([]);
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -38,6 +40,16 @@ export const ChatArea = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Update command suggestions when input changes
+  useEffect(() => {
+    if (inputValue.startsWith('/')) {
+      const suggestions = getCommandSuggestions(inputValue);
+      setCommandSuggestions(suggestions);
+    } else {
+      setCommandSuggestions([]);
+    }
+  }, [inputValue]);
 
   const loadMessages = async () => {
     if (!selectedSessionId) return;
@@ -69,23 +81,59 @@ export const ChatArea = () => {
 
     const messageContent = inputValue.trim();
     setInputValue('');
+    setCommandSuggestions([]);
     setIsLoading(true);
 
     try {
-      // Call edge function
-      const { data, error } = await supabase.functions.invoke('chat', {
-        body: {
+      // Check if this is a slash command
+      const parsed = parseCommand(messageContent);
+      
+      if (parsed) {
+        // Execute slash command
+        const result = await executeCommand(messageContent, {
           sessionId: selectedSessionId,
           workspaceId: selectedWorkspaceId,
-          content: messageContent,
-        },
-      });
+        });
 
-      if (error) throw error;
+        // Add command and result as system messages
+        const commandMessage: Message = {
+          id: `cmd-${Date.now()}`,
+          role: 'system',
+          content: `Command: ${messageContent}`,
+          created_at: new Date().toISOString(),
+        };
 
-      // Reload messages to show both user and assistant messages
-      await loadMessages();
+        const resultMessage: Message = {
+          id: `result-${Date.now()}`,
+          role: 'system',
+          content: result.message,
+          created_at: new Date().toISOString(),
+        };
 
+        setMessages(prev => [...prev, commandMessage, resultMessage]);
+
+        if (!result.success) {
+          toast({
+            title: 'Command Failed',
+            description: result.message.split('\n')[0],
+            variant: 'destructive',
+          });
+        }
+      } else {
+        // Regular chat message - call edge function
+        const { data, error } = await supabase.functions.invoke('chat', {
+          body: {
+            sessionId: selectedSessionId,
+            workspaceId: selectedWorkspaceId,
+            content: messageContent,
+          },
+        });
+
+        if (error) throw error;
+
+        // Reload messages to show both user and assistant messages
+        await loadMessages();
+      }
     } catch (error: any) {
       console.error('Error sending message:', error);
       toast({
@@ -149,18 +197,21 @@ export const ChatArea = () => {
               >
                 <div
                   className={cn(
-                    'max-w-[80%] rounded-lg px-4 py-2',
+                    'max-w-[80%] rounded-lg px-4 py-2 whitespace-pre-wrap',
                     message.role === 'user'
                       ? 'bg-primary text-primary-foreground'
                       : message.role === 'assistant'
                       ? 'bg-muted'
-                      : 'bg-accent text-accent-foreground text-xs'
+                      : 'bg-accent/50 text-accent-foreground border border-accent'
                   )}
                 >
                   {message.role === 'system' && (
-                    <div className="text-xs font-mono uppercase mb-1 opacity-70">System</div>
+                    <div className="flex items-center gap-2 mb-1 text-xs font-mono opacity-70">
+                      <Command className="h-3 w-3" />
+                      {message.content.startsWith('Command:') ? 'Slash Command' : 'System'}
+                    </div>
                   )}
-                  <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                  <div className="text-sm">{message.content}</div>
                   <div className="text-xs opacity-50 mt-1">
                     {new Date(message.created_at).toLocaleTimeString()}
                   </div>
@@ -174,9 +225,24 @@ export const ChatArea = () => {
 
       {/* Input Area */}
       <div className="border-t border-border p-4">
+        {/* Command Suggestions */}
+        {commandSuggestions.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1">
+            {commandSuggestions.slice(0, 5).map(suggestion => (
+              <button
+                key={suggestion}
+                onClick={() => setInputValue(suggestion + ' ')}
+                className="text-xs px-2 py-1 rounded bg-accent hover:bg-accent/80 font-mono transition-colors"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
+        
         <div className="flex gap-2">
           <Textarea
-            placeholder="Type your message... (Shift+Enter for new line)"
+            placeholder="Type your message or use /help for commands... (Shift+Enter for new line)"
             className="resize-none font-mono text-sm"
             rows={3}
             value={inputValue}
@@ -198,7 +264,11 @@ export const ChatArea = () => {
           </Button>
         </div>
         <div className="mt-2 text-xs text-muted-foreground font-mono">
-          {isLoading ? 'Sending message...' : 'Phase 2: OpenAI chat integration active'}
+          {isLoading 
+            ? 'Processing...' 
+            : inputValue.startsWith('/') 
+            ? '🎮 Slash command mode - Press Enter to execute' 
+            : 'Type /help for available commands'}
         </div>
       </div>
     </div>
