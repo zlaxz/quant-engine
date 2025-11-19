@@ -14,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    const { workspaceId, content, source, tags, runId, metadata } = await req.json();
+    const { workspaceId, content, source, tags, runId, metadata, memoryType, importance } = await req.json();
 
     if (!workspaceId || !content) {
       return new Response(
@@ -23,7 +23,14 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Creating memory note for workspace ${workspaceId}, source: ${source || 'manual'}`);
+    // Validate memory_type and importance
+    const validTypes = ['insight', 'rule', 'warning', 'todo', 'bug', 'profile_change'];
+    const validImportance = ['low', 'normal', 'high', 'critical'];
+    
+    const finalMemoryType = validTypes.includes(memoryType) ? memoryType : 'insight';
+    const finalImportance = validImportance.includes(importance) ? importance : 'normal';
+
+    console.log(`Creating memory note for workspace ${workspaceId}, type: ${finalMemoryType}, importance: ${finalImportance}`);
 
     // Generate embedding for the content
     const embedding = await generateEmbedding(content);
@@ -37,7 +44,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Insert memory note with embedding
+    // Insert memory note with embedding, type, and importance
     const { data, error } = await supabase
       .from('memory_notes')
       .insert({
@@ -48,6 +55,8 @@ serve(async (req) => {
         run_id: runId || null,
         metadata: metadata || {},
         embedding: embedding,
+        memory_type: finalMemoryType,
+        importance: finalImportance,
       })
       .select()
       .single();

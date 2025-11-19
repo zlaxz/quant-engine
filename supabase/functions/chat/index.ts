@@ -113,7 +113,7 @@ serve(async (req) => {
 
     console.log('[Chat API] Loaded', previousMessages?.length || 0, 'previous messages');
 
-    // 2.5. Use semantic memory retrieval for chat context
+    // 2.5. Use semantic memory retrieval for chat context with prioritization
     console.log('[Chat API] Loading memory notes for workspace:', workspaceId);
     let memoryNotes = [];
     
@@ -125,59 +125,104 @@ serve(async (req) => {
     const queryEmbedding = await generateEmbedding(searchQuery);
     
     if (queryEmbedding) {
-      // Use semantic search via the database function
+      // Use semantic search via the database function (fetch more than needed for re-ranking)
       const { data: semanticResults, error: memoryError } = await supabase.rpc('search_memory_notes', {
         query_embedding: queryEmbedding,
         match_workspace_id: workspaceId,
-        match_threshold: 0.6, // 60% similarity threshold
-        match_count: 5,
+        match_threshold: 0.5, // Lower threshold to get more candidates
+        match_count: 15, // Get more for re-ranking
       });
 
       if (memoryError) {
         console.error('[Chat API] Error in semantic memory search:', memoryError);
       } else {
-        memoryNotes = semanticResults || [];
-        console.log(`[Chat API] Found ${memoryNotes.length} relevant memory notes via semantic search`);
+        const results = semanticResults || [];
+        console.log(`[Chat API] Found ${results.length} relevant memory notes via semantic search`);
+        
+        // Prioritize rules and warnings, especially critical/high importance
+        const criticalRules = results.filter((n: any) => 
+          (n.memory_type === 'rule' || n.memory_type === 'warning') && n.importance === 'critical'
+        ).slice(0, 2);
+        
+        const highPriority = results.filter((n: any) => 
+          ((n.memory_type === 'rule' || n.memory_type === 'warning') && n.importance === 'high') ||
+          (n.memory_type !== 'rule' && n.memory_type !== 'warning' && n.importance === 'critical')
+        ).slice(0, 2);
+        
+        const remaining = results.filter((n: any) => 
+          !criticalRules.includes(n) && !highPriority.includes(n)
+        ).slice(0, 3);
+        
+        memoryNotes = [...criticalRules, ...highPriority, ...remaining].slice(0, 5);
+        console.log(`[Chat API] Prioritized to ${memoryNotes.length} notes (${criticalRules.length} critical rules/warnings)`);
       }
     } else {
       console.warn('[Chat API] Failed to generate query embedding, falling back to recent notes');
       
-      // Fallback to time-based retrieval if embedding fails
+      // Fallback to time-based retrieval if embedding fails, prioritize rules/warnings
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       
       const { data: recentNotes, error: memoryError } = await supabase
         .from('memory_notes')
-        .select('content, source, tags, created_at, similarity')
+        .select('content, source, tags, created_at, memory_type, importance, similarity')
         .eq('workspace_id', workspaceId)
         .gte('created_at', thirtyDaysAgo.toISOString())
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(10);
 
       if (memoryError) {
         console.error('[Chat API] Error fetching memory notes:', memoryError);
       } else {
-        memoryNotes = recentNotes || [];
+        const results = recentNotes || [];
+        // Prioritize even in fallback mode
+        const rules = results.filter((n: any) => n.memory_type === 'rule' || n.memory_type === 'warning').slice(0, 2);
+        const others = results.filter((n: any) => !rules.includes(n)).slice(0, 3);
+        memoryNotes = [...rules, ...others];
       }
     }
 
     // 3. Build message array for OpenAI
     const messages: ChatMessage[] = [];
     
-    // Add system prompt with memory context if available
+    // Add system prompt with prioritized memory context if available
     let systemPrompt = workspace.default_system_prompt || '';
     
     if (memoryNotes && memoryNotes.length > 0) {
-      const memoryItems = memoryNotes
-        .map((note: any, idx: number) => {
-          const date = new Date(note.created_at).toISOString().split('T')[0];
-          const similarity = note.similarity ? ` (${Math.round(note.similarity * 100)}% relevant)` : '';
-          return `${idx + 1}) [source: ${note.source}, created: ${date}${similarity}] ${note.content}`;
-        })
-        .join('\n');
+      // Separate rules/warnings from other notes
+      const rulesAndWarnings = memoryNotes.filter((note: any) => 
+        note.memory_type === 'rule' || note.memory_type === 'warning'
+      );
+      const otherNotes = memoryNotes.filter((note: any) => 
+        note.memory_type !== 'rule' && note.memory_type !== 'warning'
+      );
       
-      systemPrompt += `\n\nRelevant Memory:\n${memoryItems}`;
-      console.log('[Chat API] Injecting semantic memory context into system prompt');
+      let memoryContext = '';
+      
+      if (rulesAndWarnings.length > 0) {
+        const rulesText = rulesAndWarnings
+          .map((note: any, idx: number) => {
+            const date = new Date(note.created_at).toISOString().split('T')[0];
+            const similarity = note.similarity ? ` (${Math.round(note.similarity * 100)}% relevant)` : '';
+            return `${idx + 1}) [${note.importance} ${note.memory_type}, ${date}${similarity}] ${note.content}`;
+          })
+          .join('\n');
+        memoryContext += `\nRelevant Rules and Warnings:\n${rulesText}\n`;
+      }
+      
+      if (otherNotes.length > 0) {
+        const notesText = otherNotes
+          .map((note: any, idx: number) => {
+            const date = new Date(note.created_at).toISOString().split('T')[0];
+            const similarity = note.similarity ? ` (${Math.round(note.similarity * 100)}% relevant)` : '';
+            return `${idx + 1}) [${note.memory_type}, ${date}${similarity}] ${note.content}`;
+          })
+          .join('\n');
+        memoryContext += `\nOther Relevant Insights:\n${notesText}\n`;
+      }
+      
+      systemPrompt += memoryContext;
+      console.log('[Chat API] Injecting prioritized memory context into system prompt');
     }
     
     if (systemPrompt) {

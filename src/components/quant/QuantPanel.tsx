@@ -50,6 +50,7 @@ export const QuantPanel = ({ selectedRunIdFromMemory }: QuantPanelProps) => {
   const [isSendingSummary, setIsSendingSummary] = useState(false);
   const [isInsightDialogOpen, setIsInsightDialogOpen] = useState(false);
   const [insightContent, setInsightContent] = useState('');
+  const [insightImportance, setInsightImportance] = useState('normal');
   const [isSavingInsight, setIsSavingInsight] = useState(false);
 
   useEffect(() => {
@@ -250,6 +251,8 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
           content: insightContent.trim(),
           source: 'run_note',
           tags,
+          memoryType: 'insight',
+          importance: insightImportance,
           metadata: {
             strategy_name: strategyName,
             metrics: currentRun.metrics,
@@ -262,6 +265,7 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
 
       toast.success('Insight saved to memory with embedding');
       setInsightContent('');
+      setInsightImportance('normal');
       setIsInsightDialogOpen(false);
     } catch (error: any) {
       console.error('Error saving insight:', error);
@@ -540,6 +544,22 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
                 placeholder="What did you learn from this backtest? Key insights, patterns, or observations..."
                 className="text-xs min-h-[120px]"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="insight-importance" className="text-xs font-mono">
+                Importance
+              </Label>
+              <Select value={insightImportance} onValueChange={setInsightImportance}>
+                <SelectTrigger id="insight-importance" className="text-xs h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {currentRun && (
               <div className="text-xs text-muted-foreground space-y-1">

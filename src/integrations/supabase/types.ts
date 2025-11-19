@@ -111,6 +111,8 @@ export type Database = {
           created_at: string | null
           embedding: string | null
           id: string
+          importance: string | null
+          memory_type: string | null
           metadata: Json | null
           run_id: string | null
           source: string
@@ -122,6 +124,8 @@ export type Database = {
           created_at?: string | null
           embedding?: string | null
           id?: string
+          importance?: string | null
+          memory_type?: string | null
           metadata?: Json | null
           run_id?: string | null
           source?: string
@@ -133,6 +137,8 @@ export type Database = {
           created_at?: string | null
           embedding?: string | null
           id?: string
+          importance?: string | null
+          memory_type?: string | null
           metadata?: Json | null
           run_id?: string | null
           source?: string
@@ -276,6 +282,8 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          importance: string
+          memory_type: string
           metadata: Json
           run_id: string
           similarity: number
