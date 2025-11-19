@@ -223,21 +223,19 @@ export const ChatSessionList = () => {
                   </div>
                 </button>
                 
-                <div className={cn(
-                  "absolute right-2 top-2 transition-opacity",
-                  selectedSessionId === session.id 
-                    ? "opacity-100" 
-                    : "opacity-50 group-hover:opacity-100"
-                )}>
+                <div className="absolute right-1 top-1">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="h-6 w-6"
+                        className={cn(
+                          "h-7 w-7 bg-background/80 hover:bg-background shadow-sm",
+                          selectedSessionId === session.id && "bg-background"
+                        )}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <MoreVertical className="h-3 w-3" />
+                        <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
