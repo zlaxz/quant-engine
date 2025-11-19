@@ -2,6 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
 import { generateEmbedding } from '../_shared/embeddings.ts';
+import { buildChiefQuantPrompt } from '../_shared/chiefQuantPrompt.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -190,7 +191,9 @@ serve(async (req) => {
     const messages: ChatMessage[] = [];
     
     // Add system prompt with prioritized memory context if available
-    let systemPrompt = workspace.default_system_prompt || '';
+    // Use Chief Quant prompt as fallback if workspace doesn't have a custom prompt
+    let systemPrompt = workspace.default_system_prompt || buildChiefQuantPrompt();
+    console.log('[Chat API] Using', workspace.default_system_prompt ? 'workspace' : 'Chief Quant fallback', 'system prompt');
     
     if (memoryNotes && memoryNotes.length > 0) {
       // Separate rules/warnings from other notes

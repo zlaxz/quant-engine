@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.memory-create]
 verify_jwt = false
+
+[functions.memory-update]
+verify_jwt = false
+
+[functions.workspace-init-prompt]
+verify_jwt = false

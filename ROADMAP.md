@@ -84,11 +84,11 @@ Version 1.0 is considered complete when:
 - ⬜ **Retrieval Tuning**: Adjust similarity thresholds and match counts based on real usage
 - ⬜ **Rule Enforcement**: Test that critical rules/warnings consistently appear in chat context
 
-### Stage 3: Chief Quant Identity & Agent Modes
-- **Chief Quant Persona**: Define specialized system prompt with quant research expertise and memory awareness
-- **Audit Mode**: `/audit` command to review recent runs and identify patterns/anomalies
-- **Curation Mode**: `/curate` command to help organize and consolidate memory notes
-- **Experiment Suggestions**: Proactive suggestions for next experiments based on memory and run history
+### Stage 3: Chief Quant Identity & Agent Modes ✅
+- ✅ **Chief Quant Persona**: Specialized system prompt installed as default workspace identity with quant research expertise, memory awareness, and tool knowledge
+- ⬜ **Audit Mode**: `/audit` command to review recent runs and identify patterns/anomalies
+- ⬜ **Curation Mode**: `/curate` command to help organize and consolidate memory notes
+- ⬜ **Experiment Suggestions**: Proactive suggestions for next experiments based on memory and run history
 
 ### Stage 4: Thin Local-Code Tools
 - **Repo Bridge**: Simple API bridge to local rotation-engine repo for reading code/configs
