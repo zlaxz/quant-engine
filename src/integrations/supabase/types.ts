@@ -110,6 +110,8 @@ export type Database = {
           content: string
           created_at: string | null
           id: string
+          metadata: Json | null
+          run_id: string | null
           source: string
           tags: string[] | null
           workspace_id: string
@@ -118,6 +120,8 @@ export type Database = {
           content: string
           created_at?: string | null
           id?: string
+          metadata?: Json | null
+          run_id?: string | null
           source?: string
           tags?: string[] | null
           workspace_id: string
@@ -126,11 +130,20 @@ export type Database = {
           content?: string
           created_at?: string | null
           id?: string
+          metadata?: Json | null
+          run_id?: string | null
           source?: string
           tags?: string[] | null
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "memory_notes_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "backtest_runs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "memory_notes_workspace_id_fkey"
             columns: ["workspace_id"]

@@ -112,14 +112,44 @@ serve(async (req) => {
 
     console.log('[Chat API] Loaded', previousMessages?.length || 0, 'previous messages');
 
+    // 2.5. Load recent memory notes for context
+    console.log('[Chat API] Loading memory notes for workspace:', workspaceId);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { data: memoryNotes, error: memoryError } = await supabase
+      .from('memory_notes')
+      .select('content, source, tags, created_at')
+      .eq('workspace_id', workspaceId)
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (memoryError) {
+      console.error('[Chat API] Memory notes fetch error:', memoryError);
+      // Non-critical - continue without memory context
+    }
+
+    console.log('[Chat API] Loaded', memoryNotes?.length || 0, 'memory notes');
+
     // 3. Build message array for OpenAI
     const messages: ChatMessage[] = [];
     
-    // Add system prompt if it exists
-    if (workspace.default_system_prompt) {
+    // Add system prompt with memory context if available
+    let systemPrompt = workspace.default_system_prompt || '';
+    
+    if (memoryNotes && memoryNotes.length > 0) {
+      const memoryContext = memoryNotes
+        .map((note, idx) => `${idx + 1}. [${note.source}] ${note.content}`)
+        .join('\n');
+      
+      systemPrompt += `\n\nRelevant Memory from this workspace:\n${memoryContext}`;
+    }
+    
+    if (systemPrompt) {
       messages.push({
         role: 'system',
-        content: workspace.default_system_prompt
+        content: systemPrompt
       });
     }
 

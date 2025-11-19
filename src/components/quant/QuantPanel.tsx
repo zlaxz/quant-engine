@@ -7,7 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, TrendingUp, Send, Zap, Activity, AlertCircle } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Loader2, TrendingUp, Send, Zap, Activity, AlertCircle, Brain } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatContext } from '@/contexts/ChatContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -32,7 +34,11 @@ interface BacktestRun {
   engine_source?: string;
 }
 
-export const QuantPanel = () => {
+interface QuantPanelProps {
+  selectedRunIdFromMemory?: string | null;
+}
+
+export const QuantPanel = ({ selectedRunIdFromMemory }: QuantPanelProps) => {
   const { selectedSessionId, selectedWorkspaceId } = useChatContext();
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState<string>('');
@@ -42,10 +48,38 @@ export const QuantPanel = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [currentRun, setCurrentRun] = useState<BacktestRun | null>(null);
   const [isSendingSummary, setIsSendingSummary] = useState(false);
+  const [isInsightDialogOpen, setIsInsightDialogOpen] = useState(false);
+  const [insightContent, setInsightContent] = useState('');
+  const [isSavingInsight, setIsSavingInsight] = useState(false);
 
   useEffect(() => {
     loadStrategies();
   }, []);
+
+  // Load run from memory when selectedRunIdFromMemory changes
+  useEffect(() => {
+    if (selectedRunIdFromMemory) {
+      loadRunById(selectedRunIdFromMemory);
+    }
+  }, [selectedRunIdFromMemory]);
+
+  const loadRunById = async (runId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('backtest_runs')
+        .select('*')
+        .eq('id', runId)
+        .single();
+
+      if (error) throw error;
+
+      setCurrentRun(data);
+      toast.success('Run loaded from memory');
+    } catch (error: any) {
+      console.error('Error loading run:', error);
+      toast.error('Failed to load run');
+    }
+  };
 
   const loadStrategies = async () => {
     try {
@@ -197,6 +231,44 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
     }
   };
 
+  const saveInsightToMemory = async () => {
+    if (!currentRun || !selectedWorkspaceId || !insightContent.trim()) {
+      toast.error('Please enter insight content');
+      return;
+    }
+
+    setIsSavingInsight(true);
+    try {
+      const strategyName = strategies.find(s => s.key === currentRun.strategy_key)?.name || currentRun.strategy_key;
+      
+      const { error } = await supabase
+        .from('memory_notes')
+        .insert({
+          workspace_id: selectedWorkspaceId,
+          content: insightContent.trim(),
+          source: 'run_note',
+          run_id: currentRun.id,
+          tags: [currentRun.strategy_key, currentRun.engine_source || 'unknown'],
+          metadata: {
+            strategy_name: strategyName,
+            metrics: currentRun.metrics,
+            params: currentRun.params,
+          },
+        });
+
+      if (error) throw error;
+
+      toast.success('Insight saved to memory');
+      setInsightContent('');
+      setIsInsightDialogOpen(false);
+    } catch (error: any) {
+      console.error('Error saving insight:', error);
+      toast.error('Failed to save insight');
+    } finally {
+      setIsSavingInsight(false);
+    }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -328,22 +400,33 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
                 </Badge>
               )}
             </div>
-            <Button
-              onClick={sendSummaryToChat}
-              disabled={isSendingSummary}
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-            >
-              {isSendingSummary ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <>
-                  <Send className="mr-1 h-3 w-3" />
-                  Send to Chat
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setIsInsightDialogOpen(true)}
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+              >
+                <Brain className="mr-1 h-3 w-3" />
+                Save Insight
+              </Button>
+              <Button
+                onClick={sendSummaryToChat}
+                disabled={isSendingSummary}
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+              >
+                {isSendingSummary ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <>
+                    <Send className="mr-1 h-3 w-3" />
+                    Send to Chat
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
 
           {/* Metrics Grid */}
@@ -433,6 +516,68 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
           </p>
         </div>
       )}
+
+      {/* Save Insight Dialog */}
+      <Dialog open={isInsightDialogOpen} onOpenChange={setIsInsightDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-mono flex items-center gap-2">
+              <Brain className="h-4 w-4" />
+              Save Insight to Memory
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="insight" className="text-xs font-mono">
+                Insight
+              </Label>
+              <Textarea
+                id="insight"
+                value={insightContent}
+                onChange={(e) => setInsightContent(e.target.value)}
+                placeholder="What did you learn from this backtest? Key insights, patterns, or observations..."
+                className="text-xs min-h-[120px]"
+              />
+            </div>
+            {currentRun && (
+              <div className="text-xs text-muted-foreground space-y-1">
+                <div>
+                  <strong>Strategy:</strong>{' '}
+                  {strategies.find(s => s.key === currentRun.strategy_key)?.name || currentRun.strategy_key}
+                </div>
+                <div>
+                  <strong>CAGR:</strong> {(currentRun.metrics.cagr * 100).toFixed(2)}%
+                  {' | '}
+                  <strong>Sharpe:</strong> {currentRun.metrics.sharpe.toFixed(2)}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsInsightDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={saveInsightToMemory}
+              disabled={isSavingInsight || !insightContent.trim()}
+            >
+              {isSavingInsight ? (
+                <>
+                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save to Memory'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
