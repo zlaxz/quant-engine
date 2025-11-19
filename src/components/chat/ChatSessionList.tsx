@@ -2,16 +2,10 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, MessageSquare, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { Plus, MessageSquare, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useChatContext } from '@/contexts/ChatContext';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -202,62 +196,49 @@ export const ChatSessionList = () => {
               <div
                 key={session.id}
                 className={cn(
-                  'relative rounded-md transition-colors mb-1 p-3',
+                  'group rounded-md transition-colors mb-1 p-2 flex items-start gap-2',
                   'hover:bg-muted/50',
                   selectedSessionId === session.id && 'bg-muted'
                 )}
               >
-                <div className="flex items-start gap-2">
-                  <button
-                    onClick={() => setSelectedSession(session.id, session.workspace_id)}
-                    className="flex-1 flex items-start gap-2 text-left min-w-0"
-                  >
-                    <MessageSquare className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">
-                        {session.title}
-                      </div>
-                      <div className="text-xs text-muted-foreground font-mono">
-                        {new Date(session.created_at).toLocaleDateString()}
-                      </div>
+                <button
+                  onClick={() => setSelectedSession(session.id, session.workspace_id)}
+                  className="flex-1 flex items-start gap-2 text-left min-w-0"
+                >
+                  <MessageSquare className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">
+                      {session.title}
                     </div>
-                  </button>
-                  
-                  {/* Menu button - separate from session button */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          console.log('Menu clicked for session:', session.id);
-                        }}
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={(e) => {
-                        e.stopPropagation();
-                        openRenameDialog(session);
-                      }}>
-                        <Pencil className="h-3 w-3 mr-2" />
-                        Rename
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSessionToDelete(session.id);
-                        }}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-3 w-3 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                    <div className="text-xs text-muted-foreground font-mono">
+                      {new Date(session.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                </button>
+                
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openRenameDialog(session);
+                    }}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSessionToDelete(session.id);
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
                 </div>
               </div>
             ))
