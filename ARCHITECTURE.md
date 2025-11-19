@@ -519,7 +519,8 @@ All commands are parsed and executed in `ChatArea.tsx` before sending to LLM.
   "params": {
     "startDate": "YYYY-MM-DD",
     "endDate": "YYYY-MM-DD",
-    "capital": 100000
+    "capital": 100000,
+    "profileConfig": {}  // Optional: rotation-engine profile configuration
   }
 }
 ```
@@ -532,7 +533,8 @@ All commands are parsed and executed in `ChatArea.tsx` before sending to LLM.
     "sharpe": 1.87,
     "max_drawdown": -0.095,
     "win_rate": 0.62,
-    "total_trades": 247
+    "total_trades": 247,
+    "avg_trade_duration_days": 3.5  // Optional
   },
   "equity_curve": [
     { "date": "2020-01-01", "value": 100000 },
@@ -740,6 +742,7 @@ MemoryPanel updates → new note appears in "Recent Notes" list
 ### Backtest Storage
 
 - **Current**: Full equity curves stored as JSONB in `backtest_runs.equity_curve`
+- **Type Safety**: BacktestParams, BacktestMetrics, and EquityPoint types enforce consistent structure across frontend and backend
 - **Risk**: Large equity curves (1000+ points) may impact query performance
 - **Future**: Consider storing raw results in S3 and linking via `raw_results_url`
 

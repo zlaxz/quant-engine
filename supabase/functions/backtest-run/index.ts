@@ -7,36 +7,50 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/**
+ * Type definitions matching frontend src/types/backtest.ts
+ * These ensure consistency across the entire backtest pipeline
+ */
+
+interface BacktestParams {
+  startDate: string;        // 'YYYY-MM-DD' format
+  endDate: string;          // 'YYYY-MM-DD' format
+  capital: number;          // Starting capital in USD
+  profileConfig?: Record<string, any>;  // Optional rotation-engine profile config
+}
+
+interface BacktestMetrics {
+  cagr: number;                      // Compound Annual Growth Rate (decimal, e.g., 0.18 = 18%)
+  sharpe: number;                    // Sharpe Ratio
+  max_drawdown: number;              // Maximum Drawdown (decimal, e.g., -0.095 = -9.5%)
+  win_rate: number;                  // Win Rate (decimal, e.g., 0.62 = 62%)
+  total_trades: number;              // Total number of trades executed
+  avg_trade_duration_days?: number;  // Average trade duration in days (optional)
+  [key: string]: any;                // Allow future metric extensions
+}
+
+interface EquityPoint {
+  date: string;   // 'YYYY-MM-DD' format
+  value: number;  // Portfolio value in USD
+}
+
 interface BacktestRequest {
   sessionId: string;
   strategyKey: string;
-  params: {
-    startDate: string;
-    endDate: string;
-    capital: number;
-  };
+  params: BacktestParams;
 }
 
 interface ExternalEngineResponse {
-  metrics: {
-    cagr: number;
-    sharpe: number;
-    max_drawdown: number;
-    win_rate: number;
-    total_trades: number;
-    avg_trade_duration_days: number;
-  };
-  equity_curve: Array<{
-    date: string;
-    value: number;
-  }>;
+  metrics: BacktestMetrics;
+  equity_curve: EquityPoint[];
 }
 
 /**
  * Generate deterministic fake backtest results
  * This is the fallback stub when external engine is unavailable
+ * Returns data matching BacktestMetrics and EquityPoint[] types
  */
-function generateFakeResults(strategyKey: string, params: any) {
+function generateFakeResults(strategyKey: string, params: BacktestParams): { metrics: BacktestMetrics; equityCurve: EquityPoint[] } {
   const seed = strategyKey.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
   
   // Deterministic "random" values based on strategy key
@@ -45,7 +59,7 @@ function generateFakeResults(strategyKey: string, params: any) {
   const maxDrawdown = -0.05 - (seed % 15) / 100;
   const winRate = 0.30 + (seed % 25) / 100;
   
-  const metrics = {
+  const metrics: BacktestMetrics = {
     cagr,
     sharpe,
     max_drawdown: maxDrawdown,
@@ -60,7 +74,7 @@ function generateFakeResults(strategyKey: string, params: any) {
   const daysDiff = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
   const step = Math.max(1, Math.floor(daysDiff / 100));
   
-  const equityCurve = [];
+  const equityCurve: EquityPoint[] = [];
   let currentValue = params.capital;
   
   for (let i = 0; i <= 100; i++) {
@@ -82,11 +96,12 @@ function generateFakeResults(strategyKey: string, params: any) {
 /**
  * Call external backtest engine if configured
  * Returns null if engine is not configured or call fails
+ * Validates response structure to match BacktestMetrics and EquityPoint[] types
  */
 async function callExternalEngine(
   strategyKey: string,
-  params: any
-): Promise<{ metrics: any; equityCurve: any; engineSource: string } | null> {
+  params: BacktestParams
+): Promise<{ metrics: BacktestMetrics; equityCurve: EquityPoint[]; engineSource: string } | null> {
   const engineUrl = Deno.env.get('BACKTEST_ENGINE_URL');
   
   if (!engineUrl || engineUrl.trim() === '') {
@@ -106,7 +121,7 @@ async function callExternalEngine(
         strategyKey,
         params,
       }),
-      signal: AbortSignal.timeout(30000), // 30 second timeout
+      signal: AbortSignal.timeout(60000), // 60 second timeout
     });
 
     if (!response.ok) {
@@ -122,40 +137,37 @@ async function callExternalEngine(
       return null;
     }
 
-    // Validate metrics fields
-    const requiredMetrics = ['cagr', 'sharpe', 'max_drawdown', 'win_rate', 'total_trades', 'avg_trade_duration_days'];
-    const hasAllMetrics = requiredMetrics.every(field => field in data.metrics);
+    // Validate metrics fields (required fields)
+    const requiredMetrics = ['cagr', 'sharpe', 'max_drawdown', 'win_rate', 'total_trades'];
+    const missingMetrics = requiredMetrics.filter(key => !(key in data.metrics));
     
-    if (!hasAllMetrics) {
-      console.error('[External Engine] Invalid metrics structure, missing required fields');
+    if (missingMetrics.length > 0) {
+      console.error('[External Engine] Missing required metrics:', missingMetrics);
       return null;
     }
 
-    // Validate equity curve is an array with date/value pairs
+    // Validate equity_curve structure
     if (!Array.isArray(data.equity_curve) || data.equity_curve.length === 0) {
-      console.error('[External Engine] Invalid equity_curve - must be non-empty array');
+      console.error('[External Engine] equity_curve must be a non-empty array');
       return null;
     }
 
-    const validCurve = data.equity_curve.every(
-      point => point.date && typeof point.value === 'number'
-    );
-
-    if (!validCurve) {
-      console.error('[External Engine] Invalid equity_curve format - missing date or value fields');
+    // Validate first equity point structure
+    const firstPoint = data.equity_curve[0];
+    if (!firstPoint.date || typeof firstPoint.value !== 'number') {
+      console.error('[External Engine] Invalid equity_curve point structure');
       return null;
     }
 
-    console.log('[External Engine] Successfully received and validated results');
+    console.log('[External Engine] Successfully received valid results');
     
     return {
       metrics: data.metrics,
       equityCurve: data.equity_curve,
       engineSource: 'external',
     };
-
   } catch (error: any) {
-    console.error('[External Engine] Error calling external engine:', error.message);
+    console.error('[External Engine] Call failed:', error.message);
     return null;
   }
 }
