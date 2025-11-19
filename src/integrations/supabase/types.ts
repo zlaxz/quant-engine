@@ -14,7 +14,230 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      backtest_runs: {
+        Row: {
+          completed_at: string | null
+          equity_curve: Json | null
+          error: string | null
+          id: string
+          metrics: Json | null
+          params: Json | null
+          raw_results_url: string | null
+          session_id: string | null
+          started_at: string | null
+          status: string
+          strategy_key: string
+        }
+        Insert: {
+          completed_at?: string | null
+          equity_curve?: Json | null
+          error?: string | null
+          id?: string
+          metrics?: Json | null
+          params?: Json | null
+          raw_results_url?: string | null
+          session_id?: string | null
+          started_at?: string | null
+          status?: string
+          strategy_key: string
+        }
+        Update: {
+          completed_at?: string | null
+          equity_curve?: Json | null
+          error?: string | null
+          id?: string
+          metrics?: Json | null
+          params?: Json | null
+          raw_results_url?: string | null
+          session_id?: string | null
+          started_at?: string | null
+          status?: string
+          strategy_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "backtest_runs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_sessions: {
+        Row: {
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          title: string
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          title: string
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          title?: string
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_sessions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      memory_notes: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          source: string
+          tags: string[] | null
+          workspace_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          source?: string
+          tags?: string[] | null
+          workspace_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          source?: string
+          tags?: string[] | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memory_notes_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          model: string | null
+          provider: string | null
+          role: string
+          session_id: string
+          token_usage: Json | null
+          tool_calls: Json | null
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          model?: string | null
+          provider?: string | null
+          role: string
+          session_id: string
+          token_usage?: Json | null
+          tool_calls?: Json | null
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          model?: string | null
+          provider?: string | null
+          role?: string
+          session_id?: string
+          token_usage?: Json | null
+          tool_calls?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      strategies: {
+        Row: {
+          active: boolean | null
+          config: Json | null
+          created_at: string | null
+          description: string | null
+          id: string
+          key: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          config?: Json | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          key: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          config?: Json | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          key?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      workspaces: {
+        Row: {
+          created_at: string | null
+          default_system_prompt: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          default_system_prompt?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          default_system_prompt?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
