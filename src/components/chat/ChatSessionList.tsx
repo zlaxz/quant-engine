@@ -223,7 +223,12 @@ export const ChatSessionList = () => {
                   </div>
                 </button>
                 
-                <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className={cn(
+                  "absolute right-2 top-2 transition-opacity",
+                  selectedSessionId === session.id 
+                    ? "opacity-100" 
+                    : "opacity-50 group-hover:opacity-100"
+                )}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button 
