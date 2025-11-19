@@ -109,6 +109,7 @@ export type Database = {
         Row: {
           content: string
           created_at: string | null
+          embedding: string | null
           id: string
           metadata: Json | null
           run_id: string | null
@@ -119,6 +120,7 @@ export type Database = {
         Insert: {
           content: string
           created_at?: string | null
+          embedding?: string | null
           id?: string
           metadata?: Json | null
           run_id?: string | null
@@ -129,6 +131,7 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string | null
+          embedding?: string | null
           id?: string
           metadata?: Json | null
           run_id?: string | null
@@ -262,7 +265,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      search_memory_notes: {
+        Args: {
+          match_count?: number
+          match_threshold?: number
+          match_workspace_id: string
+          query_embedding: string
+        }
+        Returns: {
+          content: string
+          created_at: string
+          id: string
+          metadata: Json
+          run_id: string
+          similarity: number
+          source: string
+          tags: string[]
+          workspace_id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

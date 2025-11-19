@@ -240,25 +240,27 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
     setIsSavingInsight(true);
     try {
       const strategyName = strategies.find(s => s.key === currentRun.strategy_key)?.name || currentRun.strategy_key;
-      
-      const { error } = await supabase
-        .from('memory_notes')
-        .insert({
-          workspace_id: selectedWorkspaceId,
+      const tags = [currentRun.strategy_key, currentRun.engine_source || 'unknown'];
+
+      // Use memory-create edge function to generate embeddings
+      const { error } = await supabase.functions.invoke('memory-create', {
+        body: {
+          workspaceId: selectedWorkspaceId,
+          runId: currentRun.id,
           content: insightContent.trim(),
           source: 'run_note',
-          run_id: currentRun.id,
-          tags: [currentRun.strategy_key, currentRun.engine_source || 'unknown'],
+          tags,
           metadata: {
             strategy_name: strategyName,
             metrics: currentRun.metrics,
             params: currentRun.params,
           },
-        });
+        },
+      });
 
       if (error) throw error;
 
-      toast.success('Insight saved to memory');
+      toast.success('Insight saved to memory with embedding');
       setInsightContent('');
       setIsInsightDialogOpen(false);
     } catch (error: any) {

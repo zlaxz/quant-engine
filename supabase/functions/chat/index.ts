@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
+import { generateEmbedding } from '../_shared/embeddings.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -112,25 +113,53 @@ serve(async (req) => {
 
     console.log('[Chat API] Loaded', previousMessages?.length || 0, 'previous messages');
 
-    // 2.5. Load recent memory notes for context
+    // 2.5. Use semantic memory retrieval for chat context
     console.log('[Chat API] Loading memory notes for workspace:', workspaceId);
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    let memoryNotes = [];
+    
+    // Build query from recent conversation context (last 2 messages + new message)
+    const recentMessages = (previousMessages || []).slice(-2).map(m => m.content).join(' ');
+    const searchQuery = `${recentMessages} ${content}`.slice(0, 500); // Limit query length
+    
+    console.log('[Chat API] Generating embedding for semantic memory search...');
+    const queryEmbedding = await generateEmbedding(searchQuery);
+    
+    if (queryEmbedding) {
+      // Use semantic search via the database function
+      const { data: semanticResults, error: memoryError } = await supabase.rpc('search_memory_notes', {
+        query_embedding: queryEmbedding,
+        match_workspace_id: workspaceId,
+        match_threshold: 0.6, // 60% similarity threshold
+        match_count: 5,
+      });
 
-    const { data: memoryNotes, error: memoryError } = await supabase
-      .from('memory_notes')
-      .select('content, source, tags, created_at')
-      .eq('workspace_id', workspaceId)
-      .gte('created_at', thirtyDaysAgo.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(5);
+      if (memoryError) {
+        console.error('[Chat API] Error in semantic memory search:', memoryError);
+      } else {
+        memoryNotes = semanticResults || [];
+        console.log(`[Chat API] Found ${memoryNotes.length} relevant memory notes via semantic search`);
+      }
+    } else {
+      console.warn('[Chat API] Failed to generate query embedding, falling back to recent notes');
+      
+      // Fallback to time-based retrieval if embedding fails
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const { data: recentNotes, error: memoryError } = await supabase
+        .from('memory_notes')
+        .select('content, source, tags, created_at, similarity')
+        .eq('workspace_id', workspaceId)
+        .gte('created_at', thirtyDaysAgo.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(5);
 
-    if (memoryError) {
-      console.error('[Chat API] Memory notes fetch error:', memoryError);
-      // Non-critical - continue without memory context
+      if (memoryError) {
+        console.error('[Chat API] Error fetching memory notes:', memoryError);
+      } else {
+        memoryNotes = recentNotes || [];
+      }
     }
-
-    console.log('[Chat API] Loaded', memoryNotes?.length || 0, 'memory notes');
 
     // 3. Build message array for OpenAI
     const messages: ChatMessage[] = [];
@@ -139,11 +168,16 @@ serve(async (req) => {
     let systemPrompt = workspace.default_system_prompt || '';
     
     if (memoryNotes && memoryNotes.length > 0) {
-      const memoryContext = memoryNotes
-        .map((note, idx) => `${idx + 1}. [${note.source}] ${note.content}`)
+      const memoryItems = memoryNotes
+        .map((note: any, idx: number) => {
+          const date = new Date(note.created_at).toISOString().split('T')[0];
+          const similarity = note.similarity ? ` (${Math.round(note.similarity * 100)}% relevant)` : '';
+          return `${idx + 1}) [source: ${note.source}, created: ${date}${similarity}] ${note.content}`;
+        })
         .join('\n');
       
-      systemPrompt += `\n\nRelevant Memory from this workspace:\n${memoryContext}`;
+      systemPrompt += `\n\nRelevant Memory:\n${memoryItems}`;
+      console.log('[Chat API] Injecting semantic memory context into system prompt');
     }
     
     if (systemPrompt) {

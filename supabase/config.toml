@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.backtest-get]
 verify_jwt = false
+
+[functions.memory-search]
+verify_jwt = false
+
+[functions.memory-create]
+verify_jwt = false
