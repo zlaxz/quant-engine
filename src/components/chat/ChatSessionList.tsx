@@ -196,50 +196,48 @@ export const ChatSessionList = () => {
               <div
                 key={session.id}
                 className={cn(
-                  'group rounded-md transition-colors mb-1 p-2 flex items-center gap-2 w-full max-w-full',
+                  'rounded-md transition-colors mb-1 p-1.5 flex items-center gap-1 w-full',
                   'hover:bg-muted/50',
                   selectedSessionId === session.id && 'bg-muted'
                 )}
               >
                 <button
                   onClick={() => setSelectedSession(session.id, session.workspace_id)}
-                  className="flex-1 flex items-center gap-2 text-left min-w-0 overflow-hidden"
+                  className="flex-1 flex items-center gap-1.5 text-left min-w-0"
                 >
-                  <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <div className="font-medium text-sm truncate">
+                  <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-xs truncate">
                       {session.title}
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">
+                    <div className="text-[10px] text-muted-foreground truncate">
                       {new Date(session.created_at).toLocaleDateString()}
                     </div>
                   </div>
                 </button>
                 
-                <div className="flex items-center gap-0.5 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openRenameDialog(session);
-                    }}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSessionToDelete(session.id);
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openRenameDialog(session);
+                  }}
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0 hover:text-destructive"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSessionToDelete(session.id);
+                  }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
               </div>
             ))
           )}
