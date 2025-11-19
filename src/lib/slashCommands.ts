@@ -102,8 +102,21 @@ async function handleBacktest(args: string, context: CommandContext): Promise<Co
 
       if (fetchError) throw fetchError;
 
+      if (!runData) {
+        return {
+          success: false,
+          message: '❌ Backtest run not found.',
+        };
+      }
+
       if (runData.status === 'completed') {
         const metrics = runData.metrics;
+        if (!metrics) {
+          return {
+            success: false,
+            message: '❌ Backtest completed but metrics are missing.',
+          };
+        }
         return {
           success: true,
           message: `✅ Backtest completed!\n\n` +
@@ -162,14 +175,17 @@ async function handleRuns(args: string, context: CommandContext): Promise<Comman
   }
 
   try {
-    const { data, error } = await supabase
-      .from('backtest_runs')
-      .select('*')
-      .eq('session_id', context.sessionId)
-      .order('started_at', { ascending: false })
-      .limit(limit);
+  const { data, error } = await supabase
+    .from('backtest_runs')
+    .select('*')
+    .eq('session_id', context.sessionId)
+    .order('started_at', { ascending: false })
+    .limit(limit);
 
-    if (error) throw error;
+  if (error) {
+    console.error('[Slash Command /runs] Error:', error);
+    throw error;
+  }
 
     if (!data || data.length === 0) {
       return {
@@ -179,14 +195,14 @@ async function handleRuns(args: string, context: CommandContext): Promise<Comman
     }
 
     const runsList = data.map((run, idx) => {
-      const date = new Date(run.started_at).toLocaleDateString();
+      const date = new Date(run.started_at || Date.now()).toLocaleDateString();
       const status = run.status === 'completed' ? '✅' : run.status === 'failed' ? '❌' : '⏳';
-      const metrics = run.metrics;
+      const metrics = run.metrics as any || {};
       
       let summary = `${idx + 1}. ${status} ${run.strategy_key} (${date})`;
       
-      if (run.status === 'completed' && metrics) {
-        summary += `\n   CAGR: ${(metrics.cagr * 100).toFixed(2)}% | Sharpe: ${metrics.sharpe.toFixed(2)} | DD: ${(metrics.max_drawdown * 100).toFixed(2)}%`;
+      if (run.status === 'completed' && metrics.cagr !== undefined) {
+        summary += `\n   CAGR: ${(metrics.cagr * 100).toFixed(2)}% | Sharpe: ${metrics.sharpe?.toFixed(2) || 'N/A'} | DD: ${metrics.max_drawdown !== undefined ? (metrics.max_drawdown * 100).toFixed(2) : 'N/A'}%`;
       } else if (run.status === 'failed') {
         summary += `\n   Error: ${run.error || 'Unknown'}`;
       }

@@ -125,18 +125,20 @@ export const RunComparisonPanel = ({
   };
 
   // Normalize equity curves to start at 1.0 for comparison
-  const normalizedData = selectedRuns.map((run, idx) => {
-    const firstValue = run.equity_curve[0]?.value || 1;
-    return {
-      runId: run.id,
-      color: CHART_COLORS[idx % CHART_COLORS.length],
-      label: `Run ${idx + 1}: ${strategies.find(s => s.key === run.strategy_key)?.name || run.strategy_key}`,
-      data: run.equity_curve.map(point => ({
-        date: point.date,
-        normalizedValue: point.value / firstValue,
-      })),
-    };
-  });
+  const normalizedData = selectedRuns
+    .filter(run => run.equity_curve && Array.isArray(run.equity_curve) && run.equity_curve.length > 0)
+    .map((run, idx) => {
+      const firstValue = run.equity_curve[0]?.value || 1;
+      return {
+        runId: run.id,
+        color: CHART_COLORS[idx % CHART_COLORS.length],
+        label: `Run ${idx + 1}: ${strategies.find(s => s.key === run.strategy_key)?.name || run.strategy_key}`,
+        data: run.equity_curve.map(point => ({
+          date: point.date,
+          normalizedValue: point.value / firstValue,
+        })),
+      };
+    });
 
   // Merge all dates for combined chart
   const allDates = Array.from(
@@ -219,43 +221,58 @@ export const RunComparisonPanel = ({
             <tbody>
               <tr className="border-b border-border/50">
                 <td className="py-2 font-mono text-muted-foreground">CAGR</td>
-                {selectedRuns.map((run, idx) => (
-                  <td key={idx} className="text-right py-2 font-semibold">
-                    {(run.metrics.cagr * 100).toFixed(2)}%
-                  </td>
-                ))}
+                {selectedRuns.map((run, idx) => {
+                  const metrics = run.metrics as any || {};
+                  return (
+                    <td key={idx} className="text-right py-2 font-semibold">
+                      {metrics.cagr !== undefined ? `${(metrics.cagr * 100).toFixed(2)}%` : 'N/A'}
+                    </td>
+                  );
+                })}
               </tr>
               <tr className="border-b border-border/50">
                 <td className="py-2 font-mono text-muted-foreground">Sharpe</td>
-                {selectedRuns.map((run, idx) => (
-                  <td key={idx} className="text-right py-2 font-semibold">
-                    {run.metrics.sharpe.toFixed(2)}
-                  </td>
-                ))}
+                {selectedRuns.map((run, idx) => {
+                  const metrics = run.metrics as any || {};
+                  return (
+                    <td key={idx} className="text-right py-2 font-semibold">
+                      {metrics.sharpe !== undefined ? metrics.sharpe.toFixed(2) : 'N/A'}
+                    </td>
+                  );
+                })}
               </tr>
               <tr className="border-b border-border/50">
                 <td className="py-2 font-mono text-muted-foreground">Max Drawdown</td>
-                {selectedRuns.map((run, idx) => (
-                  <td key={idx} className="text-right py-2 font-semibold text-destructive">
-                    {(run.metrics.max_drawdown * 100).toFixed(2)}%
-                  </td>
-                ))}
+                {selectedRuns.map((run, idx) => {
+                  const metrics = run.metrics as any || {};
+                  return (
+                    <td key={idx} className="text-right py-2 font-semibold text-destructive">
+                      {metrics.max_drawdown !== undefined ? `${(metrics.max_drawdown * 100).toFixed(2)}%` : 'N/A'}
+                    </td>
+                  );
+                })}
               </tr>
               <tr className="border-b border-border/50">
                 <td className="py-2 font-mono text-muted-foreground">Win Rate</td>
-                {selectedRuns.map((run, idx) => (
-                  <td key={idx} className="text-right py-2 font-semibold">
-                    {(run.metrics.win_rate * 100).toFixed(1)}%
-                  </td>
-                ))}
+                {selectedRuns.map((run, idx) => {
+                  const metrics = run.metrics as any || {};
+                  return (
+                    <td key={idx} className="text-right py-2 font-semibold">
+                      {metrics.win_rate !== undefined ? `${(metrics.win_rate * 100).toFixed(1)}%` : 'N/A'}
+                    </td>
+                  );
+                })}
               </tr>
               <tr>
                 <td className="py-2 font-mono text-muted-foreground">Total Trades</td>
-                {selectedRuns.map((run, idx) => (
-                  <td key={idx} className="text-right py-2 font-semibold">
-                    {run.metrics.total_trades}
-                  </td>
-                ))}
+                {selectedRuns.map((run, idx) => {
+                  const metrics = run.metrics as any || {};
+                  return (
+                    <td key={idx} className="text-right py-2 font-semibold">
+                      {metrics.total_trades || 'N/A'}
+                    </td>
+                  );
+                })}
               </tr>
             </tbody>
           </table>
