@@ -8,19 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, FileText, Calendar, TrendingUp, Zap, Activity, AlertCircle, Save, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-
-interface BacktestRun {
-  id: string;
-  strategy_key: string;
-  params: any;
-  status: string;
-  metrics: any;
-  equity_curve: any[];
-  started_at: string;
-  completed_at: string | null;
-  engine_source?: string;
-  notes?: string | null;
-}
+import type { BacktestRun, BacktestMetrics } from '@/types/backtest';
 
 interface ExperimentBrowserProps {
   sessionId: string | null;

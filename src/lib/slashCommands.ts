@@ -1,9 +1,10 @@
 /**
  * Slash command parser and executor for Quant Chat Workbench
- * Provides /backtest, /runs, and /note commands
+ * Provides /backtest, /runs, /note, and /compare commands
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import type { BacktestRun, BacktestParams, BacktestMetrics } from '@/types/backtest';
 
 export interface CommandResult {
   success: boolean;

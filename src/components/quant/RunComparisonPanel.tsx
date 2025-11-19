@@ -5,19 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, X, Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-
-interface BacktestRun {
-  id: string;
-  strategy_key: string;
-  params: any;
-  status: string;
-  metrics: any;
-  equity_curve: any[];
-  started_at: string;
-  completed_at: string | null;
-  engine_source?: string;
-  notes?: string;
-}
+import type { BacktestRun, BacktestParams, BacktestMetrics } from '@/types/backtest';
 
 interface Strategy {
   id: string;

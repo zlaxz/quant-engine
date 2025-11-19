@@ -68,7 +68,8 @@ Version 1.0 is considered complete when:
 
 ## Remaining Work to v1 DONE
 
-### Stage 1: Rotation-Engine Integration & Run Metadata Refinement
+### Stage 1: Rotation-Engine Integration & Run Metadata Refinement ✅
+- **Type System**: Implemented strongly-typed BacktestParams, BacktestMetrics, and EquityPoint interfaces shared across frontend and backend
 - **Real Engine Bridge**: Finalize POST `/run-backtest` contract with rotation-engine
 - **Profile Selection**: Support rotation-engine profile configs in strategy dropdown
 - **Run Metadata**: Enhance params structure to capture profile variations (e.g., rebalance frequency, universe filters)
