@@ -202,17 +202,18 @@ export const ChatSessionList = () => {
               <div
                 key={session.id}
                 className={cn(
-                  'relative rounded-md transition-colors mb-1',
+                  'relative rounded-md transition-colors mb-1 p-3',
+                  'hover:bg-muted/50',
                   selectedSessionId === session.id && 'bg-muted'
                 )}
               >
-                <button
-                  onClick={() => setSelectedSession(session.id, session.workspace_id)}
-                  className="w-full text-left p-3 hover:bg-muted/50 rounded-md"
-                >
-                  <div className="flex items-start gap-2">
-                    <MessageSquare className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                    <div className="flex-1 min-w-0 pr-12">
+                <div className="flex items-start gap-2">
+                  <button
+                    onClick={() => setSelectedSession(session.id, session.workspace_id)}
+                    className="flex-1 flex items-start gap-2 text-left min-w-0"
+                  >
+                    <MessageSquare className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate">
                         {session.title}
                       </div>
@@ -220,44 +221,44 @@ export const ChatSessionList = () => {
                         {new Date(session.created_at).toLocaleDateString()}
                       </div>
                     </div>
-                    
-                    {/* Menu button inline - always visible */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="icon" 
-                          className="h-8 w-8 shrink-0 border-2"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            console.log('Menu clicked for session:', session.id);
-                          }}
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={(e) => {
+                  </button>
+                  
+                  {/* Menu button - separate from session button */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 shrink-0"
+                        onClick={(e) => {
                           e.stopPropagation();
-                          openRenameDialog(session);
-                        }}>
-                          <Pencil className="h-3 w-3 mr-2" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSessionToDelete(session.id);
-                          }}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </button>
+                          console.log('Menu clicked for session:', session.id);
+                        }}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation();
+                        openRenameDialog(session);
+                      }}>
+                        <Pencil className="h-3 w-3 mr-2" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSessionToDelete(session.id);
+                        }}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-3 w-3 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
             ))
           )}
