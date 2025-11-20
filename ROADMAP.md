@@ -56,6 +56,7 @@
 - `/list_dir path:<path>` — List rotation-engine directory contents
 - `/open_file path:<path>` — Show rotation-engine file contents
 - `/search_code <query>` — Search rotation-engine code for terms
+- `/auto_analyze [scope]` — Run autonomous research loop combining all agent modes (Autonomous Research Loop mode)
 
 ---
 
@@ -183,6 +184,34 @@ Version 1.0 is considered complete when:
 - ✅ **Safety**: Completely read-only, no write or modification capabilities
 - ✅ **Performance**: Limits search results to 100 matches, truncates large files
 - ✅ **Integration Ready**: Can be integrated into agent modes (Auditor, Pattern Miner, etc.) for code-aware analysis
+
+### Stage 10: Autonomous Research Loop v1 ✅
+- ✅ **Multi-Agent Orchestration**: `/auto_analyze [scope]` command combines all agent modes into comprehensive research report
+- ✅ **Auto-Analyze Prompt**: `autoAnalyzePrompt.ts` with 8-section structured research report
+- ✅ **Orchestration Helpers**: `autoAnalyze.ts` with key functions:
+  - `selectKeyRuns()`: Intelligently picks 3-5 representative runs (best Sharpe, worst drawdown, most recent, outliers)
+  - `buildRunPortfolioSummary()`: Aggregates metrics across all runs, identifies regime gaps, highlights extremes
+  - `assembleAgentInputs()`: Merges outputs from all agent modes into unified analysis context
+- ✅ **Complete Analysis Pipeline**: Automatically runs:
+  - Strategy Auditor on 3 key runs for deep individual analysis
+  - Pattern Miner across all runs to detect recurring behaviors
+  - Memory Curator to review knowledge base health
+  - Risk Officer to identify structural vulnerabilities
+  - Experiment Director to propose prioritized next tests
+- ✅ **Comprehensive Report Sections**:
+  - Executive Summary (key findings overview)
+  - Key Observations with specific evidence (runs, metrics, dates)
+  - Structural Conclusions (convexity, regimes, failure modes)
+  - Conflicts or Rule Violations (contradictions, breaches, invalidated beliefs)
+  - Recommended Experiments (3-8 prioritized tests with hypotheses)
+  - Updated Understanding (how mental model should shift)
+  - Suggested Memory Updates (rule/insight changes requiring user confirmation)
+  - Long-Term Risk Flags (systemic vulnerabilities)
+- ✅ **Scope Filtering**: Optional scope parameter to focus analysis on specific strategies or tags
+- ✅ **Safety Guarantees**: No auto-execution of backtests, no auto-editing of memory, all recommendations require user confirmation
+- ✅ **Integration**: Uses Chief Quant base identity with autonomous research synthesis instructions
+- ✅ **Minimum Data**: Requires at least 5 completed runs, works best with >20 runs and meaningful memory
+- ✅ **Performance**: Limits audits to 3 key runs, aggregates efficiently, handles large run sets gracefully
 
 ---
 

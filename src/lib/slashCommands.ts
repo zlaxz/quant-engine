@@ -15,6 +15,8 @@ import { buildExperimentDirectorPrompt } from '@/prompts/experimentDirectorPromp
 import { buildExperimentRunSummary, buildExperimentMemorySummary } from '@/lib/experimentPlanning';
 import { buildRiskOfficerPrompt } from '@/prompts/riskOfficerPrompt';
 import { buildRiskRunSummary, buildRiskMemorySummary } from '@/lib/riskSummaries';
+import { selectKeyRuns, buildRunPortfolioSummary, assembleAgentInputs } from '@/lib/autoAnalyze';
+import { buildAutoAnalyzePrompt } from '@/prompts/autoAnalyzePrompt';
 
 export interface CommandResult {
   success: boolean;
@@ -1138,6 +1140,216 @@ async function handleSearchCode(args: string, context: CommandContext): Promise<
 }
 
 /**
+ * /auto_analyze command - autonomous research loop
+ * Runs all agent modes and produces comprehensive research report
+ * Usage: /auto_analyze [scope]
+ */
+async function handleAutoAnalyze(args: string, context: CommandContext): Promise<CommandResult> {
+  const scope = args.trim();
+
+  try {
+    // Fetch completed runs for this session
+    const { data: runsData, error: runsError } = await supabase
+      .from('backtest_runs')
+      .select('*')
+      .eq('session_id', context.sessionId)
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false })
+      .limit(100);
+
+    if (runsError) throw runsError;
+
+    const runs = (runsData || []) as BacktestRun[];
+
+    if (runs.length === 0) {
+      return {
+        success: false,
+        message: '❌ No completed runs found for this session. Run some backtests first before using /auto_analyze.',
+      };
+    }
+
+    if (runs.length < 5) {
+      return {
+        success: false,
+        message: `⚠️ Auto-analyze works best with at least 5 completed runs. You currently have ${runs.length}. Consider running more backtests.`,
+      };
+    }
+
+    // Filter by scope if provided
+    let filteredRuns = runs;
+    if (scope) {
+      filteredRuns = runs.filter(r =>
+        r.strategy_key.toLowerCase().includes(scope.toLowerCase()) ||
+        (r.notes && r.notes.toLowerCase().includes(scope.toLowerCase()))
+      );
+
+      if (filteredRuns.length === 0) {
+        return {
+          success: false,
+          message: `❌ No runs match scope "${scope}". Try a different scope or run /auto_analyze without scope.`,
+        };
+      }
+    }
+
+    // Select key runs for detailed analysis
+    const keyRuns = selectKeyRuns(filteredRuns);
+
+    // Build portfolio summary
+    const portfolioSummary = buildRunPortfolioSummary(filteredRuns);
+
+    // Fetch memory notes
+    const { data: memoryData, error: memoryError } = await supabase
+      .from('memory_notes')
+      .select('*')
+      .eq('workspace_id', context.workspaceId)
+      .eq('archived', false)
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (memoryError) throw memoryError;
+
+    const memoryNotes = (memoryData || []) as MemoryNote[];
+
+    // Run agent modes internally
+    const auditResults: string[] = [];
+
+    // Audit key runs
+    for (const run of keyRuns.slice(0, 3)) {
+      // Limit to top 3 to avoid overwhelming context
+      const runMemory = memoryNotes.filter(note =>
+        note.run_id === run.id ||
+        (note.tags && note.tags.some(tag => run.strategy_key.includes(tag)))
+      );
+
+      const runSummaryText = buildRunSummary(run);
+      const memorySummaryText = buildMemorySummary(runMemory);
+      const auditPrompt = buildAuditPrompt(runSummaryText, memorySummaryText);
+
+      // Call chat to get audit
+      const { data: auditData, error: auditError } = await supabase.functions.invoke('chat', {
+        body: {
+          sessionId: context.sessionId,
+          workspaceId: context.workspaceId,
+          content: auditPrompt,
+        },
+      });
+
+      if (!auditError && auditData?.message) {
+        auditResults.push(`**Run: ${run.strategy_key} (${run.id.slice(0, 8)})**\n\n${auditData.message}`);
+      }
+    }
+
+    // Pattern Mining
+    const runsAggregate = buildRunsAggregate(filteredRuns.slice(0, 100));
+    const strategyKeys = [...new Set(filteredRuns.map(r => r.strategy_key))];
+    const relevantMemory = buildRelevantMemory(memoryNotes as any, strategyKeys);
+    const patternPrompt = buildPatternMinerPrompt(runsAggregate, relevantMemory);
+
+    const { data: patternData } = await supabase.functions.invoke('chat', {
+      body: {
+        sessionId: context.sessionId,
+        workspaceId: context.workspaceId,
+        content: patternPrompt,
+      },
+    });
+
+    const patternSummary = patternData?.message || '';
+
+    // Memory Curation
+    const curationSummary = buildCurationSummary(memoryNotes as any);
+    const curationPrompt = buildMemoryCuratorPrompt(curationSummary);
+
+    const { data: curationData } = await supabase.functions.invoke('chat', {
+      body: {
+        sessionId: context.sessionId,
+        workspaceId: context.workspaceId,
+        content: curationPrompt,
+      },
+    });
+
+    const memorySummary = curationData?.message || '';
+
+    // Risk Review
+    const riskRunSummary = buildRiskRunSummary(filteredRuns);
+    const riskMemorySummary = buildRiskMemorySummary(memoryNotes as any);
+    const riskPrompt = buildRiskOfficerPrompt(riskRunSummary, riskMemorySummary, '');
+
+    const { data: riskData } = await supabase.functions.invoke('chat', {
+      body: {
+        sessionId: context.sessionId,
+        workspaceId: context.workspaceId,
+        content: riskPrompt,
+      },
+    });
+
+    const riskSummary = riskData?.message || '';
+
+    // Experiment Director
+    const experimentRunSummary = buildExperimentRunSummary(filteredRuns);
+    const experimentMemorySummary = buildExperimentMemorySummary(memoryNotes as any);
+    const experimentPrompt = buildExperimentDirectorPrompt(experimentRunSummary, '', experimentMemorySummary, scope);
+
+    const { data: experimentData } = await supabase.functions.invoke('chat', {
+      body: {
+        sessionId: context.sessionId,
+        workspaceId: context.workspaceId,
+        content: experimentPrompt,
+      },
+    });
+
+    const experimentSummary = experimentData?.message || '';
+
+    // Assemble all inputs
+    const analysisInput = assembleAgentInputs(
+      portfolioSummary,
+      auditResults,
+      patternSummary,
+      memorySummary,
+      riskSummary,
+      experimentSummary
+    );
+
+    // Build final auto-analyze prompt
+    const finalPrompt = buildAutoAnalyzePrompt(scope, analysisInput);
+
+    // Call chat for final synthesis
+    const { data: finalData, error: finalError } = await supabase.functions.invoke('chat', {
+      body: {
+        sessionId: context.sessionId,
+        workspaceId: context.workspaceId,
+        content: finalPrompt,
+      },
+    });
+
+    if (finalError) throw finalError;
+
+    if (!finalData || !finalData.message) {
+      throw new Error('No response from chat function');
+    }
+
+    // Return comprehensive report
+    const scopeNote = scope ? ` (scope: ${scope})` : '';
+    return {
+      success: true,
+      message: `🤖 **Autonomous Research Report**${scopeNote}\n\nAnalyzed ${filteredRuns.length} runs with ${keyRuns.length} key audits, pattern mining, memory curation, risk review, and experiment planning:\n\n${finalData.message}`,
+      data: {
+        runsAnalyzed: filteredRuns.length,
+        keyRunsAudited: keyRuns.length,
+        memoryNotesReviewed: memoryNotes.length,
+        scope: scope || null,
+        report: finalData.message,
+      },
+    };
+  } catch (error: any) {
+    console.error('Auto-analyze command error:', error);
+    return {
+      success: false,
+      message: `❌ Failed to complete autonomous analysis: ${error.message || 'Unknown error'}`,
+    };
+  }
+}
+
+/**
  * /help command - show available commands
  */
 async function handleHelp(): Promise<CommandResult> {
@@ -1236,6 +1448,12 @@ const commands: Record<string, Command> = {
     description: 'Review structural risk across runs',
     usage: '/risk_review [focus]',
     handler: handleRiskReview,
+  },
+  auto_analyze: {
+    name: 'auto_analyze',
+    description: 'Run autonomous research loop combining all agent modes',
+    usage: '/auto_analyze [scope]',
+    handler: handleAutoAnalyze,
   },
   note: {
     name: 'note',

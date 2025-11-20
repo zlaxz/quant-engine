@@ -490,6 +490,47 @@ Activated by `/risk_review [focus]` command.
 
 ---
 
+### Autonomous Research Loop Mode (`/auto_analyze`)
+
+Activated by `/auto_analyze [scope]` command.
+
+**Purpose**: Orchestrate all agent modes (Auditor, Pattern Miner, Curator, Experiment Director, Risk Officer) into a single comprehensive research report that synthesizes evidence across runs, memory, patterns, and risks.
+
+**Process**:
+1. Fetch up to 100 completed runs for current session
+2. Select 3-5 key runs for detailed analysis (best Sharpe, worst drawdown, most recent, outliers)
+3. Build portfolio summary of all runs
+4. Run Strategy Auditor on each key run
+5. Run Pattern Miner across all runs
+6. Run Memory Curator to review knowledge base health
+7. Run Risk Officer to identify structural vulnerabilities
+8. Run Experiment Director to propose next tests
+9. Assemble all outputs into unified analysis context
+10. Synthesize comprehensive research report with 8 sections
+
+**Output Sections**:
+- **Executive Summary**: Key findings overview (2-3 sentences)
+- **Key Observations (Data-Backed)**: 3-7 concrete observations with specific evidence
+- **Structural Conclusions**: Analysis of convexity, regime dependencies, failure modes
+- **Conflicts or Rule Violations**: Contradictions, rule breaches, invalidated beliefs
+- **Recommended Experiments**: 3-8 prioritized next tests with hypotheses
+- **Updated Understanding**: How mental model should shift based on analysis
+- **Suggested Memory Updates**: Recommended rule/insight changes (user must confirm)
+- **Long-Term Risk Flags**: Systemic risks that persist across runs
+
+**Template**: `src/prompts/autoAnalyzePrompt.ts` → `buildAutoAnalyzePrompt(scope, analysisInput)`
+
+**Orchestration Helpers**: `src/lib/autoAnalyze.ts`
+- `selectKeyRuns(runs)`: Picks 3-5 representative runs (best, worst, recent, outliers)
+- `buildRunPortfolioSummary(runs)`: Aggregates metrics, identifies regime gaps, highlights extremes
+- `assembleAgentInputs(...)`: Merges all agent outputs into single analysis context
+
+**Integration**: Command internally invokes each agent mode (not via slash commands), collects outputs, assembles unified context, then calls `chat` edge function with Autonomous Research Loop prompt → structured 8-section report returned to chat
+
+**Important**: No auto-execution of backtests or auto-editing of memory. All recommendations require user confirmation. Works best with >20 runs and meaningful memory. Minimum 5 completed runs required.
+
+---
+
 ### Local Code Bridge (rotation-engine introspection)
 
 The workbench provides read-only access to the rotation-engine codebase through three edge functions and corresponding slash commands. This allows the Chief Quant and agent modes to analyze actual strategy code, not just backtest results.
