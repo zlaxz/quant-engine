@@ -7,7 +7,6 @@
  * - SWARM: DeepSeek-Reasoner (DeepSeek API) - for parallel agent modes
  */
 
-import { GoogleGenerativeAI } from "npm:@google/generative-ai@0.21.0";
 import { getMcpToolsForLlm, executeMcpToolCalls, type McpToolInvocation } from './mcpClient.ts';
 
 export type LlmTier = 'primary' | 'secondary' | 'swarm';
@@ -84,9 +83,6 @@ async function callGemini(model: string, messages: ChatMessage[], enableTools: b
     throw new Error('GEMINI_API_KEY is not set');
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const geminiModel = genAI.getGenerativeModel({ model });
-
   // Convert messages to Gemini format
   const contents = messages.slice(1).map(msg => ({
     role: msg.role === 'assistant' ? 'model' : 'user',
@@ -99,33 +95,77 @@ async function callGemini(model: string, messages: ChatMessage[], enableTools: b
   const tools = enableTools ? getMcpToolsForLlm() : undefined;
   const engineRoot = Deno.env.get('ROTATION_ENGINE_ROOT') || '/Users/zstoc/rotation-engine';
 
+  // Prepare base payload
+  const payload: any = {
+    contents,
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 8192,
+    }
+  };
+
+  if (systemInstruction) {
+    payload.systemInstruction = { parts: [{ text: systemInstruction }] };
+  }
+
   // If no tools, simple generation
   if (!tools) {
-    const result = await geminiModel.generateContent({
-      contents,
-      systemInstruction
-    });
-    return result.response.text();
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   }
 
   // Tool-enabled loop
-  let currentMessages = contents;
+  let currentContents: any[] = contents;
   let maxToolIterations = 5;
   let iteration = 0;
 
   while (iteration < maxToolIterations) {
-    const result = await geminiModel.generateContent({
-      contents: currentMessages,
-      systemInstruction,
-      tools: tools as any
-    });
+    const toolPayload = {
+      ...payload,
+      contents: currentContents,
+      tools: [{ functionDeclarations: tools.map((t: any) => t.function) }]
+    };
 
-    const response = result.response;
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toolPayload)
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const candidate = data.candidates?.[0];
     
-    // Check for tool calls
-    const functionCalls = response.functionCalls();
+    if (!candidate) {
+      throw new Error('No candidate in Gemini response');
+    }
+
+    // Check for function calls
+    const functionCalls = candidate.content?.parts?.filter((p: any) => p.functionCall);
+    
     if (!functionCalls || functionCalls.length === 0) {
-      return response.text();
+      return candidate.content?.parts?.[0]?.text ?? '';
     }
 
     // Execute tool calls
@@ -135,21 +175,21 @@ async function callGemini(model: string, messages: ChatMessage[], enableTools: b
         id: `call_${iteration}_${idx}`,
         type: 'function' as const,
         function: {
-          name: fc.name,
-          arguments: JSON.stringify(fc.args)
+          name: fc.functionCall.name,
+          arguments: JSON.stringify(fc.functionCall.args)
         }
       })),
       engineRoot
     );
 
-    // Add assistant message with tool calls
-    currentMessages.push({
+    // Add assistant message with function calls
+    currentContents.push({
       role: 'model',
-      parts: [{ functionCall: functionCalls[0] }]
+      parts: functionCalls
     });
 
-    // Add tool results
-    currentMessages.push({
+    // Add function responses
+    currentContents.push({
       role: 'user',
       parts: toolResults.map(tr => ({
         functionResponse: {
