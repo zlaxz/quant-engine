@@ -57,6 +57,9 @@
 - `/open_file path:<path>` — Show rotation-engine file contents
 - `/search_code <query>` — Search rotation-engine code for terms
 - `/auto_analyze [scope]` — Run autonomous research loop combining all agent modes (Autonomous Research Loop mode)
+- `/save_report [scope:<value>] [title:"Custom"]` — Save last /auto_analyze report for later retrieval
+- `/list_reports [scope:<value>] [tag:<value>]` — List saved research reports with optional filtering
+- `/open_report id:<uuid>` — Open and display a saved research report
 
 ---
 
@@ -212,6 +215,26 @@ Version 1.0 is considered complete when:
 - ✅ **Integration**: Uses Chief Quant base identity with autonomous research synthesis instructions
 - ✅ **Minimum Data**: Requires at least 5 completed runs, works best with >20 runs and meaningful memory
 - ✅ **Performance**: Limits audits to 3 key runs, aggregates efficiently, handles large run sets gracefully
+
+
+### Stage 11: Research Report Persistence & Workflow ✅
+- ✅ **Persistent Research Reports**: New `research_reports` table stores `/auto_analyze` outputs as durable artifacts
+- ✅ **Database Schema**: Includes workspace_id, session_id, scope, title, summary, content, tags with optimized indexes
+- ✅ **Report Save Edge Function**: `report-save` function handles report persistence with auto-generation of titles, summaries, and tags
+- ✅ **Report Management Commands**: Three new slash commands for complete report workflow:
+  - `/save_report [scope:<value>] [title:"Custom"]`: Saves last /auto_analyze output with optional custom metadata
+  - `/list_reports [scope:<value>] [tag:<value>]`: Lists saved reports with filtering by scope or tags
+  - `/open_report id:<uuid>`: Opens and displays full saved report
+- ✅ **Report Utilities**: `researchReports.ts` with helper functions:
+  - `buildDefaultReportTitle()`: Generates scope-aware titles (e.g., "Skew Strategy Research – 2025-02-10")
+  - `extractSummaryFromReport()`: Extracts executive summary from report content
+  - `buildTagsFromReport()`: Builds tags from scope and strategy terms in content
+- ✅ **Smart Extraction**: Automatically extracts executive summary sections, strategy patterns, and relevant terms
+- ✅ **Flexible Filtering**: Supports scope and tag-based filtering with efficient database indexes
+- ✅ **Seamless Workflow**: `/auto_analyze` outputs include save tip for immediate report persistence
+- ✅ **Historical Tracking**: Enables temporal analysis of research conclusions and strategy evolution
+- ✅ **Knowledge Preservation**: Research insights persist beyond chat session lifecycle
+- ✅ **Documentation**: Updated ARCHITECTURE.md with complete Research Reports section
 
 ---
 

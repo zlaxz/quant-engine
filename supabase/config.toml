@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.search-code]
 verify_jwt = false
+
+[functions.report-save]
+verify_jwt = false

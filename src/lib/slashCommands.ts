@@ -17,6 +17,7 @@ import { buildRiskOfficerPrompt } from '@/prompts/riskOfficerPrompt';
 import { buildRiskRunSummary, buildRiskMemorySummary } from '@/lib/riskSummaries';
 import { selectKeyRuns, buildRunPortfolioSummary, assembleAgentInputs } from '@/lib/autoAnalyze';
 import { buildAutoAnalyzePrompt } from '@/prompts/autoAnalyzePrompt';
+import { buildDefaultReportTitle, extractSummaryFromReport, buildTagsFromReport } from '@/lib/researchReports';
 
 export interface CommandResult {
   success: boolean;
@@ -1327,11 +1328,11 @@ async function handleAutoAnalyze(args: string, context: CommandContext): Promise
       throw new Error('No response from chat function');
     }
 
-    // Return comprehensive report
+    // Return comprehensive report with save tip
     const scopeNote = scope ? ` (scope: ${scope})` : '';
     return {
       success: true,
-      message: `🤖 **Autonomous Research Report**${scopeNote}\n\nAnalyzed ${filteredRuns.length} runs with ${keyRuns.length} key audits, pattern mining, memory curation, risk review, and experiment planning:\n\n${finalData.message}`,
+      message: `🤖 **Autonomous Research Report**${scopeNote}\n\nAnalyzed ${filteredRuns.length} runs with ${keyRuns.length} key audits, pattern mining, memory curation, risk review, and experiment planning:\n\n${finalData.message}\n\n---\n\n💡 **Tip**: Use \`/save_report\` to store this Research Report for later.`,
       data: {
         runsAnalyzed: filteredRuns.length,
         keyRunsAudited: keyRuns.length,
@@ -1345,6 +1346,215 @@ async function handleAutoAnalyze(args: string, context: CommandContext): Promise
     return {
       success: false,
       message: `❌ Failed to complete autonomous analysis: ${error.message || 'Unknown error'}`,
+    };
+  }
+}
+
+/**
+ * /save_report command - save the last /auto_analyze report
+ * Usage: /save_report [scope:<value>] [title:"Custom Title"]
+ */
+async function handleSaveReport(args: string, context: CommandContext): Promise<CommandResult> {
+  try {
+    // Parse optional arguments
+    const scopeMatch = args.match(/scope:(\S+)/);
+    const titleMatch = args.match(/title:"([^"]+)"/);
+    
+    const scope = scopeMatch ? scopeMatch[1] : null;
+    const customTitle = titleMatch ? titleMatch[1] : null;
+
+    // Find the most recent auto_analyze report in this session
+    const { data: messagesData, error: messagesError } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('session_id', context.sessionId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (messagesError) throw messagesError;
+
+    // Look for assistant/system message containing Research Report
+    const reportMessage = messagesData?.find(msg =>
+      msg.content && (
+        msg.content.includes('Autonomous Research Report') ||
+        msg.content.includes('Research Report:')
+      )
+    );
+
+    if (!reportMessage) {
+      return {
+        success: false,
+        message: '❌ No recent Research Report found to save. Run `/auto_analyze` first.',
+      };
+    }
+
+    // Extract report content (remove the tip line)
+    let reportContent = reportMessage.content;
+    reportContent = reportContent.replace(/\n\n---\n\n💡 \*\*Tip\*\*:.*$/, '');
+
+    // Build summary and tags
+    const summary = extractSummaryFromReport(reportContent);
+    const tags = buildTagsFromReport(scope, reportContent);
+
+    // Call report-save edge function
+    const { data: saveData, error: saveError } = await supabase.functions.invoke('report-save', {
+      body: {
+        workspaceId: context.workspaceId,
+        sessionId: context.sessionId,
+        scope: scope,
+        title: customTitle || undefined,
+        summary: summary,
+        content: reportContent,
+        tags: tags,
+      },
+    });
+
+    if (saveError) throw saveError;
+
+    if (!saveData || !saveData.id) {
+      throw new Error('No report ID returned from save operation');
+    }
+
+    const shortId = saveData.id.substring(0, 8);
+    return {
+      success: true,
+      message: `✅ Report saved as **${saveData.title}** (id: ${shortId})`,
+      data: saveData,
+    };
+
+  } catch (error: any) {
+    console.error('Save report command error:', error);
+    return {
+      success: false,
+      message: `❌ Failed to save report: ${error.message || 'Unknown error'}`,
+    };
+  }
+}
+
+/**
+ * /list_reports command - list saved research reports
+ * Usage: /list_reports [scope:<value>] [tag:<value>]
+ */
+async function handleListReports(args: string, context: CommandContext): Promise<CommandResult> {
+  try {
+    // Parse optional filters
+    const scopeMatch = args.match(/scope:(\S+)/);
+    const tagMatch = args.match(/tag:(\S+)/);
+    
+    const scopeFilter = scopeMatch ? scopeMatch[1] : null;
+    const tagFilter = tagMatch ? tagMatch[1] : null;
+
+    // Build query
+    let query = supabase
+      .from('research_reports')
+      .select('*')
+      .eq('workspace_id', context.workspaceId);
+
+    // Apply filters
+    if (scopeFilter) {
+      query = query.ilike('scope', `%${scopeFilter}%`);
+    }
+
+    if (tagFilter) {
+      query = query.contains('tags', [tagFilter]);
+    }
+
+    // Order and limit
+    query = query.order('created_at', { ascending: false }).limit(20);
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      const filterNote = scopeFilter || tagFilter 
+        ? ` matching filters (scope: ${scopeFilter || 'none'}, tag: ${tagFilter || 'none'})`
+        : '';
+      return {
+        success: true,
+        message: `📋 No reports found${filterNote}.`,
+        data: [],
+      };
+    }
+
+    // Format report list
+    const reportList = data.map((report, index) => {
+      const date = new Date(report.created_at).toISOString().split('T')[0];
+      const shortId = report.id.substring(0, 8);
+      const scopeTag = report.scope ? ` [${report.scope}]` : '';
+      return `${index + 1}) **[${date}]** ${report.title}${scopeTag} (id: ${shortId})`;
+    }).join('\n');
+
+    const filterNote = scopeFilter || tagFilter
+      ? `\n\n**Filters**: ${scopeFilter ? `scope=${scopeFilter}` : ''}${scopeFilter && tagFilter ? ', ' : ''}${tagFilter ? `tag=${tagFilter}` : ''}`
+      : '';
+
+    return {
+      success: true,
+      message: `📋 **Research Reports** (${data.length} found):\n\n${reportList}${filterNote}`,
+      data: data,
+    };
+
+  } catch (error: any) {
+    console.error('List reports command error:', error);
+    return {
+      success: false,
+      message: `❌ Failed to list reports: ${error.message || 'Unknown error'}`,
+    };
+  }
+}
+
+/**
+ * /open_report command - open a saved research report
+ * Usage: /open_report id:<uuid>
+ */
+async function handleOpenReport(args: string, context: CommandContext): Promise<CommandResult> {
+  try {
+    // Parse id argument
+    const idMatch = args.match(/id:(\S+)/);
+    
+    if (!idMatch) {
+      return {
+        success: false,
+        message: 'Usage: /open_report id:<uuid>\nExample: /open_report id:abc12345',
+      };
+    }
+
+    const reportId = idMatch[1];
+
+    // Fetch report
+    const { data, error } = await supabase
+      .from('research_reports')
+      .select('*')
+      .eq('id', reportId)
+      .eq('workspace_id', context.workspaceId)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) {
+      return {
+        success: false,
+        message: `❌ Report not found for id: ${reportId}`,
+      };
+    }
+
+    // Format report display
+    const date = new Date(data.created_at).toISOString().split('T')[0];
+    const scopeTag = data.scope ? ` [${data.scope}]` : '';
+    const tags = data.tags && data.tags.length > 0 ? `\n**Tags**: ${data.tags.join(', ')}` : '';
+
+    return {
+      success: true,
+      message: `📄 **Report: ${data.title}**${scopeTag}\n\n**Date**: ${date}${tags}\n\n---\n\n${data.content}`,
+      data: data,
+    };
+
+  } catch (error: any) {
+    console.error('Open report command error:', error);
+    return {
+      success: false,
+      message: `❌ Failed to open report: ${error.message || 'Unknown error'}`,
     };
   }
 }
@@ -1380,6 +1590,18 @@ async function handleHelp(): Promise<CommandResult> {
       `🛡️ /risk_review [focus]\n` +
       `   Review structural risk across runs and detect rule violations\n` +
       `   Example: /risk_review or /risk_review skew\n\n` +
+      `🤖 /auto_analyze [scope]\n` +
+      `   Run autonomous research loop combining all agent modes into comprehensive report\n` +
+      `   Example: /auto_analyze or /auto_analyze skew\n\n` +
+      `💾 /save_report [scope:<value>] [title:"Custom"]\n` +
+      `   Save the last /auto_analyze report for later retrieval\n` +
+      `   Example: /save_report or /save_report scope:skew title:"Q1 2025 Skew Analysis"\n\n` +
+      `📋 /list_reports [scope:<value>] [tag:<value>]\n` +
+      `   List saved research reports with optional filters\n` +
+      `   Example: /list_reports or /list_reports scope:skew or /list_reports tag:momentum\n\n` +
+      `📖 /open_report id:<uuid>\n` +
+      `   Open and display a saved research report\n` +
+      `   Example: /open_report id:abc12345\n\n` +
       `💡 /note <content> [type:TYPE] [importance:LEVEL] [tags:tag1,tag2]\n` +
       `   Create a memory note\n` +
       `   Example: /note This fails in bear markets type:warning importance:high\n\n` +
@@ -1454,6 +1676,24 @@ const commands: Record<string, Command> = {
     description: 'Run autonomous research loop combining all agent modes',
     usage: '/auto_analyze [scope]',
     handler: handleAutoAnalyze,
+  },
+  save_report: {
+    name: 'save_report',
+    description: 'Save the last /auto_analyze report',
+    usage: '/save_report [scope:<value>] [title:"Custom"]',
+    handler: handleSaveReport,
+  },
+  list_reports: {
+    name: 'list_reports',
+    description: 'List saved research reports',
+    usage: '/list_reports [scope:<value>] [tag:<value>]',
+    handler: handleListReports,
+  },
+  open_report: {
+    name: 'open_report',
+    description: 'Open a saved research report',
+    usage: '/open_report id:<uuid>',
+    handler: handleOpenReport,
   },
   note: {
     name: 'note',

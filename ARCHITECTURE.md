@@ -658,6 +658,154 @@ Used when analyzing rotation-engine source code. Instructs the Chief Quant to:
 
 ---
 
+## Research Reports
+
+### Overview
+
+Research Reports provide persistent storage and retrieval of comprehensive analysis outputs from the Autonomous Research Loop (`/auto_analyze`). These reports transform transient chat outputs into durable, queryable artifacts that preserve research conclusions over time.
+
+### Database Schema
+
+#### `research_reports` Table
+
+```sql
+id                uuid PRIMARY KEY default gen_random_uuid()
+workspace_id      uuid NOT NULL REFERENCES workspaces(id)
+session_id        uuid NULL REFERENCES chat_sessions(id)
+scope             text NULL          -- e.g. "skew", "strategy:skew_convexity_v1"
+title             text NOT NULL      -- human-readable title (auto-generated or custom)
+summary           text NOT NULL      -- executive summary extracted from report
+content           text NOT NULL      -- full report text (the /auto_analyze output)
+tags              text[] DEFAULT '{}'-- strategy names, regimes, extracted terms
+created_at        timestamptz DEFAULT now()
+updated_at        timestamptz DEFAULT now()
+```
+
+**Indexes**:
+- `workspace_id` for efficient workspace queries
+- `scope` for scope filtering
+- `tags` (GIN) for tag-based searches
+- `created_at DESC` for chronological ordering
+
+### Edge Functions
+
+#### `report-save`
+
+**Endpoint**: `POST /functions/v1/report-save`
+
+**Request Body**:
+```json
+{
+  "workspaceId": "uuid",
+  "sessionId": "uuid | null",
+  "scope": "string | null",
+  "title": "optional string",
+  "summary": "optional string",
+  "content": "full report text",
+  "tags": ["optional", "tags"]
+}
+```
+
+**Behavior**:
+1. Validates required fields (workspaceId, content)
+2. Auto-generates title using `buildDefaultReportTitle()` if not provided
+3. Extracts summary from content using `extractSummaryFromReport()` if not provided
+4. Builds tags using `buildTagsFromReport()` if not provided
+5. Inserts record into `research_reports` table
+6. Returns `{ id, title, created_at }`
+
+### Report Management Commands
+
+#### `/save_report [scope:<value>] [title:"Custom Title"]`
+
+Saves the most recent `/auto_analyze` output as a persistent research report.
+
+**Process**:
+1. Searches current session messages for latest "Autonomous Research Report"
+2. Extracts full report content (removes save tip)
+3. Parses optional scope and custom title arguments
+4. Calls `report-save` edge function with extracted content
+5. Returns confirmation with report title and short ID
+
+**Examples**:
+- `/save_report` - saves with auto-generated title
+- `/save_report scope:skew` - saves with scope-based title
+- `/save_report title:"Q1 2025 Skew Analysis"` - saves with custom title
+
+#### `/list_reports [scope:<value>] [tag:<value>]`
+
+Lists saved research reports with optional filtering.
+
+**Process**:
+1. Queries `research_reports` table for current workspace
+2. Applies optional scope filter (ILIKE) and tag filter (array contains)
+3. Orders by `created_at DESC`, limits to 20 results
+4. Formats as numbered list with dates, titles, scope tags, and short IDs
+
+**Examples**:
+- `/list_reports` - lists all reports
+- `/list_reports scope:skew` - filters by scope
+- `/list_reports tag:momentum` - filters by tag
+
+#### `/open_report id:<uuid>`
+
+Opens and displays a saved research report.
+
+**Process**:
+1. Fetches report by ID and workspace
+2. Formats with title, date, tags, and full content
+3. Displays complete report in chat
+
+**Example**:
+- `/open_report id:abc12345` - opens specific report
+
+### Report Utilities
+
+#### `src/lib/researchReports.ts`
+
+**Functions**:
+- `buildDefaultReportTitle(scope, createdAt)`: Creates scope-aware titles
+- `extractSummaryFromReport(content)`: Extracts executive summary sections
+- `buildTagsFromReport(scope, content)`: Builds strategy and term tags
+
+**Title Generation**:
+- With scope: "Skew Strategy Research – 2025-02-10"
+- Without scope: "Workspace Research Report – 2025-02-10"
+
+**Summary Extraction**:
+1. Searches for "Executive Summary" section in report
+2. Falls back to first 3-5 lines if section not found
+3. Truncates to 500 characters maximum
+
+**Tag Building**:
+- Includes scope terms (cleaned and split)
+- Extracts strategy patterns (e.g., `skew_convexity_v1`)
+- Identifies common strategy terms in content
+- Limits to 10 most relevant tags
+
+### Integration with Autonomous Research Loop
+
+The `/auto_analyze` command now includes a save tip at the end of each report:
+
+```
+💡 **Tip**: Use `/save_report` to store this Research Report for later.
+```
+
+This creates a seamless workflow:
+1. Run `/auto_analyze [scope]` to generate comprehensive analysis
+2. Use `/save_report` to persist the output
+3. Use `/list_reports` and `/open_report` to browse and retrieve past analysis
+
+### Use Cases
+
+- **Historical Analysis**: Track research evolution over time
+- **Strategy Development**: Compare analysis across different time periods
+- **Knowledge Preservation**: Retain insights beyond chat session lifecycle
+- **Team Collaboration**: Share structured research findings
+- **Regulatory Compliance**: Maintain audit trail of research decisions
+
+---
+
 
 **Endpoint**: `POST /functions/v1/backtest-run`
 
