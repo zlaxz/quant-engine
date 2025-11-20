@@ -4,9 +4,6 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-
-// Export commands registry for UI components
-export { commands };
 import type { BacktestRun, BacktestParams, BacktestMetrics } from '@/types/backtest';
 import { buildAuditPrompt } from '@/prompts/auditorPrompt';
 import { buildRunSummary, buildMemorySummary, type MemoryNote } from '@/lib/auditSummaries';
@@ -1625,7 +1622,7 @@ async function handleHelp(): Promise<CommandResult> {
 /**
  * Command registry
  */
-const commands: Record<string, Command> = {
+export const commands: Record<string, Command> = {
   backtest: {
     name: 'backtest',
     description: 'Run a backtest for a strategy',
