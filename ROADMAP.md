@@ -125,7 +125,26 @@ Version 1.0 is considered complete when:
 - ✅ **Conservative Approach**: Suggestions only; user manually edits via Memory panel
 - ✅ **Integration**: Uses Chief Quant Curator mode identity for analysis
 
-### Stage 7: Thin Local-Code Tools
+### Stage 7: Experiment Director Mode ✅
+- ✅ **Experiment Planning**: `/suggest_experiments [focus]` command designs concrete next experiments
+- ✅ **Experiment Director Prompt**: `experimentDirectorPrompt.ts` with 5-section structured output
+- ✅ **Planning Helpers**: `experimentPlanning.ts` with analysis functions:
+  - `buildExperimentRunSummary()`: Summarizes runs by strategy, date coverage, metrics, regime gaps
+  - `buildExperimentMemorySummary()`: Focuses on high/critical rules/warnings and insights
+- ✅ **Concrete Experiment Design**: Each experiment includes:
+  - Strategy/profile (exact key)
+  - Date range with regime rationale
+  - Parameter variations (if relevant)
+  - Hypothesis with expectations
+  - Evidence basis (patterns/rules/gaps)
+  - Success and failure criteria
+- ✅ **Prioritization**: Orders experiments by information gain, flags dependencies
+- ✅ **Focus Capability**: Optional focus parameter to target specific strategies or areas
+- ✅ **Research Lead Approach**: Emphasizes learning and structural understanding over P&L optimization
+- ✅ **Integration**: Uses Chief Quant Experiment Director mode identity
+- ✅ **Minimum Data**: Requires at least 5 completed runs
+
+### Stage 8: Thin Local-Code Tools
 - **Repo Bridge**: Simple API bridge to local rotation-engine repo for reading code/configs
 - **Code Search**: `/code <query>` to search local repo from chat
 - **Config Preview**: Show current rotation-engine config in chat when discussing strategies

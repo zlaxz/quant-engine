@@ -11,6 +11,8 @@ import { buildPatternMinerPrompt } from '@/prompts/patternMinerPrompt';
 import { buildRunsAggregate, buildRelevantMemory } from '@/lib/patternSummaries';
 import { buildMemoryCuratorPrompt } from '@/prompts/memoryCuratorPrompt';
 import { buildCurationSummary } from '@/lib/memoryCuration';
+import { buildExperimentDirectorPrompt } from '@/prompts/experimentDirectorPrompt';
+import { buildExperimentRunSummary, buildExperimentMemorySummary } from '@/lib/experimentPlanning';
 
 export interface CommandResult {
   success: boolean;
@@ -739,6 +741,109 @@ async function handleCurateMemory(
 }
 
 /**
+ * /suggest_experiments command - Propose next experiments based on runs and memory
+ */
+async function handleSuggestExperiments(
+  args: string,
+  context: CommandContext
+): Promise<CommandResult> {
+  try {
+    const focus = args.trim() || undefined;
+
+    // Fetch recent completed runs
+    const { data: runs, error: runsError } = await supabase
+      .from('backtest_runs')
+      .select('*')
+      .eq('session_id', context.sessionId)
+      .eq('status', 'completed')
+      .order('started_at', { ascending: false })
+      .limit(100);
+
+    if (runsError) throw runsError;
+
+    if (!runs || runs.length < 5) {
+      return {
+        success: true,
+        message: `📋 Not enough completed runs to suggest experiments yet (found ${runs?.length || 0}, need at least 5).\n\nRun more backtests first using /backtest or the Quant panel.`,
+      };
+    }
+
+    // Fetch relevant memory notes
+    const { data: memoryData, error: memoryError } = await supabase
+      .from('memory_notes')
+      .select('*')
+      .eq('workspace_id', context.workspaceId)
+      .eq('archived', false)
+      .order('importance', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (memoryError) throw memoryError;
+
+    const memoryNotes = (memoryData || []).map(note => ({
+      id: note.id,
+      workspace_id: note.workspace_id,
+      content: note.content,
+      source: note.source,
+      tags: note.tags || [],
+      created_at: note.created_at,
+      run_id: note.run_id,
+      metadata: note.metadata || {},
+      memory_type: note.memory_type || 'insight',
+      importance: note.importance || 'normal',
+      archived: note.archived || false,
+    }));
+
+    // Build summaries
+    const runSummary = buildExperimentRunSummary(runs as BacktestRun[]);
+    const memorySummary = buildExperimentMemorySummary(memoryNotes);
+    const patternSummary = ''; // Can be enhanced later to include recent Pattern Miner output
+
+    // Build Experiment Director prompt
+    const experimentPrompt = buildExperimentDirectorPrompt(
+      runSummary,
+      patternSummary,
+      memorySummary,
+      focus
+    );
+
+    // Call chat function
+    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat', {
+      body: {
+        sessionId: context.sessionId,
+        workspaceId: context.workspaceId,
+        content: experimentPrompt,
+      },
+    });
+
+    if (chatError) throw chatError;
+
+    if (!chatData || !chatData.message) {
+      throw new Error('No response from chat function');
+    }
+
+    // Return experiment suggestions
+    const focusNote = focus ? ` (focus: ${focus})` : '';
+    return {
+      success: true,
+      message: `🎯 **Experiment Plan**${focusNote}\n\nBased on ${runs.length} completed runs and ${memoryNotes.length} memory notes:\n\n${chatData.message}`,
+      data: {
+        runsAnalyzed: runs.length,
+        memoryNotesCount: memoryNotes.length,
+        focus: focus || null,
+        plan: chatData.message,
+      },
+    };
+  } catch (error: any) {
+    console.error('Suggest experiments command error:', error);
+    return {
+      success: false,
+      message: `❌ Failed to suggest experiments: ${error.message || 'Unknown error'}`,
+    };
+  }
+}
+
+/**
  * /help command - show available commands
  */
 async function handleHelp(): Promise<CommandResult> {
@@ -763,6 +868,9 @@ async function handleHelp(): Promise<CommandResult> {
       `🔧 /curate_memory\n` +
       `   Review stored rules/insights and propose promotions, demotions, and cleanups\n` +
       `   Example: /curate_memory\n\n` +
+      `🎯 /suggest_experiments [focus]\n` +
+      `   Propose next experiments based on existing runs and memory\n` +
+      `   Example: /suggest_experiments or /suggest_experiments skew\n\n` +
       `💡 /note <content> [type:TYPE] [importance:LEVEL] [tags:tag1,tag2]\n` +
       `   Create a memory note\n` +
       `   Example: /note This fails in bear markets type:warning importance:high\n\n` +
@@ -810,6 +918,12 @@ const commands: Record<string, Command> = {
     description: 'Review and propose improvements to the current rule set and memory notes',
     usage: '/curate_memory',
     handler: handleCurateMemory,
+  },
+  suggest_experiments: {
+    name: 'suggest_experiments',
+    description: 'Propose next experiments based on existing runs and memory',
+    usage: '/suggest_experiments [focus]',
+    handler: handleSuggestExperiments,
   },
   note: {
     name: 'note',

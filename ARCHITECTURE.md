@@ -412,6 +412,47 @@ Activated by `/curate_memory` command.
 
 ---
 
+### Experiment Director Mode (`/suggest_experiments`)
+
+Activated by `/suggest_experiments [focus]` command.
+
+**Purpose**: Design concrete next experiments to maximize learning and structural understanding, acting as a research lead who determines what to test next.
+
+**Process**:
+1. Fetch last 100 completed runs for current session
+2. Fetch non-archived memory notes (up to 200) for current workspace
+3. Build experiment planning summaries:
+   - Run summary: grouped by strategy with date coverage, typical metrics, regime gaps
+   - Memory summary: high/critical rules, warnings, and insights
+4. Compose Experiment Director prompt with optional focus parameter
+5. Call chat function to generate experiment plan
+
+**Output Sections**:
+- **Objectives**: Key questions we're trying to answer (what to learn, not just P&L)
+- **High-Priority Experiments**: 3-10 concrete experiments with:
+  - Strategy/profile (exact strategy key)
+  - Date range (with regime rationale)
+  - Parameter variations (if relevant)
+  - Hypothesis (expectations and reasoning)
+  - Evidence basis (patterns/rules/gaps addressed)
+  - Success criteria (what validates hypothesis)
+  - Failure criteria (what invalidates hypothesis)
+- **Secondary Experiments**: Lower-priority but valuable tests
+- **Dependencies & Missing Info**: Blockers, data limitations, unresolved questions
+- **Recommended Execution Order**: Which experiments to run first and why (information gain)
+
+**Template**: `src/prompts/experimentDirectorPrompt.ts` → `buildExperimentDirectorPrompt(runSummary, patternSummary, memorySummary, focus?)`
+
+**Planning Helpers**: `src/lib/experimentPlanning.ts`
+- `buildExperimentRunSummary(runs)`: Summarizes last N runs by strategy, date coverage, typical metrics, identifies regime gaps
+- `buildExperimentMemorySummary(notes)`: Focuses on high/critical rules/warnings and insights, limits to ~15 notes
+
+**Integration**: Command calls `chat` edge function with Experiment Director prompt; Chief Quant base identity + experiment planning instructions → structured experiment plan returned to chat
+
+**Important**: Proposes experiments only; never auto-executes. Minimum 5 completed runs required.
+
+---
+
 ### `backtest-run`
 
 **Endpoint**: `POST /functions/v1/backtest-run`
@@ -753,6 +794,32 @@ All commands are parsed and executed in `ChatArea.tsx` before sending to LLM.
       - Proposed Updated Ruleset (cleaned-up rules by strategy)
    7. Display curator recommendations in chat as system message
    8. Note: Recommendations only; user must manually edit via Memory panel
+
+#### `/suggest_experiments [focus]`
+- **Description**: Propose next experiments based on existing runs and memory
+- **Usage**:
+   - `/suggest_experiments` (analyze all runs)
+   - `/suggest_experiments skew` (focus on skew-related experiments)
+   - `/suggest_experiments strategy:skew_convexity_v1` (focus on specific strategy)
+- **Behavior**:
+   1. Parse optional focus parameter (any text after command)
+   2. Fetch last 100 completed runs for current session
+   3. Fetch non-archived memory notes (up to 200) for current workspace
+   4. Build experiment planning summaries:
+      - Run summary: grouped by strategy, date coverage, typical metrics, regime gaps
+      - Memory summary: high/critical rules, warnings, insights
+      - Pattern summary: empty for now (can be enhanced with Pattern Miner output)
+   5. Build Experiment Director prompt with focus (if provided)
+   6. Call `chat` edge function with experiment planning prompt
+   7. Return structured experiment plan with sections:
+      - Objectives (key questions to answer)
+      - High-Priority Experiments (3-10 concrete tests with all details)
+      - Secondary Experiments (lower priority but valuable)
+      - Dependencies & Missing Info (blockers, limitations)
+      - Recommended Execution Order (which to run first and why)
+   8. Display experiment plan in chat as system message
+   9. Minimum 5 completed runs required
+   10. Note: Proposes experiments only; never auto-executes
 
 ### Command Autocomplete
 
