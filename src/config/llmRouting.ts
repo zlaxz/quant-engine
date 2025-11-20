@@ -12,9 +12,9 @@ export type ProviderName = 'openai' | 'google' | 'anthropic' | 'deepseek' | 'cus
 /**
  * Model configuration for PRIMARY tier
  * Used for: Main chat, final synthesizers, high-stakes reasoning
- * Provider: Google Gemini (thinking mode)
+ * Provider: Google Gemini 3 (thinking mode)
  */
-export const PRIMARY_MODEL = import.meta.env.VITE_PRIMARY_MODEL || 'gemini-2.0-flash-thinking-exp-1219';
+export const PRIMARY_MODEL = import.meta.env.VITE_PRIMARY_MODEL || 'gemini-3-pro-preview';
 export const PRIMARY_PROVIDER = (import.meta.env.VITE_PRIMARY_PROVIDER || 'google') as ProviderName;
 
 /**

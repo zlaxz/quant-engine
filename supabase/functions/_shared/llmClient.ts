@@ -24,7 +24,7 @@ export interface ChatMessage {
  * Get model configuration for a specific tier
  */
 export function getConfigForTier(tier: LlmTier): LlmConfig {
-  const primaryModel = Deno.env.get('PRIMARY_MODEL') ?? 'gemini-2.0-flash-thinking-exp-1219';
+  const primaryModel = Deno.env.get('PRIMARY_MODEL') ?? 'gemini-3-pro-preview';
   const primaryProvider = (Deno.env.get('PRIMARY_PROVIDER') ?? 'google') as ProviderName;
 
   const secondaryModel = Deno.env.get('SECONDARY_MODEL') ?? 'gpt-4o';
