@@ -13,6 +13,8 @@ import { buildMemoryCuratorPrompt } from '@/prompts/memoryCuratorPrompt';
 import { buildCurationSummary } from '@/lib/memoryCuration';
 import { buildExperimentDirectorPrompt } from '@/prompts/experimentDirectorPrompt';
 import { buildExperimentRunSummary, buildExperimentMemorySummary } from '@/lib/experimentPlanning';
+import { buildRiskOfficerPrompt } from '@/prompts/riskOfficerPrompt';
+import { buildRiskRunSummary, buildRiskMemorySummary } from '@/lib/riskSummaries';
 
 export interface CommandResult {
   success: boolean;
@@ -844,6 +846,137 @@ async function handleSuggestExperiments(
 }
 
 /**
+ * /risk_review command - review structural risk across runs
+ * Usage: /risk_review [focus]
+ * Examples:
+ *   /risk_review
+ *   /risk_review skew
+ *   /risk_review strategy:momentum_breakout_v1
+ */
+async function handleRiskReview(args: string, context: CommandContext): Promise<CommandResult> {
+  const focus = args.trim() || null;
+
+  try {
+    // Fetch completed runs
+    let query = supabase
+      .from('backtest_runs')
+      .select('*')
+      .eq('session_id', context.sessionId)
+      .eq('status', 'completed')
+      .order('started_at', { ascending: false })
+      .limit(100);
+
+    const { data: runsData, error: runsError } = await query;
+
+    if (runsError) throw runsError;
+
+    const runs = (runsData || []) as BacktestRun[];
+
+    // Require minimum runs for meaningful risk analysis
+    if (runs.length < 5) {
+      return {
+        success: false,
+        message: `⚠️ Insufficient data for risk review.\n\nRisk Officer requires at least 5 completed runs. You currently have ${runs.length}.\n\nRun more backtests first using /backtest command.`,
+      };
+    }
+
+    // Filter by focus if provided
+    let filteredRuns = runs;
+    if (focus) {
+      filteredRuns = runs.filter(r => 
+        r.strategy_key.toLowerCase().includes(focus.toLowerCase()) ||
+        (r.params?.profileConfig && JSON.stringify(r.params.profileConfig).toLowerCase().includes(focus.toLowerCase()))
+      );
+
+      if (filteredRuns.length === 0) {
+        return {
+          success: false,
+          message: `❌ No runs found matching focus: "${focus}"`,
+        };
+      }
+    }
+
+    // Fetch relevant memory notes
+    const { data: memoryData, error: memoryError } = await supabase
+      .from('memory_notes')
+      .select('*')
+      .eq('workspace_id', context.workspaceId)
+      .eq('archived', false)
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (memoryError) throw memoryError;
+
+    const memoryNotes = (memoryData || []).map(note => ({
+      id: note.id,
+      content: note.content,
+      memory_type: note.memory_type || 'insight',
+      importance: note.importance || 'normal',
+      tags: note.tags || [],
+      source: note.source,
+      run_id: note.run_id,
+      created_at: note.created_at,
+      archived: note.archived || false,
+    }));
+
+    // Filter memory by focus if provided
+    let filteredMemory = memoryNotes;
+    if (focus) {
+      filteredMemory = memoryNotes.filter(n =>
+        n.tags.some(tag => tag.toLowerCase().includes(focus.toLowerCase())) ||
+        n.content.toLowerCase().includes(focus.toLowerCase())
+      );
+    }
+
+    // Build risk summaries
+    const runSummary = buildRiskRunSummary(filteredRuns as BacktestRun[]);
+    const memorySummary = buildRiskMemorySummary(filteredMemory);
+    const patternSummary = ''; // Can be enhanced later to include recent Pattern Miner output
+
+    // Build Risk Officer prompt
+    const riskPrompt = buildRiskOfficerPrompt(
+      runSummary,
+      memorySummary,
+      patternSummary
+    );
+
+    // Call chat function
+    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat', {
+      body: {
+        sessionId: context.sessionId,
+        workspaceId: context.workspaceId,
+        content: riskPrompt,
+      },
+    });
+
+    if (chatError) throw chatError;
+
+    if (!chatData || !chatData.message) {
+      throw new Error('No response from chat function');
+    }
+
+    // Return risk review
+    const focusNote = focus ? ` (focus: ${focus})` : '';
+    return {
+      success: true,
+      message: `🛡️ **Risk Review Report**${focusNote}\n\nAnalyzed ${filteredRuns.length} completed runs and ${filteredMemory.length} memory notes:\n\n${chatData.message}`,
+      data: {
+        runsAnalyzed: filteredRuns.length,
+        memoryNotesCount: filteredMemory.length,
+        focus: focus || null,
+        report: chatData.message,
+      },
+    };
+  } catch (error: any) {
+    console.error('Risk review command error:', error);
+    return {
+      success: false,
+      message: `❌ Failed to perform risk review: ${error.message || 'Unknown error'}`,
+    };
+  }
+}
+
+/**
  * /help command - show available commands
  */
 async function handleHelp(): Promise<CommandResult> {
@@ -871,6 +1004,9 @@ async function handleHelp(): Promise<CommandResult> {
       `🎯 /suggest_experiments [focus]\n` +
       `   Propose next experiments based on existing runs and memory\n` +
       `   Example: /suggest_experiments or /suggest_experiments skew\n\n` +
+      `🛡️ /risk_review [focus]\n` +
+      `   Review structural risk across runs and detect rule violations\n` +
+      `   Example: /risk_review or /risk_review skew\n\n` +
       `💡 /note <content> [type:TYPE] [importance:LEVEL] [tags:tag1,tag2]\n` +
       `   Create a memory note\n` +
       `   Example: /note This fails in bear markets type:warning importance:high\n\n` +
@@ -924,6 +1060,12 @@ const commands: Record<string, Command> = {
     description: 'Propose next experiments based on existing runs and memory',
     usage: '/suggest_experiments [focus]',
     handler: handleSuggestExperiments,
+  },
+  risk_review: {
+    name: 'risk_review',
+    description: 'Review structural risk across runs',
+    usage: '/risk_review [focus]',
+    handler: handleRiskReview,
   },
   note: {
     name: 'note',
