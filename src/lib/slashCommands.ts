@@ -27,6 +27,7 @@ import {
   buildRiskAgentPrompt,
   buildExperimentAgentPrompt,
 } from '@/prompts/researchAgentPrompts';
+import { writeFile, deleteFile } from '@/lib/codeWriter';
 
 export interface CommandResult {
   success: boolean;
@@ -1599,6 +1600,75 @@ async function handleRedTeamFile(args: string, context: CommandContext): Promise
 }
 
 /**
+ * /write_file command - create or overwrite file
+ */
+async function handleWriteFile(args: string, context: CommandContext): Promise<CommandResult> {
+  // Parse: /write_file <path> <content>
+  const match = args.match(/^(\S+)\s+(.+)$/s);
+  if (!match) {
+    return { 
+      success: false, 
+      message: '❌ Usage: /write_file <path> <content>\n\nExample:\n/write_file strategies/test.py def my_function():\n    return True' 
+    };
+  }
+  
+  const [, path, content] = match;
+  
+  const result = await writeFile(path, content);
+  
+  if (!result.success) {
+    return {
+      success: false,
+      message: `❌ Write failed: ${result.error}`
+    };
+  }
+  
+  let message = `✅ File written successfully: \`${path}\``;
+  if (result.backup_path) {
+    message += `\n📦 Backup created: \`${result.backup_path}\``;
+  }
+  
+  return {
+    success: true,
+    message,
+    data: result
+  };
+}
+
+/**
+ * /delete_file command - delete file with backup
+ */
+async function handleDeleteFile(args: string, context: CommandContext): Promise<CommandResult> {
+  const path = args.trim();
+  if (!path) {
+    return { 
+      success: false, 
+      message: '❌ Usage: /delete_file <path>\n\nExample:\n/delete_file strategies/old_strategy.py' 
+    };
+  }
+  
+  const result = await deleteFile(path);
+  
+  if (!result.success) {
+    return {
+      success: false,
+      message: `❌ Delete failed: ${result.error}`
+    };
+  }
+  
+  let message = `✅ File deleted: \`${path}\``;
+  if (result.backup_path) {
+    message += `\n📦 Backup created: \`${result.backup_path}\``;
+  }
+  
+  return {
+    success: true,
+    message,
+    data: result
+  };
+}
+
+/**
  * /help command - show available commands
  */
 async function handleHelp(): Promise<CommandResult> {
@@ -1656,6 +1726,12 @@ async function handleHelp(): Promise<CommandResult> {
       `🔴 /red_team_file path:<path>\n` +
       `   Run multi-agent red team audit (strategy-logic, overfit, lookahead-bias, robustness, consistency)\n` +
       `   Example: /red_team_file path:profiles/skew.py\n\n` +
+      `✏️ /write_file <path> <content>\n` +
+      `   Create or overwrite a file with new content (creates backup if exists)\n` +
+      `   Example: /write_file strategies/new.py def my_strategy():\\n    pass\n\n` +
+      `🗑️ /delete_file <path>\n` +
+      `   Delete a file (creates backup before deletion)\n` +
+      `   Example: /delete_file strategies/old.py\n\n` +
       `❓ /help\n` +
       `   Show this help message`,
   };
@@ -1783,6 +1859,20 @@ export const commands: Record<string, Command> = {
     usage: '/red_team_file path:<path>',
     handler: handleRedTeamFile,
     tier: 'swarm', // Agent mode, runs multiple swarm calls
+  },
+  write_file: {
+    name: 'write_file',
+    description: 'Create or overwrite a file with new content',
+    usage: '/write_file <path> <content>',
+    handler: handleWriteFile,
+    tier: undefined, // No chat call, uses write-file endpoint
+  },
+  delete_file: {
+    name: 'delete_file',
+    description: 'Delete a file (creates backup)',
+    usage: '/delete_file <path>',
+    handler: handleDeleteFile,
+    tier: undefined, // No chat call, uses write-file endpoint
   },
   help: {
     name: 'help',

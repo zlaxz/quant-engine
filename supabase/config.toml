@@ -57,3 +57,6 @@ verify_jwt = false
 
 [functions.report-save]
 verify_jwt = false
+
+[functions.write-file]
+verify_jwt = false
