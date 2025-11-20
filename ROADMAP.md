@@ -11,7 +11,7 @@
 ### Core Infrastructure
 - **Workspaces**: Multi-tenant organization of research projects
 - **Chat Sessions**: Conversation containers within workspaces with full message history
-- **Chat Engine**: OpenAI integration via Supabase edge function with streaming disabled (can be added later)
+- **Chat Engine**: Multi-provider LLM routing (Google Gemini PRIMARY, DeepSeek SWARM, OpenAI SECONDARY) via Supabase edge functions
 
 ### Quant Tab
 - **Strategy Selection**: Dropdown for available strategies (strategies table)
@@ -307,12 +307,21 @@ These are valuable but not required for v1.0:
 - Final synthesis via chat-primary
 - ~75% latency reduction vs sequential execution
 
+### Phase 5: Multi-Provider LLM Routing ✅
+- Implemented three-tier, multi-provider architecture
+- PRIMARY tier: Google Gemini 2.0 Flash (thinking mode) via Google Generative Language API
+- SWARM tier: DeepSeek-Reasoner via DeepSeek API
+- SECONDARY tier: OpenAI GPT-4o (reserved for future use)
+- Created shared llmClient module with provider abstraction (callGemini, callOpenAI, callDeepSeek)
+- Updated chat-primary and chat-swarm to use new multi-provider client
+- Configured API key management for GEMINI_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY
+
 ---
 
 ## Current Status
 
-**Phase Completed**: Phase 4 — /auto_analyze v2 with Swarm Orchestration
+**Phase Completed**: Phase 5 — Multi-Provider LLM Routing (Gemini PRIMARY, DeepSeek SWARM, OpenAI SECONDARY)
 
-**Next Phase**: Model tier differentiation (Gemini 3 for PRIMARY, cheaper models for SWARM)
+**Current Architecture**: Three-tier multi-provider system with Gemini 2.0 Flash for high-stakes reasoning, DeepSeek-Reasoner for parallel agent work, OpenAI GPT-4o reserved for alternative use cases
 
 **Known Issues**: See ARCHITECTURE.md for technical notes

@@ -5,6 +5,17 @@ project_id = "ynaqtawyynqikfyranda"
 # For local development: supabase secrets set ROTATION_ENGINE_ROOT="/path/to/rotation-engine"
 # For production: Set in Supabase dashboard → Settings → Edge Functions
 
+# Multi-Provider LLM Configuration
+# Required API keys for each provider:
+# - GEMINI_API_KEY: Google Gemini API (PRIMARY tier)
+# - OPENAI_API_KEY: OpenAI API (SECONDARY tier)
+# - DEEPSEEK_API_KEY: DeepSeek API (SWARM tier)
+#
+# Model and provider configuration (set via Supabase secrets):
+# - PRIMARY_MODEL, PRIMARY_PROVIDER (default: gemini-2.0-flash-thinking-exp-1219, google)
+# - SECONDARY_MODEL, SECONDARY_PROVIDER (default: gpt-4o, openai)
+# - SWARM_MODEL, SWARM_PROVIDER (default: deepseek-reasoner, deepseek)
+
 [functions.chat-primary]
 verify_jwt = false
 

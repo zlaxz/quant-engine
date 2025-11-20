@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
 import { generateEmbedding } from '../_shared/embeddings.ts';
 import { buildChiefQuantPrompt } from '../_shared/chiefQuantPrompt.ts';
+import { callLlm, type ChatMessage as LlmChatMessage } from '../_shared/llmClient.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,46 +22,7 @@ interface ChatRequest {
   model?: string;
 }
 
-/**
- * Call OpenAI Chat Completions API
- * This is the server-side LLM client - secrets are NEVER exposed to the browser
- */
-async function callChatModel(messages: ChatMessage[], model: string = 'gpt-5-2025-08-07'): Promise<string> {
-  const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-  
-  if (!openAIApiKey) {
-    throw new Error('OPENAI_API_KEY is not configured');
-  }
-
-  console.log(`[LLM Client - PRIMARY] Calling OpenAI with model: ${model}, messages: ${messages.length}`);
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${openAIApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_completion_tokens: 2000,
-      // Note: temperature not supported for gpt-5 models
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('[LLM Client - PRIMARY] OpenAI API error:', response.status, errorText);
-    throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
-  }
-
-  const data = await response.json();
-  const assistantMessage = data.choices[0].message.content;
-  
-  console.log('[LLM Client - PRIMARY] Response received, length:', assistantMessage.length);
-  
-  return assistantMessage;
-}
+// Removed: callChatModel - now using shared llmClient.callLlm
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -272,9 +234,10 @@ serve(async (req) => {
       throw new Error(`Failed to save user message: ${userMessageError.message}`);
     }
 
-    // 5. Call OpenAI
-    console.log('[Chat API - PRIMARY] Calling OpenAI with', messages.length, 'messages');
-    const assistantResponse = await callChatModel(messages, model || 'gpt-5-2025-08-07');
+    // 5. Call PRIMARY tier LLM (Gemini 3 Deep Think)
+    console.log('[Chat API - PRIMARY] Calling PRIMARY tier LLM with', messages.length, 'messages');
+    const llmMessages: LlmChatMessage[] = messages.map(m => ({ role: m.role, content: m.content }));
+    const assistantResponse = await callLlm('primary', llmMessages);
 
     // 6. Save assistant message to database
     console.log('[Chat API - PRIMARY] Saving assistant response to database');
@@ -284,8 +247,8 @@ serve(async (req) => {
         session_id: sessionId,
         role: 'assistant',
         content: assistantResponse,
-        provider: 'openai',
-        model: model || 'gpt-5-2025-08-07'
+        provider: 'google',
+        model: 'gemini-2.0-flash-thinking-exp-1219'
       });
 
     if (assistantMessageError) {

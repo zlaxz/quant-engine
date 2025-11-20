@@ -7,7 +7,7 @@
 - **Frontend**: React 18 + TypeScript + Vite, deployed via Lovable
 - **Backend**: Supabase (PostgreSQL + Edge Functions on Deno runtime)
 - **External Engine**: rotation-engine Python server for real backtests (optional, with stub fallback)
-- **LLM Provider**: OpenAI for chat completions (GPT-4+) and embeddings (text-embedding-3-small)
+- **LLM Providers**: Multi-provider routing — Google Gemini (PRIMARY tier), DeepSeek (SWARM tier), OpenAI (SECONDARY tier + embeddings)
 - **Vector Search**: pgvector extension for semantic memory retrieval
 
 The system is designed for rapid iteration on trading strategies with conversational UX, persistent memory, and side-by-side experiment comparison.
@@ -231,56 +231,85 @@ Trigger function to auto-update `updated_at` timestamp on row modifications.
 
 All edge functions run on Supabase Edge Functions (Deno runtime) and are configured in `supabase/config.toml`.
 
-### Model Tiers & Routing
+### Multi-Provider Model Routing
 
-The Quant Chat Workbench implements a two-tier LLM routing strategy with parallel execution capabilities:
+The Quant Chat Workbench implements a **three-tier, multi-provider LLM routing strategy** with parallel execution capabilities:
 
 **PRIMARY Tier** (`chat-primary`):
 - **Purpose**: High-stakes reasoning, code writing, architecture decisions, final synthesis
-- **Model**: Configurable via `VITE_PRIMARY_MODEL` (defaults to `gpt-5-2025-08-07`)
+- **Provider**: Google Gemini API
+- **Model**: Configurable via `PRIMARY_MODEL` env (defaults to `gemini-2.0-flash-thinking-exp-1219`)
 - **Used By**: Main chat interface, `/auto_analyze` final synthesis, user-facing conversation, synthesis of swarm results
-- **Characteristics**: Most powerful reasoning model, reserved for novel/complex work
+- **Characteristics**: Google Gemini 2.0 Flash with thinking mode for powerful reasoning on novel/complex work
+
+**SECONDARY Tier** (future use):
+- **Purpose**: Alternative high-quality reasoning when PRIMARY is unavailable or for specific use cases
+- **Provider**: OpenAI API
+- **Model**: Configurable via `SECONDARY_MODEL` env (defaults to `gpt-4o`)
+- **Used By**: Reserved for future commands requiring OpenAI-specific capabilities
+- **Characteristics**: GPT-4o for reliable reasoning as fallback or specialized tasks
 
 **SWARM Tier** (`chat-swarm` + `chat-swarm-parallel`):
 - **Purpose**: Agent modes, specialist analysis, repetitive workflows, parallel multi-agent execution
-- **Model**: Configurable via `VITE_SWARM_MODEL` (defaults to `gpt-5-2025-08-07` in Phase 1-3)
-- **Used By**: `/audit_run`, `/mine_patterns`, `/curate_memory`, `/suggest_experiments`, `/risk_review`, individual red team auditors
+- **Provider**: DeepSeek API
+- **Model**: Configurable via `SWARM_MODEL` env (defaults to `deepseek-reasoner`)
+- **Used By**: `/audit_run`, `/mine_patterns`, `/curate_memory`, `/suggest_experiments`, `/risk_review`, `/red_team_file` auditors, `/auto_analyze` research agents
 - **Parallel Orchestration**: `chat-swarm-parallel` fans out multiple prompts to `chat-swarm` in parallel
-- **Characteristics**: Cost-optimized for frequent, structured analysis tasks
+- **Characteristics**: DeepSeek-Reasoner for cost-optimized, frequent structured analysis tasks
+
+**Multi-Provider Architecture** (`supabase/functions/_shared/llmClient.ts`):
+- **Provider Types**: `'openai' | 'google' | 'anthropic' | 'deepseek' | 'custom'`
+- **Tier-to-Provider Mapping**: Each tier routes to its designated provider via `getConfigForTier(tier)`
+- **Unified Interface**: `callLlm(tier, messages)` abstracts provider-specific APIs
+- **Provider Clients**:
+  - `callGemini()`: Google Generative Language API for Gemini models
+  - `callOpenAI()`: OpenAI Chat Completions API for GPT models
+  - `callDeepSeek()`: DeepSeek API (OpenAI-compatible) for DeepSeek-Reasoner
+  - Future: Anthropic Claude, custom endpoints
 
 **Routing Configuration** (`src/config/llmRouting.ts`):
-- `LlmTier` type: `'primary' | 'swarm'`
-- `PRIMARY_MODEL`: Environment variable for primary tier model
-- `SWARM_MODEL`: Environment variable for swarm tier model
-- `getModelForTier(tier)`: Helper to get model name for a tier
+- `LlmTier` type: `'primary' | 'secondary' | 'swarm'`
+- `ProviderName` type: `'openai' | 'google' | 'anthropic' | 'deepseek' | 'custom'`
+- Environment variables:
+  - `PRIMARY_MODEL`, `PRIMARY_PROVIDER` (default: `gemini-2.0-flash-thinking-exp-1219`, `google`)
+  - `SECONDARY_MODEL`, `SECONDARY_PROVIDER` (default: `gpt-4o`, `openai`)
+  - `SWARM_MODEL`, `SWARM_PROVIDER` (default: `deepseek-reasoner`, `deepseek`)
+- Helpers: `getModelForTier(tier)`, `getProviderForTier(tier)`
+
+**API Key Management** (Supabase Secrets):
+- `GEMINI_API_KEY`: Required for PRIMARY tier (Google Gemini API)
+- `OPENAI_API_KEY`: Required for SECONDARY tier and embeddings (OpenAI API)
+- `DEEPSEEK_API_KEY`: Required for SWARM tier (DeepSeek API)
+- All keys stored as Supabase secrets, accessed server-side only via `Deno.env`
 
 **Command Tier Annotation**:
 Slash commands in `src/lib/slashCommands.ts` include a `tier` field indicating which chat function to use:
-- `tier: 'primary'` → Routes to `chat-primary` function
-- `tier: 'swarm'` → Routes to `chat-swarm` function (or `chat-swarm-parallel` for multi-agent workflows)
+- `tier: 'primary'` → Routes to `chat-primary` function (Gemini 3)
+- `tier: 'swarm'` → Routes to `chat-swarm` function (DeepSeek-Reasoner) or `chat-swarm-parallel` for multi-agent workflows
+- `tier: 'secondary'` → Reserved for future use (GPT-5.1)
 - `tier: undefined` → No chat call, uses other endpoints (data fetch, backtest-run, etc.)
 
 **Swarm Orchestration Pattern**:
 
 The system implements a **fan-out → gather → synthesize** pattern for multi-agent workflows:
 
-1. **Fan-out**: Multiple specialized prompts sent to `chat-swarm-parallel` → executes in parallel via `chat-swarm`
+1. **Fan-out**: Multiple specialized prompts sent to `chat-swarm-parallel` → executes in parallel via `chat-swarm` (DeepSeek)
 2. **Gather**: All results collected from parallel execution
-3. **Synthesize**: Combined results sent to `chat-primary` for coherent report generation
+3. **Synthesize**: Combined results sent to `chat-primary` (Gemini 3) for coherent report generation
 
-**Example**: `/red_team_file` (v2) uses this pattern:
-- 5 specialized auditors (strategy logic, overfit, lookahead-bias, robustness, consistency) execute in parallel
-- Each produces independent analysis via `chat-swarm`
-- Final synthesis via `chat-primary` creates unified Code Audit Report
+**Examples**:
+- `/red_team_file` v2: 5 code auditors (strategy logic, overfit, lookahead-bias, robustness, consistency) execute in parallel via DeepSeek, synthesized via Gemini 3
+- `/auto_analyze` v2: 4 research agents (pattern miner, curator, risk officer, experiment director) execute in parallel via DeepSeek, synthesized via Gemini 3
 
-This pattern can be reused for other multi-agent workflows (e.g., parallel pattern mining across strategies, parallel risk assessment across regimes).
+This pattern separates **independent analysis** (cheap, parallel, SWARM tier) from **integration & reasoning** (expensive, PRIMARY tier), reducing total latency and cost.
 
 **Phase Status**:
 - Phase 1: Tier routing infrastructure ✅
 - Phase 2: `chat-swarm-parallel` and `runSwarm` helper ✅
 - Phase 3: Red Team v2 using swarm + synthesis ✅
 - Phase 4: `/auto_analyze` v2 using swarm + synthesis ✅
-- Future: Different models per tier (e.g., Gemini 3 for PRIMARY, cheaper models for SWARM)
+- Phase 5: Multi-provider LLM routing (Gemini PRIMARY, DeepSeek SWARM, OpenAI SECONDARY) ✅
+- Future: Additional providers (Anthropic Claude, custom endpoints)
 
 ---
 
@@ -298,7 +327,7 @@ This pattern can be reused for other multi-agent workflows (e.g., parallel patte
 }
 ```
 
-**Tier**: PRIMARY (high-stakes reasoning)
+**Tier**: PRIMARY (high-stakes reasoning, Google Gemini 2.0 Flash thinking mode)
 
 **Behavior**:
 1. Initialize Supabase client
@@ -319,7 +348,7 @@ This pattern can be reused for other multi-agent workflows (e.g., parallel patte
    - Previous messages (last N)
    - New user message
 6. Save user message to `messages` table
-7. Call OpenAI Chat Completions API (`gpt-5-2025-08-07` by default)
+7. Call PRIMARY tier LLM via `callLlm('primary', messages)` → Google Gemini API
 8. Save assistant response to `messages` table
 9. Return assistant content to client
 
@@ -333,7 +362,7 @@ The chat uses a specialized **Chief Quant Researcher** identity defined in `supa
 
 **Error Handling**:
 - If memory retrieval fails: log error, skip memory injection, continue with Chief Quant identity
-- If OpenAI API fails: return 500 with error message
+- If Gemini API fails: return 500 with error message
 - If workspace not found: return 404
 
 **CORS**: Enabled with `Access-Control-Allow-Origin: *`
@@ -356,19 +385,19 @@ The chat uses a specialized **Chief Quant Researcher** identity defined in `supa
 }
 ```
 
-**Tier**: SWARM (agent/specialist workflows)
+**Tier**: SWARM (agent/specialist workflows, DeepSeek-Reasoner)
 
 **Behavior**:
-Identical to `chat-primary` but logically separated for agent mode routing. Used by:
+Uses SWARM tier routing to DeepSeek-Reasoner via `callLlm('swarm', messages)`. Identical workflow to `chat-primary` (workspace prompt, memory context, Chief Quant identity) but routed to cost-optimized DeepSeek API. Used by:
 - `/audit_run` — Strategy Auditor agent analysis
 - `/mine_patterns` — Pattern Miner cross-run analysis
 - `/curate_memory` — Memory Curator rule health review
 - `/suggest_experiments` — Experiment Director planning
 - `/risk_review` — Risk Officer structural risk analysis
+- `/auto_analyze` research agents (pattern miner, curator, risk officer, experiment director)
 - Individual red team auditors (called via `chat-swarm-parallel`)
 
-**Future Phases**:
-- Will use a different, more cost-efficient model (e.g., cheaper LLMs)
+**Current Provider**: DeepSeek API (`deepseek-reasoner` model)
 
 **CORS**: Enabled with `Access-Control-Allow-Origin: *`
 
