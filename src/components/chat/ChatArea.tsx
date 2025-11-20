@@ -122,8 +122,8 @@ export const ChatArea = () => {
           });
         }
       } else {
-        // Regular chat message - call edge function
-        const { data, error } = await supabase.functions.invoke('chat', {
+        // Regular chat message - call PRIMARY chat function
+        const { data, error } = await supabase.functions.invoke('chat-primary', {
           body: {
             sessionId: selectedSessionId,
             workspaceId: selectedWorkspaceId,
