@@ -18,6 +18,7 @@ import { buildRiskRunSummary, buildRiskMemorySummary } from '@/lib/riskSummaries
 import { selectKeyRuns, buildRunPortfolioSummary, assembleAgentInputs } from '@/lib/autoAnalyze';
 import { buildAutoAnalyzePrompt } from '@/prompts/autoAnalyzePrompt';
 import { buildDefaultReportTitle, extractSummaryFromReport, buildTagsFromReport } from '@/lib/researchReports';
+import { runRedTeamAuditForFile } from '@/lib/redTeamAudit';
 
 export interface CommandResult {
   success: boolean;
@@ -1560,6 +1561,73 @@ async function handleOpenReport(args: string, context: CommandContext): Promise<
 }
 
 /**
+ * /red_team_file command - run multi-agent red team audit on rotation-engine code
+ * Usage: /red_team_file path:<path>
+ * Example: /red_team_file path:profiles/skew.py
+ */
+async function handleRedTeamFile(args: string, context: CommandContext): Promise<CommandResult> {
+  // Parse path argument
+  const pathMatch = args.match(/path:(\S+)/);
+  
+  if (!pathMatch) {
+    return {
+      success: false,
+      message: 'Usage: /red_team_file path:<path>\nExample: /red_team_file path:profiles/skew.py',
+    };
+  }
+
+  const filePath = pathMatch[1];
+
+  try {
+    // Fetch file contents via read-file edge function
+    console.log(`Fetching file: ${filePath}`);
+    const { data: fileData, error: fileError } = await supabase.functions.invoke('read-file', {
+      body: { path: filePath },
+    });
+
+    if (fileError) {
+      console.error('read-file error:', fileError);
+      return {
+        success: false,
+        message: `❌ Failed to read file: ${fileError.message}`,
+      };
+    }
+
+    if (!fileData || !fileData.content) {
+      return {
+        success: false,
+        message: `❌ File not found at path: ${filePath}\n\nTip: Use /list_dir to explore available files.`,
+      };
+    }
+
+    const code = fileData.content;
+    console.log(`File fetched, running red team audit (${code.length} characters)`);
+
+    // Run multi-agent red team audit
+    const result = await runRedTeamAuditForFile({
+      sessionId: context.sessionId,
+      workspaceId: context.workspaceId,
+      path: filePath,
+      code,
+      context: '', // Could be enhanced later to accept context from user
+    });
+
+    return {
+      success: true,
+      message: result.report,
+      data: result,
+    };
+
+  } catch (error: any) {
+    console.error('Red team audit error:', error);
+    return {
+      success: false,
+      message: `❌ Red team audit failed: ${error.message || 'Unknown error'}`,
+    };
+  }
+}
+
+/**
  * /help command - show available commands
  */
 async function handleHelp(): Promise<CommandResult> {
@@ -1614,6 +1682,9 @@ async function handleHelp(): Promise<CommandResult> {
       `🔎 /search_code <query>\n` +
       `   Search rotation-engine code for a term\n` +
       `   Example: /search_code peakless or /search_code path:profiles convexity\n\n` +
+      `🔴 /red_team_file path:<path>\n` +
+      `   Run multi-agent red team audit (strategy-logic, overfit, lookahead-bias, robustness, consistency)\n` +
+      `   Example: /red_team_file path:profiles/skew.py\n\n` +
       `❓ /help\n` +
       `   Show this help message`,
   };
@@ -1718,6 +1789,12 @@ export const commands: Record<string, Command> = {
     description: 'Search rotation-engine code for a term',
     usage: '/search_code <query>',
     handler: handleSearchCode,
+  },
+  red_team_file: {
+    name: 'red_team_file',
+    description: 'Run multi-agent red team audit on rotation-engine code',
+    usage: '/red_team_file path:<path>',
+    handler: handleRedTeamFile,
   },
   help: {
     name: 'help',

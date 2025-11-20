@@ -56,6 +56,7 @@
 - `/list_dir path:<path>` — List rotation-engine directory contents
 - `/open_file path:<path>` — Show rotation-engine file contents
 - `/search_code <query>` — Search rotation-engine code for terms
+- `/red_team_file path:<path>` — Run multi-agent red team audit (strategy-logic, overfit, lookahead-bias, robustness, consistency) on rotation-engine file
 - `/auto_analyze [scope]` — Run autonomous research loop combining all agent modes (Autonomous Research Loop mode)
 - `/save_report [scope:<value>] [title:"Custom"]` — Save last /auto_analyze report for later retrieval
 - `/list_reports [scope:<value>] [tag:<value>]` — List saved research reports with optional filtering

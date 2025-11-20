@@ -806,6 +806,84 @@ This creates a seamless workflow:
 
 ---
 
+---
+
+### Red Team Code Audit Mode
+
+The **Red Team Code Audit** provides multi-agent adversarial code review for rotation-engine files.
+
+#### Overview
+
+Instead of a single code review, the system orchestrates 5 specialized auditors, each focusing on a specific vulnerability class:
+
+1. **Strategy Logic Auditor** — Analyzes entry/exit criteria, signal flow, and behavioral consistency across market regimes
+2. **Overfit Auditor** — Identifies signs of overfitting (magic numbers, date-specific logic, excessive branching)
+3. **Lookahead Bias Auditor** — Detects data leakage and future information usage
+4. **Robustness Auditor** — Checks edge case handling (NaN, None, empty data, extreme values)
+5. **Implementation Consistency Auditor** — Reviews code quality, naming conventions, and alignment with rotation-engine patterns
+
+#### How It Works
+
+1. User triggers `/red_team_file path:profiles/skew.py`
+2. System fetches file via `read-file` edge function
+3. For each auditor:
+   - Builds specialized prompt using templates from `src/prompts/redTeamPrompts.ts`
+   - Calls `chat` edge function with auditor-specific context
+   - Captures response as that auditor's section
+4. Combines all auditor reports into single structured output
+5. Displays full report as system message in chat
+
+#### Key Characteristics
+
+- **READ-ONLY**: No code is modified automatically
+- **Sequential Execution**: Auditors run one at a time to avoid rate limiting
+- **Graceful Degradation**: If one auditor fails, others continue
+- **Advisory Only**: All findings are recommendations requiring human review
+
+#### Prompt Templates
+
+Each auditor uses a structured prompt template (`redTeamPrompts.ts`) that:
+- Identifies the auditor's role explicitly
+- Provides file path and optional context
+- Requests output in consistent format (Summary, Findings, Suggestions, Tests)
+- Emphasizes specific vulnerability classes
+
+#### Orchestration
+
+The `src/lib/redTeamAudit.ts` module:
+- Manages sequential auditor calls
+- Aggregates sub-reports into combined report
+- Handles partial failures gracefully
+- Adds small delays between calls to respect rate limits
+
+#### Usage Example
+
+```
+/list_dir path:profiles
+/red_team_file path:profiles/skew.py
+
+# Output: Multi-section report with:
+# - Strategy Logic Audit
+# - Overfit Audit
+# - Lookahead Bias Audit
+# - Robustness Audit
+# - Implementation Consistency Audit
+```
+
+#### Slash Command
+
+##### `/red_team_file path:<path>`
+
+Runs multi-agent red team audit on the specified rotation-engine file.
+
+**Examples**:
+- `/red_team_file path:profiles/skew.py`
+- `/red_team_file path:engine/detectors/vol_spike.py`
+
+**Output**: Comprehensive audit report with 5 specialized perspectives
+
+This mode replicates the multi-agent red team workflow from Claude Code, integrated directly into the Quant Chat Workbench.
+
 
 **Endpoint**: `POST /functions/v1/backtest-run`
 
