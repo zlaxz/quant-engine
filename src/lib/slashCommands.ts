@@ -5,6 +5,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { BacktestRun, BacktestParams, BacktestMetrics } from '@/types/backtest';
+import type { LlmTier } from '@/config/llmRouting';
 import { buildAuditPrompt } from '@/prompts/auditorPrompt';
 import { buildRunSummary, buildMemorySummary, type MemoryNote } from '@/lib/auditSummaries';
 import { buildPatternMinerPrompt } from '@/prompts/patternMinerPrompt';
@@ -31,6 +32,7 @@ export interface Command {
   description: string;
   usage: string;
   handler: (args: string, context: CommandContext) => Promise<CommandResult>;
+  tier?: LlmTier; // Which LLM tier to use for this command
 }
 
 export interface CommandContext {
@@ -523,8 +525,8 @@ async function handleAuditRun(args: string, context: CommandContext): Promise<Co
     // Build audit prompt
     const auditPrompt = buildAuditPrompt(runSummary, memorySummary);
     
-    // Call chat function with audit prompt
-    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat', {
+    // Call SWARM chat function for agent analysis
+    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat-swarm', {
       body: {
         sessionId: context.sessionId,
         workspaceId: context.workspaceId,
@@ -630,8 +632,8 @@ async function handleMinePatterns(args: string, context: CommandContext): Promis
     // Build pattern mining prompt
     const patternPrompt = buildPatternMinerPrompt(runSummary, memorySummary);
 
-    // Call chat function
-    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat', {
+    // Call SWARM chat function for agent analysis
+    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat-swarm', {
       body: {
         sessionId: context.sessionId,
         workspaceId: context.workspaceId,
@@ -713,8 +715,8 @@ async function handleCurateMemory(
     // Build curator prompt
     const curatorPrompt = buildMemoryCuratorPrompt(summary);
 
-    // Call chat function with curator prompt
-    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat', {
+    // Call SWARM chat function for agent analysis
+    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat-swarm', {
       body: {
         sessionId: context.sessionId,
         workspaceId: context.workspaceId,
@@ -813,8 +815,8 @@ async function handleSuggestExperiments(
       focus
     );
 
-    // Call chat function
-    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat', {
+    // Call SWARM chat function for agent analysis
+    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat-swarm', {
       body: {
         sessionId: context.sessionId,
         workspaceId: context.workspaceId,
@@ -944,8 +946,8 @@ async function handleRiskReview(args: string, context: CommandContext): Promise<
       patternSummary
     );
 
-    // Call chat function
-    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat', {
+    // Call SWARM chat function for agent analysis
+    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat-swarm', {
       body: {
         sessionId: context.sessionId,
         workspaceId: context.workspaceId,
@@ -1227,8 +1229,8 @@ async function handleAutoAnalyze(args: string, context: CommandContext): Promise
       const memorySummaryText = buildMemorySummary(runMemory);
       const auditPrompt = buildAuditPrompt(runSummaryText, memorySummaryText);
 
-      // Call chat to get audit
-      const { data: auditData, error: auditError } = await supabase.functions.invoke('chat', {
+      // Call SWARM chat for agent analysis
+      const { data: auditData, error: auditError } = await supabase.functions.invoke('chat-swarm', {
         body: {
           sessionId: context.sessionId,
           workspaceId: context.workspaceId,
@@ -1247,7 +1249,7 @@ async function handleAutoAnalyze(args: string, context: CommandContext): Promise
     const relevantMemory = buildRelevantMemory(memoryNotes as any, strategyKeys);
     const patternPrompt = buildPatternMinerPrompt(runsAggregate, relevantMemory);
 
-    const { data: patternData } = await supabase.functions.invoke('chat', {
+    const { data: patternData } = await supabase.functions.invoke('chat-swarm', {
       body: {
         sessionId: context.sessionId,
         workspaceId: context.workspaceId,
@@ -1261,7 +1263,7 @@ async function handleAutoAnalyze(args: string, context: CommandContext): Promise
     const curationSummary = buildCurationSummary(memoryNotes as any);
     const curationPrompt = buildMemoryCuratorPrompt(curationSummary);
 
-    const { data: curationData } = await supabase.functions.invoke('chat', {
+    const { data: curationData } = await supabase.functions.invoke('chat-swarm', {
       body: {
         sessionId: context.sessionId,
         workspaceId: context.workspaceId,
@@ -1276,7 +1278,7 @@ async function handleAutoAnalyze(args: string, context: CommandContext): Promise
     const riskMemorySummary = buildRiskMemorySummary(memoryNotes as any);
     const riskPrompt = buildRiskOfficerPrompt(riskRunSummary, riskMemorySummary, '');
 
-    const { data: riskData } = await supabase.functions.invoke('chat', {
+    const { data: riskData } = await supabase.functions.invoke('chat-swarm', {
       body: {
         sessionId: context.sessionId,
         workspaceId: context.workspaceId,
@@ -1291,7 +1293,7 @@ async function handleAutoAnalyze(args: string, context: CommandContext): Promise
     const experimentMemorySummary = buildExperimentMemorySummary(memoryNotes as any);
     const experimentPrompt = buildExperimentDirectorPrompt(experimentRunSummary, '', experimentMemorySummary, scope);
 
-    const { data: experimentData } = await supabase.functions.invoke('chat', {
+    const { data: experimentData } = await supabase.functions.invoke('chat-swarm', {
       body: {
         sessionId: context.sessionId,
         workspaceId: context.workspaceId,
@@ -1314,8 +1316,8 @@ async function handleAutoAnalyze(args: string, context: CommandContext): Promise
     // Build final auto-analyze prompt
     const finalPrompt = buildAutoAnalyzePrompt(scope, analysisInput);
 
-    // Call chat for final synthesis
-    const { data: finalData, error: finalError } = await supabase.functions.invoke('chat', {
+    // Call PRIMARY chat for final synthesis (high-stakes reasoning)
+    const { data: finalData, error: finalError } = await supabase.functions.invoke('chat-primary', {
       body: {
         sessionId: context.sessionId,
         workspaceId: context.workspaceId,
@@ -1699,108 +1701,126 @@ export const commands: Record<string, Command> = {
     description: 'Run a backtest for a strategy',
     usage: '/backtest <strategy_key> [start_date] [end_date] [capital]',
     handler: handleBacktest,
+    tier: undefined, // No chat call, uses backtest-run endpoint
   },
   runs: {
     name: 'runs',
     description: 'List recent backtest runs',
     usage: '/runs [limit]',
     handler: handleRuns,
+    tier: undefined, // No chat call, pure data fetch
   },
   compare: {
     name: 'compare',
     description: 'Compare recent completed runs',
     usage: '/compare [N]',
     handler: handleCompare,
+    tier: undefined, // No chat call, pure data fetch
   },
   audit_run: {
     name: 'audit_run',
     description: 'Audit a completed backtest run',
     usage: '/audit_run N or /audit_run id:<runId>',
     handler: handleAuditRun,
+    tier: 'swarm', // Agent mode
   },
   mine_patterns: {
     name: 'mine_patterns',
     description: 'Detect recurring patterns across runs and memory',
     usage: '/mine_patterns [limit]',
     handler: handleMinePatterns,
+    tier: 'swarm', // Agent mode
   },
   curate_memory: {
     name: 'curate_memory',
     description: 'Review and propose improvements to the current rule set and memory notes',
     usage: '/curate_memory',
     handler: handleCurateMemory,
+    tier: 'swarm', // Agent mode
   },
   suggest_experiments: {
     name: 'suggest_experiments',
     description: 'Propose next experiments based on existing runs and memory',
     usage: '/suggest_experiments [focus]',
     handler: handleSuggestExperiments,
+    tier: 'swarm', // Agent mode
   },
   risk_review: {
     name: 'risk_review',
     description: 'Review structural risk across runs',
     usage: '/risk_review [focus]',
     handler: handleRiskReview,
+    tier: 'swarm', // Agent mode
   },
   auto_analyze: {
     name: 'auto_analyze',
     description: 'Run autonomous research loop combining all agent modes',
     usage: '/auto_analyze [scope]',
     handler: handleAutoAnalyze,
+    tier: 'primary', // Final synthesis uses primary tier
   },
   save_report: {
     name: 'save_report',
     description: 'Save the last /auto_analyze report',
     usage: '/save_report [scope:<value>] [title:"Custom"]',
     handler: handleSaveReport,
+    tier: undefined, // No chat call, uses report-save endpoint
   },
   list_reports: {
     name: 'list_reports',
     description: 'List saved research reports',
     usage: '/list_reports [scope:<value>] [tag:<value>]',
     handler: handleListReports,
+    tier: undefined, // No chat call, pure data fetch
   },
   open_report: {
     name: 'open_report',
     description: 'Open a saved research report',
     usage: '/open_report id:<uuid>',
     handler: handleOpenReport,
+    tier: undefined, // No chat call, pure data fetch
   },
   note: {
     name: 'note',
     description: 'Create a memory note',
     usage: '/note <content> [type:TYPE] [importance:LEVEL] [tags:tag1,tag2]',
     handler: handleNote,
+    tier: undefined, // No chat call, uses memory-create endpoint
   },
   list_dir: {
     name: 'list_dir',
     description: 'List files and directories in rotation-engine',
     usage: '/list_dir path:<path>',
     handler: handleListDir,
+    tier: undefined, // No chat call, uses list-dir endpoint
   },
   open_file: {
     name: 'open_file',
     description: 'Show contents of a rotation-engine file',
     usage: '/open_file path:<path>',
     handler: handleOpenFile,
+    tier: undefined, // No chat call, uses read-file endpoint
   },
   search_code: {
     name: 'search_code',
     description: 'Search rotation-engine code for a term',
     usage: '/search_code <query>',
     handler: handleSearchCode,
+    tier: undefined, // No chat call, uses search-code endpoint
   },
   red_team_file: {
     name: 'red_team_file',
     description: 'Run multi-agent red team audit on rotation-engine code',
     usage: '/red_team_file path:<path>',
     handler: handleRedTeamFile,
+    tier: 'swarm', // Agent mode, runs multiple swarm calls
   },
   help: {
     name: 'help',
     description: 'Show available commands',
     usage: '/help',
     handler: handleHelp,
+    tier: undefined, // No chat call, pure help text
   },
 };
 

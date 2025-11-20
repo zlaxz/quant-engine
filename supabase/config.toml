@@ -5,7 +5,10 @@ project_id = "ynaqtawyynqikfyranda"
 # For local development: supabase secrets set ROTATION_ENGINE_ROOT="/path/to/rotation-engine"
 # For production: Set in Supabase dashboard → Settings → Edge Functions
 
-[functions.chat]
+[functions.chat-primary]
+verify_jwt = false
+
+[functions.chat-swarm]
 verify_jwt = false
 
 [functions.backtest-run]

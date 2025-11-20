@@ -231,18 +231,54 @@ Trigger function to auto-update `updated_at` timestamp on row modifications.
 
 All edge functions run on Supabase Edge Functions (Deno runtime) and are configured in `supabase/config.toml`.
 
-### `chat`
+### Model Tiers & Routing
 
-**Endpoint**: `POST /functions/v1/chat`
+The Quant Chat Workbench implements a two-tier LLM routing strategy:
+
+**PRIMARY Tier** (`chat-primary`):
+- **Purpose**: High-stakes reasoning, code writing, architecture decisions, final synthesis
+- **Model**: Configurable via `VITE_PRIMARY_MODEL` (defaults to `gpt-5-2025-08-07`)
+- **Used By**: Main chat interface, `/auto_analyze` final synthesis, user-facing conversation
+- **Characteristics**: Most powerful reasoning model, reserved for novel/complex work
+
+**SWARM Tier** (`chat-swarm`):
+- **Purpose**: Agent modes, specialist analysis, repetitive workflows
+- **Model**: Configurable via `VITE_SWARM_MODEL` (defaults to `gpt-5-2025-08-07` in Phase 1)
+- **Used By**: `/audit_run`, `/mine_patterns`, `/curate_memory`, `/suggest_experiments`, `/risk_review`, `/red_team_file`
+- **Characteristics**: Cost-optimized for frequent, structured analysis tasks
+
+**Routing Configuration** (`src/config/llmRouting.ts`):
+- `LlmTier` type: `'primary' | 'swarm'`
+- `PRIMARY_MODEL`: Environment variable for primary tier model
+- `SWARM_MODEL`: Environment variable for swarm tier model
+- `getModelForTier(tier)`: Helper to get model name for a tier
+
+**Command Tier Annotation**:
+Slash commands in `src/lib/slashCommands.ts` include a `tier` field indicating which chat function to use:
+- `tier: 'primary'` → Routes to `chat-primary` function
+- `tier: 'swarm'` → Routes to `chat-swarm` function
+- `tier: undefined` → No chat call, uses other endpoints (data fetch, backtest-run, etc.)
+
+**Phase 1 Status**:
+Both tiers currently use the same model (`gpt-5-2025-08-07`). Future phases will introduce different models per tier (e.g., Gemini 3 for PRIMARY, cheaper models for SWARM) and parallel execution for SWARM operations.
+
+---
+
+### `chat-primary`
+
+**Endpoint**: `POST /functions/v1/chat-primary`
 
 **Request Body**:
 ```json
 {
   "sessionId": "uuid",
   "workspaceId": "uuid",
-  "content": "user message text"
+  "content": "user message text",
+  "model": "gpt-5-2025-08-07" // optional
 }
 ```
+
+**Tier**: PRIMARY (high-stakes reasoning)
 
 **Behavior**:
 1. Initialize Supabase client
@@ -279,6 +315,41 @@ The chat uses a specialized **Chief Quant Researcher** identity defined in `supa
 - If memory retrieval fails: log error, skip memory injection, continue with Chief Quant identity
 - If OpenAI API fails: return 500 with error message
 - If workspace not found: return 404
+
+**CORS**: Enabled with `Access-Control-Allow-Origin: *`
+
+**JWT Verification**: Disabled (`verify_jwt = false` in config)
+
+---
+
+### `chat-swarm`
+
+**Endpoint**: `POST /functions/v1/chat-swarm`
+
+**Request Body**:
+```json
+{
+  "sessionId": "uuid",
+  "workspaceId": "uuid",
+  "content": "user message text",
+  "model": "gpt-5-2025-08-07" // optional
+}
+```
+
+**Tier**: SWARM (agent/specialist workflows)
+
+**Behavior**:
+Identical to `chat-primary` but logically separated for agent mode routing. Used by:
+- `/audit_run` — Strategy Auditor agent analysis
+- `/mine_patterns` — Pattern Miner cross-run analysis
+- `/curate_memory` — Memory Curator rule health review
+- `/suggest_experiments` — Experiment Director planning
+- `/risk_review` — Risk Officer structural risk analysis
+- `/red_team_file` — Multi-agent code audit (5 sequential swarm calls)
+
+**Future Phases**:
+- Will use a different, more cost-efficient model (e.g., cheaper LLMs)
+- May implement parallel execution for multiple swarm calls
 
 **CORS**: Enabled with `Access-Control-Allow-Origin: *`
 
