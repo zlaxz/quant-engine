@@ -453,6 +453,43 @@ Activated by `/suggest_experiments [focus]` command.
 
 ---
 
+### Risk Officer Mode (`/risk_review`)
+
+Activated by `/risk_review [focus]` command.
+
+**Purpose**: Identify structural risks, failure patterns, rule violations, and tail risk indicators across runs with conservative, evidence-based assessment focused on downside protection.
+
+**Process**:
+1. Fetch up to 100 completed runs for current session
+2. Fetch non-archived memory notes (up to 200) for current workspace
+3. Filter by optional focus parameter (strategy or tag)
+4. Build risk-focused summaries:
+   - Run summary: extreme drawdowns, worst runs, per-strategy risk profile, regime-specific failures, coverage gaps
+   - Memory summary: critical and high-importance rules and warnings
+5. Compose Risk Officer prompt
+6. Call chat function to generate risk report
+
+**Output Sections**:
+- **Key Risks**: Largest structural risks (extreme drawdowns, unstable Sharpe, inconsistent regimes)
+- **Violations of Existing Rules**: Where strategy behavior contradicts memory rules/warnings with severity levels
+- **Repeated Failure Modes**: Documented patterns (peakless trades, early failures, regime mismatches, metric-based patterns)
+- **Dangerous Regimes**: Date ranges or market regimes where failures cluster with strategy-specific vulnerabilities
+- **Tail Risk Indicators**: Return asymmetry, fat tail exposure, volatility clustering, extreme loss events
+- **Recommended Actions**: Concrete mitigation steps (reduce allocation, test parameters, avoid regimes, additional experiments) with calls to other agent modes
+- **Critical Alerts**: Reserved for catastrophic signals requiring immediate attention (optional section)
+
+**Template**: `src/prompts/riskOfficerPrompt.ts` → `buildRiskOfficerPrompt(runSummary, memorySummary, patternSummary)`
+
+**Risk Summarization Helpers**: `src/lib/riskSummaries.ts`
+- `buildRiskRunSummary(runs)`: Aggregates max/median drawdowns, identifies worst runs, builds per-strategy risk profiles, detects regime failures and coverage gaps
+- `buildRiskMemorySummary(notes)`: Prioritizes critical/high rules and warnings, groups by importance level
+
+**Integration**: Command calls `chat` edge function with Risk Officer prompt; Chief Quant base identity + risk assessment instructions → structured risk report returned to chat
+
+**Important**: Conservative, evidence-based approach focused on what can damage performance. Never auto-edits or auto-executes. Minimum 5 completed runs required.
+
+---
+
 ### `backtest-run`
 
 **Endpoint**: `POST /functions/v1/backtest-run`

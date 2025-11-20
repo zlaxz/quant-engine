@@ -144,7 +144,27 @@ Version 1.0 is considered complete when:
 - ✅ **Integration**: Uses Chief Quant Experiment Director mode identity
 - ✅ **Minimum Data**: Requires at least 5 completed runs
 
-### Stage 8: Thin Local-Code Tools
+### Stage 8: Risk Officer Mode ✅
+- ✅ **Risk Analysis**: `/risk_review [focus]` command identifies structural risks and rule violations
+- ✅ **Risk Officer Prompt**: `riskOfficerPrompt.ts` with 7-section structured report
+- ✅ **Risk Summarization Helpers**: `riskSummaries.ts` with analysis functions:
+  - `buildRiskRunSummary()`: Aggregates extreme drawdowns, worst runs, per-strategy risk profiles, regime failures, coverage gaps
+  - `buildRiskMemorySummary()`: Prioritizes critical/high rules and warnings
+- ✅ **Conservative Analysis**: Evidence-based focus on downside protection and structural vulnerabilities
+- ✅ **Comprehensive Risk Review**: Includes:
+  - Key structural risks (extreme DD, unstable metrics, regime inconsistencies)
+  - Rule violations with severity levels
+  - Repeated failure modes with patterns
+  - Dangerous regimes and strategy vulnerabilities
+  - Tail risk indicators (asymmetry, fat tails, volatility clustering)
+  - Concrete mitigation recommendations
+  - Critical alerts for catastrophic signals
+- ✅ **Focus Capability**: Optional focus parameter to narrow analysis to specific strategies
+- ✅ **Safety-First Approach**: Emphasizes preventing disasters over optimizing upside
+- ✅ **Integration**: Uses Chief Quant Risk Officer mode identity
+- ✅ **Minimum Data**: Requires at least 5 completed runs
+
+### Stage 9: Thin Local-Code Tools
 - **Repo Bridge**: Simple API bridge to local rotation-engine repo for reading code/configs
 - **Code Search**: `/code <query>` to search local repo from chat
 - **Config Preview**: Show current rotation-engine config in chat when discussing strategies
