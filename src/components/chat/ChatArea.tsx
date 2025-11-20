@@ -267,14 +267,14 @@ export const ChatArea = () => {
               <div className="p-3 border-b border-border bg-muted/50">
                 <h3 className="font-semibold text-sm font-mono flex items-center gap-2">
                   <Command className="h-4 w-4" />
-                  Slash Commands
+                  Slash Commands ({Object.keys(commands).length})
                 </h3>
                 <p className="text-xs text-muted-foreground mt-1">
                   Click any command to insert it into the chat
                 </p>
               </div>
-              <ScrollArea className="max-h-96">
-                <div className="p-2">
+              <ScrollArea className="h-[400px]">
+                <div className="p-2 space-y-1">
                   {Object.values(commands).map((cmd) => (
                     <button
                       key={cmd.name}
