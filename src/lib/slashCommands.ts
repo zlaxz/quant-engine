@@ -4,6 +4,9 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+
+// Export commands registry for UI components
+export { commands };
 import type { BacktestRun, BacktestParams, BacktestMetrics } from '@/types/backtest';
 import { buildAuditPrompt } from '@/prompts/auditorPrompt';
 import { buildRunSummary, buildMemorySummary, type MemoryNote } from '@/lib/auditSummaries';

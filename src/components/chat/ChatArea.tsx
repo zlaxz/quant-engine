@@ -1,13 +1,14 @@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Loader2, Command } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Send, Loader2, Command, Slash } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useChatContext } from '@/contexts/ChatContext';
 import { cn } from '@/lib/utils';
-import { executeCommand, parseCommand, getCommandSuggestions } from '@/lib/slashCommands';
+import { executeCommand, parseCommand, getCommandSuggestions, commands } from '@/lib/slashCommands';
 
 interface Message {
   id: string;
@@ -23,6 +24,7 @@ export const ChatArea = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingMessages, setIsFetchingMessages] = useState(false);
   const [commandSuggestions, setCommandSuggestions] = useState<string[]>([]);
+  const [showCommandMenu, setShowCommandMenu] = useState(false);
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -241,6 +243,58 @@ export const ChatArea = () => {
         )}
         
         <div className="flex gap-2">
+          <Popover open={showCommandMenu} onOpenChange={setShowCommandMenu}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                disabled={isLoading || !selectedSessionId}
+              >
+                <Slash className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent 
+              className="w-96 p-0 bg-background border-border z-50" 
+              align="start"
+              side="top"
+            >
+              <div className="p-3 border-b border-border bg-muted/50">
+                <h3 className="font-semibold text-sm font-mono flex items-center gap-2">
+                  <Command className="h-4 w-4" />
+                  Slash Commands
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Click any command to insert it into the chat
+                </p>
+              </div>
+              <ScrollArea className="max-h-96">
+                <div className="p-2">
+                  {Object.values(commands).map((cmd) => (
+                    <button
+                      key={cmd.name}
+                      onClick={() => {
+                        setInputValue(cmd.usage);
+                        setShowCommandMenu(false);
+                      }}
+                      className="w-full text-left p-3 rounded hover:bg-muted/50 transition-colors border border-transparent hover:border-border"
+                    >
+                      <div className="font-mono text-sm font-semibold text-primary">
+                        /{cmd.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {cmd.description}
+                      </div>
+                      <div className="text-xs font-mono text-accent-foreground mt-1 opacity-70">
+                        {cmd.usage}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </PopoverContent>
+          </Popover>
+          
           <Textarea
             placeholder="Type your message or use /help for commands... (Shift+Enter for new line)"
             className="resize-none font-mono text-sm"
