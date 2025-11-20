@@ -233,18 +233,19 @@ All edge functions run on Supabase Edge Functions (Deno runtime) and are configu
 
 ### Model Tiers & Routing
 
-The Quant Chat Workbench implements a two-tier LLM routing strategy:
+The Quant Chat Workbench implements a two-tier LLM routing strategy with parallel execution capabilities:
 
 **PRIMARY Tier** (`chat-primary`):
 - **Purpose**: High-stakes reasoning, code writing, architecture decisions, final synthesis
 - **Model**: Configurable via `VITE_PRIMARY_MODEL` (defaults to `gpt-5-2025-08-07`)
-- **Used By**: Main chat interface, `/auto_analyze` final synthesis, user-facing conversation
+- **Used By**: Main chat interface, `/auto_analyze` final synthesis, user-facing conversation, synthesis of swarm results
 - **Characteristics**: Most powerful reasoning model, reserved for novel/complex work
 
-**SWARM Tier** (`chat-swarm`):
-- **Purpose**: Agent modes, specialist analysis, repetitive workflows
-- **Model**: Configurable via `VITE_SWARM_MODEL` (defaults to `gpt-5-2025-08-07` in Phase 1)
-- **Used By**: `/audit_run`, `/mine_patterns`, `/curate_memory`, `/suggest_experiments`, `/risk_review`, `/red_team_file`
+**SWARM Tier** (`chat-swarm` + `chat-swarm-parallel`):
+- **Purpose**: Agent modes, specialist analysis, repetitive workflows, parallel multi-agent execution
+- **Model**: Configurable via `VITE_SWARM_MODEL` (defaults to `gpt-5-2025-08-07` in Phase 1-3)
+- **Used By**: `/audit_run`, `/mine_patterns`, `/curate_memory`, `/suggest_experiments`, `/risk_review`, individual red team auditors
+- **Parallel Orchestration**: `chat-swarm-parallel` fans out multiple prompts to `chat-swarm` in parallel
 - **Characteristics**: Cost-optimized for frequent, structured analysis tasks
 
 **Routing Configuration** (`src/config/llmRouting.ts`):
@@ -256,11 +257,29 @@ The Quant Chat Workbench implements a two-tier LLM routing strategy:
 **Command Tier Annotation**:
 Slash commands in `src/lib/slashCommands.ts` include a `tier` field indicating which chat function to use:
 - `tier: 'primary'` → Routes to `chat-primary` function
-- `tier: 'swarm'` → Routes to `chat-swarm` function
+- `tier: 'swarm'` → Routes to `chat-swarm` function (or `chat-swarm-parallel` for multi-agent workflows)
 - `tier: undefined` → No chat call, uses other endpoints (data fetch, backtest-run, etc.)
 
-**Phase 1 Status**:
-Both tiers currently use the same model (`gpt-5-2025-08-07`). Future phases will introduce different models per tier (e.g., Gemini 3 for PRIMARY, cheaper models for SWARM) and parallel execution for SWARM operations.
+**Swarm Orchestration Pattern**:
+
+The system implements a **fan-out → gather → synthesize** pattern for multi-agent workflows:
+
+1. **Fan-out**: Multiple specialized prompts sent to `chat-swarm-parallel` → executes in parallel via `chat-swarm`
+2. **Gather**: All results collected from parallel execution
+3. **Synthesize**: Combined results sent to `chat-primary` for coherent report generation
+
+**Example**: `/red_team_file` (v2) uses this pattern:
+- 5 specialized auditors (strategy logic, overfit, lookahead-bias, robustness, consistency) execute in parallel
+- Each produces independent analysis via `chat-swarm`
+- Final synthesis via `chat-primary` creates unified Code Audit Report
+
+This pattern can be reused for other multi-agent workflows (e.g., parallel pattern mining across strategies, parallel risk assessment across regimes).
+
+**Phase Status**:
+- Phase 1: Tier routing infrastructure ✅
+- Phase 2: `chat-swarm-parallel` and `runSwarm` helper ✅
+- Phase 3: Red Team v2 using swarm + synthesis ✅
+- Future: Different models per tier (e.g., Gemini 3 for PRIMARY, cheaper models for SWARM)
 
 ---
 
@@ -345,11 +364,78 @@ Identical to `chat-primary` but logically separated for agent mode routing. Used
 - `/curate_memory` — Memory Curator rule health review
 - `/suggest_experiments` — Experiment Director planning
 - `/risk_review` — Risk Officer structural risk analysis
-- `/red_team_file` — Multi-agent code audit (5 sequential swarm calls)
+- Individual red team auditors (called via `chat-swarm-parallel`)
 
 **Future Phases**:
 - Will use a different, more cost-efficient model (e.g., cheaper LLMs)
-- May implement parallel execution for multiple swarm calls
+
+**CORS**: Enabled with `Access-Control-Allow-Origin: *`
+
+**JWT Verification**: Disabled (`verify_jwt = false` in config)
+
+---
+
+### `chat-swarm-parallel`
+
+**Endpoint**: `POST /functions/v1/chat-swarm-parallel`
+
+**Request Body**:
+```json
+{
+  "sessionId": "uuid",
+  "workspaceId": "uuid",
+  "prompts": [
+    {
+      "label": "auditor-1",
+      "content": "prompt text"
+    },
+    {
+      "label": "auditor-2",
+      "content": "prompt text"
+    }
+  ],
+  "model": "gpt-5-2025-08-07" // optional
+}
+```
+
+**Tier**: SWARM (parallel orchestration)
+
+**Behavior**:
+1. Accept array of labeled prompts
+2. Fan out all prompts in parallel to `chat-swarm`
+3. Wait for all results using `Promise.all`
+4. Return array of results in same order as input
+
+**Response**:
+```json
+{
+  "results": [
+    {
+      "label": "auditor-1",
+      "content": "assistant response",
+      "error": "optional error message"
+    },
+    {
+      "label": "auditor-2",
+      "content": "assistant response"
+    }
+  ]
+}
+```
+
+**Used By**:
+- `/red_team_file` v2 — Parallel execution of 5 specialized code auditors
+- Frontend helper: `runSwarm()` in `src/lib/swarmClient.ts`
+
+**Error Handling**:
+- If individual swarm call fails: Result includes `error` field, other calls continue
+- Partial failures allowed: Some auditors can succeed while others fail
+- Complete orchestration failure: Returns 500 with error message
+
+**Performance**:
+- Executes N prompts in parallel (not sequential)
+- Total time ≈ slowest individual call, not sum of all calls
+- Example: 5 auditors @ ~10s each = ~10s total (vs ~50s sequential)
 
 **CORS**: Enabled with `Access-Control-Allow-Origin: *`
 

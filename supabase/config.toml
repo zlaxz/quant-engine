@@ -11,6 +11,9 @@ verify_jwt = false
 [functions.chat-swarm]
 verify_jwt = false
 
+[functions.chat-swarm-parallel]
+verify_jwt = false
+
 [functions.backtest-run]
 verify_jwt = false
 
