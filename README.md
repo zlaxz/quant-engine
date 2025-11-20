@@ -50,6 +50,47 @@ npm run dev
 - Click on "New codespace" to launch a new Codespace environment.
 - Edit files directly within the Codespace and commit and push your changes once you're done.
 
+## Connecting Your Local Rotation Engine
+
+This project includes code bridge commands (`/open_file`, `/list_dir`, `/search_code`, `/red_team_file`) that can read directly from your local rotation-engine directory.
+
+### Setup Instructions
+
+1. **Copy the example environment file:**
+   ```sh
+   cp .env.example .env.local
+   ```
+
+2. **Set the rotation-engine path in `.env.local`:**
+   ```sh
+   VITE_ROTATION_ENGINE_ROOT="/Users/zstoc/rotation-engine"
+   ```
+   Replace with the absolute path to your local rotation-engine directory.
+
+3. **Configure Supabase Edge Functions:**
+   
+   For local development with Supabase CLI:
+   ```sh
+   supabase secrets set ROTATION_ENGINE_ROOT="/Users/zstoc/rotation-engine"
+   ```
+
+   For deployed edge functions, set the secret in your Supabase project dashboard:
+   - Navigate to: Settings → Edge Functions
+   - Add secret: `ROTATION_ENGINE_ROOT` with your server path
+
+4. **Test the connection:**
+   - `/list_dir path:.` — List root directory
+   - `/list_dir path:profiles` — List profiles directory
+   - `/open_file path:profiles/skew.py` — Open a specific file
+   - `/search_code peakless` — Search across the codebase
+   - `/red_team_file path:profiles/skew.py` — Run code audit
+
+### Safety Features
+
+- **Read-only access:** Edge functions can only read files, never write
+- **Path validation:** Directory traversal (`..`) and absolute paths are blocked
+- **Sandboxed:** Code bridge cannot access files outside the configured root
+
 ## What technologies are used for this project?
 
 This project is built with:

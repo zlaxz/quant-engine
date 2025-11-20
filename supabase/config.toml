@@ -1,5 +1,10 @@
 project_id = "ynaqtawyynqikfyranda"
 
+# Edge Functions Environment Variables
+# Set ROTATION_ENGINE_ROOT to the absolute path of your local rotation-engine directory
+# For local development: supabase secrets set ROTATION_ENGINE_ROOT="/path/to/rotation-engine"
+# For production: Set in Supabase dashboard → Settings → Edge Functions
+
 [functions.chat]
 verify_jwt = false
 
