@@ -20,7 +20,7 @@ export function registerPythonExecutionHandlers() {
       const cmd = [
         'python3',
         'rotation-engine-bridge/cli_wrapper.py',
-        '--strategy', params.strategyKey,
+        '--profile', params.strategyKey,
         '--start', params.startDate,
         '--end', params.endDate,
         '--capital', params.capital.toString(),
