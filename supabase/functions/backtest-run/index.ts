@@ -266,6 +266,44 @@ serve(async (req) => {
       throw new Error(`Failed to update backtest run: ${updateError.message}`);
     }
 
+    // 4. Save full results locally for Phase 6 data inspection
+    const rotationEngineRoot = Deno.env.get('ROTATION_ENGINE_ROOT');
+    if (rotationEngineRoot && rotationEngineRoot.trim() !== '') {
+      try {
+        const resultsDir = `${rotationEngineRoot}/data/backtest_results/runs`;
+        
+        // Ensure directory exists
+        try {
+          await Deno.mkdir(resultsDir, { recursive: true });
+        } catch (mkdirError: any) {
+          // Ignore if directory already exists
+          if (mkdirError.name !== 'AlreadyExists') {
+            throw mkdirError;
+          }
+        }
+        
+        // Save full results including trades
+        const fullResults = {
+          run_id: backtestRun.id,
+          strategy_key: strategyKey,
+          params,
+          metrics,
+          equity_curve: equityCurve,
+          trades: [], // Stub - will be populated by external engine
+          engine_source: engineSource,
+          created_at: completedRun.completed_at
+        };
+        
+        const resultsPath = `${resultsDir}/${backtestRun.id}.json`;
+        await Deno.writeTextFile(resultsPath, JSON.stringify(fullResults, null, 2));
+        console.log('[Backtest Run] Saved full results to:', resultsPath);
+        
+      } catch (saveError: any) {
+        console.error('[Backtest Run] Failed to save full results locally:', saveError.message);
+        // Non-critical - don't fail the backtest if local save fails
+      }
+    }
+
     console.log('[Backtest Run] Backtest completed successfully');
 
     return new Response(
