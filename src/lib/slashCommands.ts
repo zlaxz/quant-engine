@@ -398,22 +398,22 @@ async function handleCompare(args: string, context: CommandContext): Promise<Com
       return `${idx + 1}. ${run.strategy_key}\n` +
              `   Period: ${period}\n` +
              `   Engine: ${engineLabel}\n` +
-             `   • CAGR: ${(metrics.cagr * 100).toFixed(2)}%\n` +
-             `   • Sharpe: ${metrics.sharpe.toFixed(2)}\n` +
-             `   • Max DD: ${(metrics.max_drawdown * 100).toFixed(2)}%\n` +
-             `   • Win Rate: ${(metrics.win_rate * 100).toFixed(1)}%\n` +
-             `   • Trades: ${metrics.total_trades}`;
+             `   • CAGR: ${metrics.cagr != null ? (metrics.cagr * 100).toFixed(2) : 'N/A'}%\n` +
+             `   • Sharpe: ${metrics.sharpe != null ? metrics.sharpe.toFixed(2) : 'N/A'}\n` +
+             `   • Max DD: ${metrics.max_drawdown != null ? (metrics.max_drawdown * 100).toFixed(2) : 'N/A'}%\n` +
+             `   • Win Rate: ${metrics.win_rate != null ? (metrics.win_rate * 100).toFixed(1) : 'N/A'}%\n` +
+             `   • Trades: ${metrics.total_trades != null ? metrics.total_trades : 'N/A'}`;
     }).join('\n\n');
 
-    // Find best performers
+    // Find best performers (with null safety)
     const bestCAGR = data.reduce((best, run, idx) => 
-      run.metrics.cagr > data[best].metrics.cagr ? idx : best, 0
+      (run.metrics.cagr != null && data[best].metrics.cagr != null && run.metrics.cagr > data[best].metrics.cagr) ? idx : best, 0
     );
     const bestSharpe = data.reduce((best, run, idx) => 
-      run.metrics.sharpe > data[best].metrics.sharpe ? idx : best, 0
+      (run.metrics.sharpe != null && data[best].metrics.sharpe != null && run.metrics.sharpe > data[best].metrics.sharpe) ? idx : best, 0
     );
     const bestDrawdown = data.reduce((best, run, idx) => 
-      Math.abs(run.metrics.max_drawdown) < Math.abs(data[best].metrics.max_drawdown) ? idx : best, 0
+      (run.metrics.max_drawdown != null && data[best].metrics.max_drawdown != null && Math.abs(run.metrics.max_drawdown) < Math.abs(data[best].metrics.max_drawdown)) ? idx : best, 0
     );
 
     const summary = `📊 Run Comparison (${data.length} runs)\n\n${runSummaries}\n\n` +

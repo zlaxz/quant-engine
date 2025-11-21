@@ -77,7 +77,7 @@ export const ChatSessionList = () => {
         .from('workspaces')
         .select('id')
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (!workspaces) {
         toast.error('No workspace found. Please create a workspace first.');
