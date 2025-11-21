@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
 import { generateEmbedding } from '../_shared/embeddings.ts';
 import { buildChiefQuantPrompt } from '../_shared/chiefQuantPrompt.ts';
-import { callLlm, type ChatMessage as LlmChatMessage } from '../_shared/llmClient.ts';
+import { callLlm, getConfigForTier, type ChatMessage as LlmChatMessage } from '../_shared/llmClient.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -247,8 +247,8 @@ serve(async (req) => {
     // 6. Save assistant message to database
     console.log('[Chat API - PRIMARY] Saving assistant response to database');
     
-    // Get actual provider/model from config
-    const config = { model: 'gemini-3-pro-preview', provider: 'google' };
+    // Get actual provider/model from config dynamically
+    const config = getConfigForTier('primary');
     
     const { error: assistantMessageError } = await supabase
       .from('messages')
