@@ -16,10 +16,10 @@ export function registerPythonExecutionHandlers() {
     try {
       console.log('Running backtest:', params);
 
-      // Build Python command - customize this to match your rotation-engine CLI
+      // Build Python command using cli_wrapper.py
       const cmd = [
         'python3',
-        'run_backtest.py', // Adjust to your actual script
+        'rotation-engine-bridge/cli_wrapper.py',
         '--strategy', params.strategyKey,
         '--start', params.startDate,
         '--end', params.endDate,
@@ -61,8 +61,19 @@ export function registerPythonExecutionHandlers() {
         };
       }
 
-      // Parse results from stdout (or read from file if your engine writes to file)
-      const results = JSON.parse(stdout);
+      // Parse results from stdout with error handling
+      let results;
+      try {
+        results = JSON.parse(stdout);
+      } catch (parseError) {
+        console.error('Failed to parse Python output as JSON:', parseError);
+        console.error('Raw stdout:', stdout);
+        console.error('Raw stderr:', stderr);
+        return {
+          success: false,
+          error: `Failed to parse backtest results: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}`,
+        };
+      }
 
       // Save raw results to local file
       const runId = results.runId || `run_${Date.now()}`;
