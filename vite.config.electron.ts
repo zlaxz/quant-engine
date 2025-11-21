@@ -1,19 +1,29 @@
 import { defineConfig } from 'vite';
 import path from 'path';
 
-// Electron main process config
+// Electron main process config - builds for Node.js, not browser
 export default defineConfig({
   build: {
     outDir: 'dist-electron',
-    lib: {
-      entry: {
+    ssr: true, // Build for Node.js environment
+    rollupOptions: {
+      input: {
         main: 'src/electron/main.ts',
         preload: 'src/electron/preload.ts',
       },
-      formats: ['es'],
-    },
-    rollupOptions: {
-      external: ['electron', 'fs', 'path', 'child_process', 'glob'],
+      output: {
+        format: 'es',
+        entryFileNames: '[name].js',
+      },
+      external: [
+        'electron',
+        'fs',
+        'fs/promises',
+        'path',
+        'child_process',
+        'url',
+        'glob',
+      ],
     },
   },
   resolve: {
