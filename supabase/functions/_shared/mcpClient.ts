@@ -22,6 +22,24 @@ export interface McpToolResponse {
 }
 
 /**
+ * Recursively remove additionalProperties from schema (Gemini doesn't support it)
+ */
+function stripAdditionalProperties(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  
+  if (Array.isArray(obj)) {
+    return obj.map(stripAdditionalProperties);
+  }
+  
+  const result: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === 'additionalProperties') continue; // Skip this field
+    result[key] = stripAdditionalProperties(value);
+  }
+  return result;
+}
+
+/**
  * Get list of available MCP tools formatted for LLM
  */
 export function getMcpToolsForLlm() {
@@ -30,7 +48,7 @@ export function getMcpToolsForLlm() {
     function: {
       name: tool.name,
       description: tool.description,
-      parameters: tool.inputSchema
+      parameters: stripAdditionalProperties(tool.inputSchema)
     }
   }));
 }
