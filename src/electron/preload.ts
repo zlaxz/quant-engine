@@ -15,14 +15,14 @@ contextBridge.exposeInMainWorld('electron', {
     startDate: string;
     endDate: string;
     capital: number;
-    profileConfig?: Record<string, any>;
+    profileConfig?: Record<string, unknown>;
   }) => ipcRenderer.invoke('run-backtest', params),
 
   // LLM operations
-  chatPrimary: (messages: any[]) => ipcRenderer.invoke('chat-primary', messages),
-  chatSwarm: (messages: any[]) => ipcRenderer.invoke('chat-swarm', messages),
-  chatSwarmParallel: (prompts: any[]) => ipcRenderer.invoke('chat-swarm-parallel', prompts),
-  helperChat: (messages: any[]) => ipcRenderer.invoke('helper-chat', messages),
+  chatPrimary: (messages: Array<{ role: string; content: string }>) => ipcRenderer.invoke('chat-primary', messages),
+  chatSwarm: (messages: Array<{ role: string; content: string }>) => ipcRenderer.invoke('chat-swarm', messages),
+  chatSwarmParallel: (prompts: Array<{ agentId: string; messages: Array<{ role: string; content: string }> }>) => ipcRenderer.invoke('chat-swarm-parallel', prompts),
+  helperChat: (messages: Array<{ role: string; content: string }>) => ipcRenderer.invoke('helper-chat', messages),
 
   // Environment
   getRotationEngineRoot: () => ipcRenderer.invoke('get-rotation-engine-root'),
@@ -34,12 +34,25 @@ export interface ElectronAPI {
   writeFile: (filePath: string, content: string) => Promise<{ success: boolean }>;
   deleteFile: (filePath: string) => Promise<{ success: boolean }>;
   listDir: (dirPath: string) => Promise<{ entries: Array<{ name: string; type: 'file' | 'directory' }> }>;
-  searchCode: (query: string, dirPath?: string) => Promise<{ results: any[] }>;
-  runBacktest: (params: any) => Promise<any>;
-  chatPrimary: (messages: any[]) => Promise<{ content: string; provider: string; model: string }>;
-  chatSwarm: (messages: any[]) => Promise<{ content: string; provider: string; model: string }>;
-  chatSwarmParallel: (prompts: any[]) => Promise<any[]>;
-  helperChat: (messages: any[]) => Promise<{ content: string }>;
+  searchCode: (query: string, dirPath?: string) => Promise<{ results: Array<{ file: string; line: number; content: string }> }>;
+  runBacktest: (params: {
+    strategyKey: string;
+    startDate: string;
+    endDate: string;
+    capital: number;
+    profileConfig?: Record<string, unknown>;
+  }) => Promise<{
+    success: boolean;
+    metrics?: Record<string, number>;
+    equityCurve?: Array<{ date: string; value: number }>;
+    trades?: unknown[];
+    rawResultsPath?: string;
+    error?: string;
+  }>;
+  chatPrimary: (messages: Array<{ role: string; content: string }>) => Promise<{ content: string; provider: string; model: string }>;
+  chatSwarm: (messages: Array<{ role: string; content: string }>) => Promise<{ content: string; provider: string; model: string }>;
+  chatSwarmParallel: (prompts: Array<{ agentId: string; messages: Array<{ role: string; content: string }> }>) => Promise<Array<{ agentId: string; content: string }>>;
+  helperChat: (messages: Array<{ role: string; content: string }>) => Promise<{ content: string }>;
   getRotationEngineRoot: () => Promise<string>;
 }
 

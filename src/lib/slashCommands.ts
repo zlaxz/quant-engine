@@ -1298,7 +1298,6 @@ async function handleAutoAnalyze(args: string, context: CommandContext): Promise
     const finalPrompt = buildAutoAnalyzePrompt(scope, synthesisInput);
 
     // Call PRIMARY chat for final synthesis (high-stakes reasoning)
-    console.log('[Auto-Analyze] Synthesizing final report via PRIMARY_MODEL...');
     const { data: finalData, error: finalError } = await supabase.functions.invoke('chat-primary', {
       body: {
         sessionId: context.sessionId,
@@ -1565,7 +1564,6 @@ async function handleRedTeamFile(args: string, context: CommandContext): Promise
 
   try {
     // Fetch file contents via read-file edge function
-    console.log(`Fetching file: ${filePath}`);
     const { data: fileData, error: fileError } = await supabase.functions.invoke('read-file', {
       body: { path: filePath },
     });
@@ -1586,7 +1584,6 @@ async function handleRedTeamFile(args: string, context: CommandContext): Promise
     }
 
     const code = fileData.content;
-    console.log(`File fetched, running red team audit (${code.length} characters)`);
 
     // Run multi-agent red team audit
     const result = await runRedTeamAuditForFile({
