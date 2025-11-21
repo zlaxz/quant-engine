@@ -129,23 +129,34 @@ export async function runBatchBacktest(
       };
     }
 
-    // Run all backtests in parallel
-    const backtestPromises = combinations.map(params =>
-      supabaseClient.functions.invoke('backtest-run', {
-        body: {
-          sessionId: baseConfig.sessionId,
-          strategyKey,
-          params: {
-            ...params,
-            startDate: baseConfig.startDate,
-            endDate: baseConfig.endDate,
-            capital: baseConfig.capital
+    // FIXED: Run backtests with concurrency control to prevent resource exhaustion
+    const CONCURRENCY_LIMIT = 10;
+    const results: any[] = [];
+    
+    for (let i = 0; i < combinations.length; i += CONCURRENCY_LIMIT) {
+      const batch = combinations.slice(i, i + CONCURRENCY_LIMIT);
+      
+      const batchPromises = batch.map(params =>
+        supabaseClient.functions.invoke('backtest-run', {
+          body: {
+            sessionId: baseConfig.sessionId,
+            strategyKey,
+            params: {
+              ...params,
+              startDate: baseConfig.startDate,
+              endDate: baseConfig.endDate,
+              capital: baseConfig.capital
+            }
           }
-        }
-      })
-    );
-
-    const results = await Promise.all(backtestPromises);
+        })
+      );
+      
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+      
+      // Log progress
+      console.log(`Batch backtest progress: ${Math.min(i + CONCURRENCY_LIMIT, combinations.length)}/${combinations.length}`);
+    }
     
     // Process results
     const backtestResults: BacktestResult[] = results.map((res, idx) => {

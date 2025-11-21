@@ -61,11 +61,10 @@ export async function inspectMarketData(
       return { success: false, error: 'Start date must be before end date' };
     }
     
-    // Based on rotation-engine data structure:
-    // /Volumes/VelocityData/polygon_downloads/options/SPX/...
-    // For now, we'll read from data directory if it exists
-    
-    const dataPath = `${engineRoot}/data/market_data/${symbol.toUpperCase()}.csv`;
+    // FIXED: Make data path configurable via environment variable
+    // Supports both local testing and production Polygon data volumes
+    const marketDataRoot = Deno.env.get('MARKET_DATA_ROOT') || `${engineRoot}/data/market_data`;
+    const dataPath = `${marketDataRoot}/${symbol.toUpperCase()}.csv`;
     
     try {
       const content = await Deno.readTextFile(dataPath);
@@ -103,7 +102,15 @@ export async function inspectMarketData(
       if (fileError.name === 'NotFound') {
         return {
           success: false,
-          error: `Market data file not found: ${dataPath}. Data inspection requires local market data files.`
+          error: `Market data file not found: ${dataPath}. 
+
+SETUP REQUIRED:
+1. Set MARKET_DATA_ROOT environment variable to your Polygon data directory
+   Example: export MARKET_DATA_ROOT=/Volumes/VelocityData/polygon_downloads
+2. Ensure data files are accessible at: \${MARKET_DATA_ROOT}/${symbol.toUpperCase()}.csv
+3. Current search path: ${dataPath}
+
+For local testing, create ${engineRoot}/data/market_data/ and place CSV files there.`
         };
       }
       throw fileError;

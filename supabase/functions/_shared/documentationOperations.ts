@@ -42,6 +42,14 @@ export async function generateDocstrings(
   llmApiKey: string
 ): Promise<DocstringResult> {
   try {
+    // FIXED: Validate LLM API key before proceeding
+    if (!llmApiKey || llmApiKey.trim() === '') {
+      return {
+        success: false,
+        error: 'LOVABLE_API_KEY is required for documentation generation. Please configure it in Supabase secrets.'
+      };
+    }
+
     // Read the file
     const fullPath = `${engineRoot}/${filePath}`;
     const content = await Deno.readTextFile(fullPath);
@@ -134,6 +142,14 @@ export async function generateReadme(
   llmApiKey: string
 ): Promise<ReadmeResult> {
   try {
+    // FIXED: Validate LLM API key before proceeding
+    if (!llmApiKey || llmApiKey.trim() === '') {
+      return {
+        success: false,
+        error: 'LOVABLE_API_KEY is required for README generation. Please configure it in Supabase secrets.'
+      };
+    }
+
     const fullPath = `${engineRoot}/${modulePath}`;
     
     // Check if path is directory or file
