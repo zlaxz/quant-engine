@@ -16,6 +16,16 @@ import {
   checkOutdatedPackages,
   checkPythonVersion
 } from './validationOperations.ts';
+import {
+  findFunction,
+  findClass,
+  findUsages,
+  generateCallGraph,
+  generateImportTree,
+  findDeadCode,
+  calculateComplexity,
+  generateCodeStats
+} from './analysisOperations.ts';
 
 export interface McpTool {
   name: string;
@@ -515,6 +525,132 @@ export const MCP_TOOLS: McpTool[] = [
       type: 'object',
       properties: {}
     }
+  },
+  {
+    name: 'find_function',
+    description: 'Find function definition in codebase using AST analysis',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Function name to search for'
+        },
+        path: {
+          type: 'string',
+          description: 'Optional path to limit search scope'
+        }
+      },
+      required: ['name']
+    }
+  },
+  {
+    name: 'find_class',
+    description: 'Find class definition in codebase using AST analysis',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Class name to search for'
+        },
+        path: {
+          type: 'string',
+          description: 'Optional path to limit search scope'
+        }
+      },
+      required: ['name']
+    }
+  },
+  {
+    name: 'find_usages',
+    description: 'Find all usages/references to a symbol (function/class/variable)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        symbol: {
+          type: 'string',
+          description: 'Symbol name to find usages of'
+        },
+        path: {
+          type: 'string',
+          description: 'Optional path to limit search scope'
+        }
+      },
+      required: ['symbol']
+    }
+  },
+  {
+    name: 'call_graph',
+    description: 'Generate call graph showing what functions a function calls',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        function_name: {
+          type: 'string',
+          description: 'Function name to analyze'
+        },
+        path: {
+          type: 'string',
+          description: 'Optional path to limit analysis scope'
+        }
+      },
+      required: ['function_name']
+    }
+  },
+  {
+    name: 'import_tree',
+    description: 'Show import dependency tree for a module',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        module_name: {
+          type: 'string',
+          description: 'Module name to analyze imports for'
+        }
+      },
+      required: ['module_name']
+    }
+  },
+  {
+    name: 'dead_code',
+    description: 'Find potentially unused functions and classes',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Optional path to analyze (default: entire codebase)'
+        }
+      }
+    }
+  },
+  {
+    name: 'complexity',
+    description: 'Calculate cyclomatic complexity for functions in a file',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'File path to analyze'
+        }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'code_stats',
+    description: 'Generate codebase statistics (lines, functions, classes, etc.)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Optional path to analyze (default: entire codebase)'
+        }
+      }
+    }
   }
 ];
 
@@ -616,6 +752,30 @@ export async function executeMcpTool(
       
       case 'python_version':
         return await executePythonVersion(engineRoot);
+      
+      case 'find_function':
+        return await executeFindFunction(args.name, args.path, engineRoot);
+      
+      case 'find_class':
+        return await executeFindClass(args.name, args.path, engineRoot);
+      
+      case 'find_usages':
+        return await executeFindUsages(args.symbol, args.path, engineRoot);
+      
+      case 'call_graph':
+        return await executeCallGraph(args.function_name, args.path, engineRoot);
+      
+      case 'import_tree':
+        return await executeImportTree(args.module_name, engineRoot);
+      
+      case 'dead_code':
+        return await executeDeadCode(args.path, engineRoot);
+      
+      case 'complexity':
+        return await executeComplexity(args.path, engineRoot);
+      
+      case 'code_stats':
+        return await executeCodeStats(args.path, engineRoot);
       
       default:
         return {
@@ -915,4 +1075,68 @@ async function executePythonVersion(engineRoot: string): Promise<McpToolResult> 
     return { content: [{ type: 'text', text: result.error }], isError: true };
   }
   return { content: [{ type: 'text', text: result.output || 'Python version check completed' }] };
+}
+
+async function executeFindFunction(name: string, path: string | undefined, engineRoot: string): Promise<McpToolResult> {
+  const result = await findFunction(name, engineRoot, path);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output }] };
+}
+
+async function executeFindClass(name: string, path: string | undefined, engineRoot: string): Promise<McpToolResult> {
+  const result = await findClass(name, engineRoot, path);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output }] };
+}
+
+async function executeFindUsages(symbol: string, path: string | undefined, engineRoot: string): Promise<McpToolResult> {
+  const result = await findUsages(symbol, engineRoot, path);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output }] };
+}
+
+async function executeCallGraph(functionName: string, path: string | undefined, engineRoot: string): Promise<McpToolResult> {
+  const result = await generateCallGraph(functionName, engineRoot, path);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output }] };
+}
+
+async function executeImportTree(moduleName: string, engineRoot: string): Promise<McpToolResult> {
+  const result = await generateImportTree(moduleName, engineRoot);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output }] };
+}
+
+async function executeDeadCode(path: string | undefined, engineRoot: string): Promise<McpToolResult> {
+  const result = await findDeadCode(engineRoot, path);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output }] };
+}
+
+async function executeComplexity(path: string, engineRoot: string): Promise<McpToolResult> {
+  const result = await calculateComplexity(engineRoot, path);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output }] };
+}
+
+async function executeCodeStats(path: string | undefined, engineRoot: string): Promise<McpToolResult> {
+  const result = await generateCodeStats(engineRoot, path);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output }] };
 }
