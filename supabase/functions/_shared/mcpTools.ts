@@ -32,6 +32,12 @@ import {
   runRegressionTest,
   runCrossValidation
 } from './automationOperations.ts';
+import {
+  inspectMarketData,
+  checkDataQuality,
+  getTradeLog,
+  getTradeDetail
+} from './dataInspectionOperations.ts';
 
 export interface McpTool {
   name: string;
@@ -822,6 +828,82 @@ export const MCP_TOOLS: McpTool[] = [
       },
       required: ['strategy_key', 'params', 'start_date', 'end_date']
     }
+  },
+  {
+    name: 'inspect_market_data',
+    description: 'Inspect raw market data (OHLCV bars) from local Polygon CSV files for a given symbol and date range',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        symbol: {
+          type: 'string',
+          description: 'Symbol to inspect (e.g., "SPX", "AAPL")'
+        },
+        start_date: {
+          type: 'string',
+          description: 'Start date in YYYY-MM-DD format'
+        },
+        end_date: {
+          type: 'string',
+          description: 'End date in YYYY-MM-DD format'
+        }
+      },
+      required: ['symbol', 'start_date', 'end_date']
+    }
+  },
+  {
+    name: 'data_quality_check',
+    description: 'Validate data integrity - check for missing bars, outliers, and price consistency issues',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        symbol: {
+          type: 'string',
+          description: 'Symbol to check (e.g., "SPX", "AAPL")'
+        },
+        start_date: {
+          type: 'string',
+          description: 'Start date in YYYY-MM-DD format'
+        },
+        end_date: {
+          type: 'string',
+          description: 'End date in YYYY-MM-DD format'
+        }
+      },
+      required: ['symbol', 'start_date', 'end_date']
+    }
+  },
+  {
+    name: 'get_trade_log',
+    description: 'Get all trades from a backtest run with entry/exit details, P&L, and hold duration',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        run_id: {
+          type: 'string',
+          description: 'Backtest run UUID'
+        }
+      },
+      required: ['run_id']
+    }
+  },
+  {
+    name: 'get_trade_detail',
+    description: 'Deep dive on a specific trade from a backtest run with full market context',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        run_id: {
+          type: 'string',
+          description: 'Backtest run UUID'
+        },
+        trade_idx: {
+          type: 'number',
+          description: 'Trade index (0-based)'
+        }
+      },
+      required: ['run_id', 'trade_idx']
+    }
   }
 ];
 
@@ -959,6 +1041,18 @@ export async function executeMcpTool(
       
       case 'cross_validate':
         return await executeCrossValidate(args, engineRoot);
+      
+      case 'inspect_market_data':
+        return await executeInspectMarketData(args.symbol, args.start_date, args.end_date, engineRoot);
+      
+      case 'data_quality_check':
+        return await executeDataQualityCheck(args.symbol, args.start_date, args.end_date, engineRoot);
+      
+      case 'get_trade_log':
+        return await executeGetTradeLog(args.run_id, engineRoot);
+      
+      case 'get_trade_detail':
+        return await executeGetTradeDetail(args.run_id, args.trade_idx, engineRoot);
       
       default:
         return {
@@ -1572,6 +1666,116 @@ async function executeCrossValidate(args: any, engineRoot: string): Promise<McpT
   } catch (error) {
     return {
       content: [{ type: 'text', text: `Cross-validation error: ${error instanceof Error ? error.message : String(error)}` }],
+      isError: true
+    };
+  }
+}
+
+// ==================== Phase 6: Data Inspection Executors ====================
+
+async function executeInspectMarketData(symbol: string, startDate: string, endDate: string, engineRoot: string): Promise<McpToolResult> {
+  try {
+    const result = await inspectMarketData(symbol, startDate, endDate, engineRoot);
+    
+    if (!result.success) {
+      return {
+        content: [{ type: 'text', text: result.error || 'Unknown error' }],
+        isError: true
+      };
+    }
+    
+    const summary = `${result.summary}\n\nFirst 10 rows:\n${JSON.stringify(result.data?.slice(0, 10), null, 2)}`;
+    return { content: [{ type: 'text', text: summary }] };
+    
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: `Market data inspection error: ${error instanceof Error ? error.message : String(error)}` }],
+      isError: true
+    };
+  }
+}
+
+async function executeDataQualityCheck(symbol: string, startDate: string, endDate: string, engineRoot: string): Promise<McpToolResult> {
+  try {
+    const result = await checkDataQuality(symbol, startDate, endDate, engineRoot);
+    
+    if (!result.success) {
+      return {
+        content: [{ type: 'text', text: result.error || 'Unknown error' }],
+        isError: true
+      };
+    }
+    
+    let output = result.summary || 'Data quality check completed';
+    if (result.issues && result.issues.length > 0) {
+      output += '\n\nIssues Found:\n' + result.issues.map((issue, idx) => `${idx + 1}. ${issue}`).join('\n');
+    }
+    
+    return { content: [{ type: 'text', text: output }] };
+    
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: `Data quality check error: ${error instanceof Error ? error.message : String(error)}` }],
+      isError: true
+    };
+  }
+}
+
+async function executeGetTradeLog(runId: string, engineRoot: string): Promise<McpToolResult> {
+  try {
+    const result = await getTradeLog(runId, engineRoot);
+    
+    if (!result.success) {
+      return {
+        content: [{ type: 'text', text: result.error || 'Unknown error' }],
+        isError: true
+      };
+    }
+    
+    let output = `${result.summary}\n\n`;
+    
+    if (result.metadata) {
+      output += `Strategy: ${result.metadata.strategy_key}\n`;
+      output += `Metrics: ${JSON.stringify(result.metadata.metrics, null, 2)}\n\n`;
+    }
+    
+    if (result.trades && result.trades.length > 0) {
+      output += 'Trade Summary:\n';
+      output += result.trades.slice(0, 20).map((trade, idx) => 
+        `${idx}. ${trade.entry_date} -> ${trade.exit_date} | P&L: $${trade.pnl.toFixed(2)} (${(trade.pnl_pct * 100).toFixed(2)}%) | ${trade.hold_days}d`
+      ).join('\n');
+      
+      if (result.trades.length > 20) {
+        output += `\n... and ${result.trades.length - 20} more trades`;
+      }
+    }
+    
+    return { content: [{ type: 'text', text: output }] };
+    
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: `Trade log error: ${error instanceof Error ? error.message : String(error)}` }],
+      isError: true
+    };
+  }
+}
+
+async function executeGetTradeDetail(runId: string, tradeIdx: number, engineRoot: string): Promise<McpToolResult> {
+  try {
+    const result = await getTradeDetail(runId, tradeIdx, engineRoot);
+    
+    if (!result.success) {
+      return {
+        content: [{ type: 'text', text: result.error || 'Unknown error' }],
+        isError: true
+      };
+    }
+    
+    return { content: [{ type: 'text', text: result.context || 'No context available' }] };
+    
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: `Trade detail error: ${error instanceof Error ? error.message : String(error)}` }],
       isError: true
     };
   }

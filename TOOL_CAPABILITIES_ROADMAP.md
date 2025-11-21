@@ -521,9 +521,22 @@ This document outlines the phased implementation plan for completing the Quant C
 - Trade replay visualization
 
 ### Success Criteria
-- [ ] Chief Quant can inspect market data when debugging strategies
-- [ ] Chief Quant can review individual trades from backtest runs
-- [ ] Data quality issues are detected and reported
+- [x] Chief Quant can inspect market data when debugging strategies
+- [x] Chief Quant can review individual trades from backtest runs
+- [x] Data quality issues are detected and reported
+- [x] Trade logs stored locally alongside backtest results
+- [x] MCP tools accessible via workspace-init-prompt edge function
+- [x] Slash commands integrated into command registry
+
+**Status**: ✅ **COMPLETE** (Phase 6 complete as of 2025-01-19)
+
+**Implementation Summary**:
+- Created `dataInspectionOperations.ts` with `inspectMarketData`, `checkDataQuality`, `getTradeLog`, `getTradeDetail`
+- Extended `backtest-run` edge function to save full results locally to `data/backtest_results/runs/<run_id>.json`
+- Added 4 new MCP tools: `inspect_market_data`, `data_quality_check`, `get_trade_log`, `get_trade_detail`
+- Integrated tools into `mcpTools.ts` catalog and execution dispatcher
+- Added 4 slash commands: `/inspect_data`, `/data_quality`, `/trade_log`, `/trade_detail`
+- All tools accessible to Chief Quant for debugging strategies and analyzing trade-level results
 
 ---
 

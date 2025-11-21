@@ -1814,6 +1814,196 @@ async function handleCreateDir(args: string, context: CommandContext): Promise<C
 }
 
 /**
+ * /inspect_data command - inspect raw market data
+ * Usage: /inspect_data symbol:<symbol> start:<YYYY-MM-DD> end:<YYYY-MM-DD>
+ */
+async function handleInspectData(args: string, _context: CommandContext): Promise<CommandResult> {
+  const symbolMatch = args.match(/symbol:(\S+)/);
+  const startMatch = args.match(/start:(\d{4}-\d{2}-\d{2})/);
+  const endMatch = args.match(/end:(\d{4}-\d{2}-\d{2})/);
+  
+  if (!symbolMatch || !startMatch || !endMatch) {
+    return {
+      success: false,
+      message: 'Usage: /inspect_data symbol:<symbol> start:<YYYY-MM-DD> end:<YYYY-MM-DD>\nExample: /inspect_data symbol:SPX start:2024-01-01 end:2024-03-31',
+    };
+  }
+  
+  const symbol = symbolMatch[1];
+  const startDate = startMatch[1];
+  const endDate = endMatch[1];
+  
+  try {
+    const { data, error } = await supabase.functions.invoke('workspace-init-prompt', {
+      body: {
+        tool: 'inspect_market_data',
+        args: { symbol, start_date: startDate, end_date: endDate }
+      }
+    });
+    
+    if (error) throw error;
+    
+    return {
+      success: true,
+      message: data.result || 'Market data inspection completed',
+      data
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: `❌ Failed to inspect market data: ${error.message}`,
+    };
+  }
+}
+
+/**
+ * /data_quality command - check data quality
+ * Usage: /data_quality symbol:<symbol> start:<YYYY-MM-DD> end:<YYYY-MM-DD>
+ */
+async function handleDataQuality(args: string, _context: CommandContext): Promise<CommandResult> {
+  const symbolMatch = args.match(/symbol:(\S+)/);
+  const startMatch = args.match(/start:(\d{4}-\d{2}-\d{2})/);
+  const endMatch = args.match(/end:(\d{4}-\d{2}-\d{2})/);
+  
+  if (!symbolMatch || !startMatch || !endMatch) {
+    return {
+      success: false,
+      message: 'Usage: /data_quality symbol:<symbol> start:<YYYY-MM-DD> end:<YYYY-MM-DD>\nExample: /data_quality symbol:SPX start:2024-01-01 end:2024-03-31',
+    };
+  }
+  
+  const symbol = symbolMatch[1];
+  const startDate = startMatch[1];
+  const endDate = endMatch[1];
+  
+  try {
+    const { data, error } = await supabase.functions.invoke('workspace-init-prompt', {
+      body: {
+        tool: 'data_quality_check',
+        args: { symbol, start_date: startDate, end_date: endDate }
+      }
+    });
+    
+    if (error) throw error;
+    
+    return {
+      success: true,
+      message: data.result || 'Data quality check completed',
+      data
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: `❌ Failed to check data quality: ${error.message}`,
+    };
+  }
+}
+
+/**
+ * /trade_log command - get trade log for a backtest run
+ * Usage: /trade_log id:<runId> or /trade_log N (Nth most recent)
+ */
+async function handleTradeLog(args: string, context: CommandContext): Promise<CommandResult> {
+  let runId: string | undefined;
+  
+  const idMatch = args.match(/id:([0-9a-f-]{36})/i);
+  if (idMatch) {
+    runId = idMatch[1];
+  } else {
+    const nMatch = args.match(/^\d+$/);
+    if (nMatch) {
+      const n = parseInt(args, 10);
+      const { data: runs } = await supabase
+        .from('backtest_runs')
+        .select('id')
+        .eq('session_id', context.sessionId)
+        .eq('status', 'completed')
+        .order('completed_at', { ascending: false })
+        .limit(n);
+      
+      if (!runs || runs.length < n) {
+        return {
+          success: false,
+          message: `❌ Only ${runs?.length || 0} completed runs available`,
+        };
+      }
+      
+      runId = runs[n - 1].id;
+    }
+  }
+  
+  if (!runId) {
+    return {
+      success: false,
+      message: 'Usage: /trade_log id:<runId> or /trade_log N\nExample: /trade_log 1 (most recent) or /trade_log id:abc-123-...',
+    };
+  }
+  
+  try {
+    const { data, error } = await supabase.functions.invoke('workspace-init-prompt', {
+      body: {
+        tool: 'get_trade_log',
+        args: { run_id: runId }
+      }
+    });
+    
+    if (error) throw error;
+    
+    return {
+      success: true,
+      message: data.result || 'Trade log retrieved',
+      data
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: `❌ Failed to get trade log: ${error.message}`,
+    };
+  }
+}
+
+/**
+ * /trade_detail command - get detailed analysis of specific trade
+ * Usage: /trade_detail id:<runId> idx:<tradeIdx>
+ */
+async function handleTradeDetail(args: string, _context: CommandContext): Promise<CommandResult> {
+  const idMatch = args.match(/id:([0-9a-f-]{36})/i);
+  const idxMatch = args.match(/idx:(\d+)/);
+  
+  if (!idMatch || !idxMatch) {
+    return {
+      success: false,
+      message: 'Usage: /trade_detail id:<runId> idx:<tradeIdx>\nExample: /trade_detail id:abc-123-... idx:5',
+    };
+  }
+  
+  const runId = idMatch[1];
+  const tradeIdx = parseInt(idxMatch[1], 10);
+  
+  try {
+    const { data, error } = await supabase.functions.invoke('workspace-init-prompt', {
+      body: {
+        tool: 'get_trade_detail',
+        args: { run_id: runId, trade_idx: tradeIdx }
+      }
+    });
+    
+    if (error) throw error;
+    
+    return {
+      success: true,
+      message: data.result || 'Trade detail retrieved',
+      data
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: `❌ Failed to get trade detail: ${error.message}`,
+    };
+  }
+}
+
+/**
  * /help command - show available commands
  */
 async function handleHelp(): Promise<CommandResult> {
@@ -1889,6 +2079,18 @@ async function handleHelp(): Promise<CommandResult> {
       `📁 /create_dir <path>\n` +
       `   Create a new directory\n` +
       `   Example: /create_dir strategies/experimental\n\n` +
+      `📊 /inspect_data symbol:<symbol> start:<date> end:<date>\n` +
+      `   Inspect raw market data (OHLCV bars)\n` +
+      `   Example: /inspect_data symbol:SPX start:2024-01-01 end:2024-03-31\n\n` +
+      `🔍 /data_quality symbol:<symbol> start:<date> end:<date>\n` +
+      `   Check data quality for missing bars and outliers\n` +
+      `   Example: /data_quality symbol:SPX start:2024-01-01 end:2024-03-31\n\n` +
+      `📈 /trade_log id:<runId>\n` +
+      `   Get trade log from backtest run\n` +
+      `   Example: /trade_log id:abc-123-... or /trade_log 1\n\n` +
+      `🔬 /trade_detail id:<runId> idx:<tradeIdx>\n` +
+      `   Deep dive on specific trade with market context\n` +
+      `   Example: /trade_detail id:abc-123-... idx:5\n\n` +
       `❓ /help\n` +
       `   Show this help message`,
   };
@@ -2057,6 +2259,34 @@ export const commands: Record<string, Command> = {
     description: 'Create a new directory',
     usage: '/create_dir <path>',
     handler: handleCreateDir,
+    tier: undefined,
+  },
+  inspect_data: {
+    name: 'inspect_data',
+    description: 'Inspect raw market data (OHLCV bars)',
+    usage: '/inspect_data symbol:<symbol> start:<YYYY-MM-DD> end:<YYYY-MM-DD>',
+    handler: handleInspectData,
+    tier: undefined,
+  },
+  data_quality: {
+    name: 'data_quality',
+    description: 'Check data quality for missing bars, outliers, and consistency',
+    usage: '/data_quality symbol:<symbol> start:<YYYY-MM-DD> end:<YYYY-MM-DD>',
+    handler: handleDataQuality,
+    tier: undefined,
+  },
+  trade_log: {
+    name: 'trade_log',
+    description: 'Get trade log from backtest run',
+    usage: '/trade_log id:<runId> or /trade_log N',
+    handler: handleTradeLog,
+    tier: undefined,
+  },
+  trade_detail: {
+    name: 'trade_detail',
+    description: 'Deep dive on specific trade with market context',
+    usage: '/trade_detail id:<runId> idx:<tradeIdx>',
+    handler: handleTradeDetail,
     tier: undefined,
   },
   help: {
