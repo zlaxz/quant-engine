@@ -92,11 +92,15 @@ serve(async (req) => {
       .from('workspaces')
       .select('default_system_prompt')
       .eq('id', workspaceId)
-      .single();
+      .maybeSingle();
 
     if (workspaceError) {
       console.error('[Chat API] Workspace fetch error:', workspaceError);
       throw new Error(`Failed to fetch workspace: ${workspaceError.message}`);
+    }
+    
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
     }
 
     // 2. Load previous messages for this session

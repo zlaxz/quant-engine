@@ -466,9 +466,16 @@ async function handleAuditRun(args: string, context: CommandContext): Promise<Co
         .eq('id', runId)
         .eq('session_id', context.sessionId)
         .eq('status', 'completed')
-        .single();
+        .maybeSingle();
       
-      if (error || !data) {
+      if (error) {
+        return {
+          success: false,
+          message: `❌ Error fetching run: ${error.message}`,
+        };
+      }
+      
+      if (!data) {
         return {
           success: false,
           message: `❌ No completed run found with ID: ${runId}`,

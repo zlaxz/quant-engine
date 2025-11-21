@@ -54,11 +54,15 @@ serve(async (req) => {
       .from('workspaces')
       .select('default_system_prompt')
       .eq('id', workspaceId)
-      .single();
+      .maybeSingle();
 
     if (workspaceError) {
       console.error('[Chat API - PRIMARY] Workspace fetch error:', workspaceError);
       throw new Error(`Failed to fetch workspace: ${workspaceError.message}`);
+    }
+    
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
     }
 
     // 2. Load previous messages for this session
@@ -242,14 +246,18 @@ serve(async (req) => {
 
     // 6. Save assistant message to database
     console.log('[Chat API - PRIMARY] Saving assistant response to database');
+    
+    // Get actual provider/model from config
+    const config = { model: 'gemini-3-pro-preview', provider: 'google' };
+    
     const { error: assistantMessageError } = await supabase
       .from('messages')
       .insert({
         session_id: sessionId,
         role: 'assistant',
         content: assistantResponse,
-        provider: 'google',
-        model: 'gemini-2.0-flash-thinking-exp-1219'
+        provider: config.provider,
+        model: config.model
       });
 
     if (assistantMessageError) {
