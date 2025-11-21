@@ -64,7 +64,7 @@ export async function listDir(dirPath: string): Promise<{ entries: Array<{ name:
   return data;
 }
 
-export async function searchCode(query: string, dirPath?: string): Promise<{ results: any[] }> {
+export async function searchCode(query: string, dirPath?: string): Promise<{ results: Array<{ file: string; line: number; content: string }> }> {
   if (isElectron) {
     return window.electron.searchCode(query, dirPath);
   }
@@ -83,8 +83,15 @@ export async function runBacktest(params: {
   startDate: string;
   endDate: string;
   capital: number;
-  profileConfig?: Record<string, any>;
-}): Promise<any> {
+  profileConfig?: Record<string, unknown>;
+}): Promise<{
+  success: boolean;
+  metrics?: Record<string, number>;
+  equityCurve?: Array<{ date: string; value: number }>;
+  trades?: unknown[];
+  rawResultsPath?: string;
+  error?: string;
+}> {
   if (isElectron) {
     return window.electron.runBacktest(params);
   }
@@ -99,7 +106,7 @@ export async function runBacktest(params: {
 }
 
 // LLM Operations - can optionally use Electron for lower latency
-export async function chatPrimary(messages: any[]): Promise<{ content: string; provider: string; model: string }> {
+export async function chatPrimary(messages: Array<{ role: string; content: string }>): Promise<{ content: string; provider: string; model: string }> {
   if (isElectron) {
     // Use direct API call via Electron
     return window.electron.chatPrimary(messages);
@@ -114,7 +121,7 @@ export async function chatPrimary(messages: any[]): Promise<{ content: string; p
   return data;
 }
 
-export async function chatSwarm(messages: any[]): Promise<{ content: string; provider: string; model: string }> {
+export async function chatSwarm(messages: Array<{ role: string; content: string }>): Promise<{ content: string; provider: string; model: string }> {
   if (isElectron) {
     return window.electron.chatSwarm(messages);
   }
@@ -127,7 +134,7 @@ export async function chatSwarm(messages: any[]): Promise<{ content: string; pro
   return data;
 }
 
-export async function chatSwarmParallel(prompts: any[]): Promise<any[]> {
+export async function chatSwarmParallel(prompts: Array<{ agentId: string; messages: Array<{ role: string; content: string }> }>): Promise<Array<{ agentId: string; content: string }>> {
   if (isElectron) {
     return window.electron.chatSwarmParallel(prompts);
   }
@@ -140,7 +147,7 @@ export async function chatSwarmParallel(prompts: any[]): Promise<any[]> {
   return data;
 }
 
-export async function helperChat(messages: any[]): Promise<{ content: string }> {
+export async function helperChat(messages: Array<{ role: string; content: string }>): Promise<{ content: string }> {
   if (isElectron) {
     return window.electron.helperChat(messages);
   }
