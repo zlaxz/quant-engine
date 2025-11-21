@@ -236,6 +236,151 @@ export const MCP_TOOLS: McpTool[] = [
       },
       required: ['message']
     }
+  },
+  {
+    name: 'git_add',
+    description: 'Stage files for commit',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'File path to stage (or "." for all)'
+        }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'git_branch',
+    description: 'List, create, or delete branches',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        list: {
+          type: 'boolean',
+          description: 'List all branches'
+        },
+        create: {
+          type: 'boolean',
+          description: 'Create new branch'
+        },
+        delete: {
+          type: 'boolean',
+          description: 'Delete branch'
+        },
+        name: {
+          type: 'string',
+          description: 'Branch name'
+        }
+      }
+    }
+  },
+  {
+    name: 'git_checkout',
+    description: 'Switch branches or create and switch to new branch',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        branch: {
+          type: 'string',
+          description: 'Branch name'
+        },
+        create: {
+          type: 'boolean',
+          description: 'Create new branch'
+        }
+      },
+      required: ['branch']
+    }
+  },
+  {
+    name: 'git_merge',
+    description: 'Merge branch into current branch',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        branch: {
+          type: 'string',
+          description: 'Branch to merge'
+        },
+        noFf: {
+          type: 'boolean',
+          description: 'Create merge commit even if fast-forward possible'
+        }
+      },
+      required: ['branch']
+    }
+  },
+  {
+    name: 'git_pull',
+    description: 'Fetch and merge changes from remote',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        remote: {
+          type: 'string',
+          description: 'Remote name (default: origin)'
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch name'
+        }
+      }
+    }
+  },
+  {
+    name: 'git_push',
+    description: 'Push commits to remote repository',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        remote: {
+          type: 'string',
+          description: 'Remote name (default: origin)'
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch name'
+        },
+        setUpstream: {
+          type: 'boolean',
+          description: 'Set upstream tracking'
+        }
+      }
+    }
+  },
+  {
+    name: 'git_revert',
+    description: 'Revert a commit by creating a new commit',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        commit: {
+          type: 'string',
+          description: 'Commit hash to revert'
+        },
+        noCommit: {
+          type: 'boolean',
+          description: 'Revert without committing'
+        }
+      },
+      required: ['commit']
+    }
+  },
+  {
+    name: 'git_stash',
+    description: 'Stash changes in working directory',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['save', 'list', 'pop', 'apply', 'drop', 'clear'],
+          description: 'Stash action (default: save)'
+        }
+      }
+    }
   }
 ];
 
@@ -286,6 +431,30 @@ export async function executeMcpTool(
       
       case 'git_commit':
         return await executeGitCommit(args.message, engineRoot);
+      
+      case 'git_add':
+        return await executeGitAdd(args.path, engineRoot);
+      
+      case 'git_branch':
+        return await executeGitBranch(args, engineRoot);
+      
+      case 'git_checkout':
+        return await executeGitCheckout(args, engineRoot);
+      
+      case 'git_merge':
+        return await executeGitMerge(args, engineRoot);
+      
+      case 'git_pull':
+        return await executeGitPull(args, engineRoot);
+      
+      case 'git_push':
+        return await executeGitPush(args, engineRoot);
+      
+      case 'git_revert':
+        return await executeGitRevert(args, engineRoot);
+      
+      case 'git_stash':
+        return await executeGitStash(args, engineRoot);
       
       default:
         return {
@@ -449,4 +618,68 @@ async function executeGitCommit(message: string, engineRoot: string): Promise<Mc
     return { content: [{ type: 'text', text: result.error }], isError: true };
   }
   return { content: [{ type: 'text', text: result.output || 'Commit created' }] };
+}
+
+async function executeGitAdd(path: string, engineRoot: string): Promise<McpToolResult> {
+  const result = await executeGitCommand('add', { path }, engineRoot);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output || `Staged ${path}` }] };
+}
+
+async function executeGitBranch(args: any, engineRoot: string): Promise<McpToolResult> {
+  const result = await executeGitCommand('branch', args, engineRoot);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output || 'Branch operation completed' }] };
+}
+
+async function executeGitCheckout(args: any, engineRoot: string): Promise<McpToolResult> {
+  const result = await executeGitCommand('checkout', args, engineRoot);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output || `Switched to branch ${args.branch}` }] };
+}
+
+async function executeGitMerge(args: any, engineRoot: string): Promise<McpToolResult> {
+  const result = await executeGitCommand('merge', args, engineRoot);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output || `Merged ${args.branch}` }] };
+}
+
+async function executeGitPull(args: any, engineRoot: string): Promise<McpToolResult> {
+  const result = await executeGitCommand('pull', args, engineRoot);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output || 'Pull completed' }] };
+}
+
+async function executeGitPush(args: any, engineRoot: string): Promise<McpToolResult> {
+  const result = await executeGitCommand('push', args, engineRoot);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output || 'Push completed' }] };
+}
+
+async function executeGitRevert(args: any, engineRoot: string): Promise<McpToolResult> {
+  const result = await executeGitCommand('revert', args, engineRoot);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output || `Reverted commit ${args.commit}` }] };
+}
+
+async function executeGitStash(args: any, engineRoot: string): Promise<McpToolResult> {
+  const result = await executeGitCommand('stash', args, engineRoot);
+  if (result.error) {
+    return { content: [{ type: 'text', text: result.error }], isError: true };
+  }
+  return { content: [{ type: 'text', text: result.output || 'Stash operation completed' }] };
 }
