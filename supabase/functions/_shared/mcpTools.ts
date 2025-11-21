@@ -1328,15 +1328,25 @@ async function executeCodeStats(path: string | undefined, engineRoot: string): P
 
 async function executeBatchBacktest(args: any, engineRoot: string): Promise<McpToolResult> {
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return {
+        content: [{ type: 'text', text: 'Supabase credentials not configured' }],
+        isError: true
+      };
+    }
+    
     // Create Supabase client
     const supabaseClient = {
       functions: {
         invoke: async (name: string, options: any) => {
-          const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/${name}`, {
+          const response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+              'Authorization': `Bearer ${supabaseKey}`
             },
             body: JSON.stringify(options.body)
           });
@@ -1373,14 +1383,24 @@ async function executeBatchBacktest(args: any, engineRoot: string): Promise<McpT
 
 async function executeSweepParams(args: any, engineRoot: string): Promise<McpToolResult> {
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return {
+        content: [{ type: 'text', text: 'Supabase credentials not configured' }],
+        isError: true
+      };
+    }
+    
     const supabaseClient = {
       functions: {
         invoke: async (name: string, options: any) => {
-          const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/${name}`, {
+          const response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+              'Authorization': `Bearer ${supabaseKey}`
             },
             body: JSON.stringify(options.body)
           });
@@ -1420,14 +1440,25 @@ async function executeSweepParams(args: any, engineRoot: string): Promise<McpToo
 
 async function executeRegressionTest(args: any, engineRoot: string): Promise<McpToolResult> {
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return {
+        content: [{ type: 'text', text: 'Supabase credentials not configured' }],
+        isError: true
+      };
+    }
+    
+    // Create proper Supabase client mock
     const supabaseClient = {
       functions: {
         invoke: async (name: string, options: any) => {
-          const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/${name}`, {
+          const response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+              'Authorization': `Bearer ${supabaseKey}`
             },
             body: JSON.stringify(options.body)
           });
@@ -1438,18 +1469,26 @@ async function executeRegressionTest(args: any, engineRoot: string): Promise<Mcp
       from: (table: string) => ({
         select: (columns: string) => ({
           eq: (column: string, value: any) => ({
-            single: async () => {
+            maybeSingle: async () => {
               const response = await fetch(
-                `${Deno.env.get('SUPABASE_URL')}/rest/v1/${table}?${column}=eq.${value}&select=${columns}`,
+                `${supabaseUrl}/rest/v1/${table}?${column}=eq.${value}&select=${columns}`,
                 {
                   headers: {
-                    'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
-                    'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+                    'apikey': supabaseKey,
+                    'Authorization': `Bearer ${supabaseKey}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
                   }
                 }
               );
+              
+              if (!response.ok) {
+                const error = await response.json();
+                return { data: null, error };
+              }
+              
               const data = await response.json();
-              return { data: data[0], error: response.ok ? null : data };
+              return { data: data.length > 0 ? data[0] : null, error: null };
             }
           })
         })
@@ -1484,14 +1523,24 @@ async function executeRegressionTest(args: any, engineRoot: string): Promise<Mcp
 
 async function executeCrossValidate(args: any, engineRoot: string): Promise<McpToolResult> {
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return {
+        content: [{ type: 'text', text: 'Supabase credentials not configured' }],
+        isError: true
+      };
+    }
+    
     const supabaseClient = {
       functions: {
         invoke: async (name: string, options: any) => {
-          const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/${name}`, {
+          const response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+              'Authorization': `Bearer ${supabaseKey}`
             },
             body: JSON.stringify(options.body)
           });

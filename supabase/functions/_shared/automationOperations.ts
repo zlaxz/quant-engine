@@ -40,6 +40,7 @@ function generateParamCombinations(grid: ParamGrid): Record<string, any>[] {
   
   function recurse(index: number, current: Record<string, any>) {
     if (index === keys.length) {
+      // CRITICAL: Create a copy to avoid all combinations referencing the same object
       combinations.push({ ...current });
       return;
     }
@@ -48,8 +49,7 @@ function generateParamCombinations(grid: ParamGrid): Record<string, any>[] {
     const values = grid[key];
     
     for (const value of values) {
-      current[key] = value;
-      recurse(index + 1, current);
+      recurse(index + 1, { ...current, [key]: value });
     }
   }
   
@@ -61,6 +61,14 @@ function generateParamCombinations(grid: ParamGrid): Record<string, any>[] {
  * Generate parameter sweep values
  */
 function generateSweepValues(start: number, end: number, step: number): number[] {
+  // Validation
+  if (step <= 0) {
+    throw new Error('Step must be positive');
+  }
+  if (start > end) {
+    throw new Error('Start must be less than or equal to end');
+  }
+  
   const values: number[] = [];
   for (let val = start; val <= end + 0.0001; val += step) {
     values.push(Math.round(val * 100000) / 100000); // Round to 5 decimals
@@ -78,6 +86,31 @@ export async function runBatchBacktest(
   baseConfig: { startDate: string; endDate: string; capital: number; sessionId?: string }
 ): Promise<{ success: boolean; results: BacktestResult[]; summary: string }> {
   try {
+    // Validation
+    if (!strategyKey || strategyKey.trim() === '') {
+      return {
+        success: false,
+        results: [],
+        summary: "Strategy key is required"
+      };
+    }
+    
+    if (new Date(baseConfig.startDate) >= new Date(baseConfig.endDate)) {
+      return {
+        success: false,
+        results: [],
+        summary: "Start date must be before end date"
+      };
+    }
+    
+    if (baseConfig.capital <= 0) {
+      return {
+        success: false,
+        results: [],
+        summary: "Capital must be positive"
+      };
+    }
+    
     const combinations = generateParamCombinations(paramGrid);
     
     if (combinations.length === 0) {
@@ -122,7 +155,7 @@ export async function runBatchBacktest(
           params: combinations[idx],
           metrics: { cagr: 0, sharpe: 0, max_drawdown: 0, win_rate: 0, total_trades: 0 },
           status: 'failed',
-          error: res.error.message
+          error: res.error.message || 'Unknown error'
         };
       }
       
@@ -140,7 +173,7 @@ export async function runBatchBacktest(
     successfulResults.sort((a, b) => (b.metrics.sharpe || 0) - (a.metrics.sharpe || 0));
 
     // Generate summary
-    const summary = generateBatchSummary(successfulResults, combinations.length);
+    const summary = generateBatchSummary(successfulResults, backtestResults, combinations.length);
 
     return {
       success: true,
@@ -159,15 +192,24 @@ export async function runBatchBacktest(
 /**
  * Generate summary of batch backtest results
  */
-function generateBatchSummary(results: BacktestResult[], totalCombinations: number): string {
-  if (results.length === 0) {
-    return `Completed ${totalCombinations} backtests, but all failed.`;
+function generateBatchSummary(
+  successfulResults: BacktestResult[], 
+  allResults: BacktestResult[],
+  totalCombinations: number
+): string {
+  const failedCount = allResults.filter(r => r.status === 'failed').length;
+  
+  if (successfulResults.length === 0) {
+    return `Completed ${totalCombinations} backtests, but all failed.${failedCount > 0 ? `\n\nFailure examples:\n${allResults.filter(r => r.error).slice(0, 3).map(r => `- ${r.error}`).join('\n')}` : ''}`;
   }
 
-  const top5 = results.slice(0, Math.min(5, results.length));
+  const top5 = successfulResults.slice(0, Math.min(5, successfulResults.length));
   
-  let summary = `Batch Backtest Complete: ${results.length}/${totalCombinations} successful\n\n`;
-  summary += `Top ${top5.length} Performers (by Sharpe):\n`;
+  let summary = `Batch Backtest Complete: ${successfulResults.length}/${totalCombinations} successful`;
+  if (failedCount > 0) {
+    summary += ` (${failedCount} failed)`;
+  }
+  summary += `\n\nTop ${top5.length} Performers (by Sharpe):\n`;
   
   top5.forEach((r, idx) => {
     const paramsStr = Object.entries(r.params)
@@ -193,6 +235,15 @@ export async function runParameterSweep(
   baseConfig: { startDate: string; endDate: string; capital: number; sessionId?: string }
 ): Promise<{ success: boolean; results: BacktestResult[]; summary: string }> {
   try {
+    // Validation
+    if (!paramName || paramName.trim() === '') {
+      return {
+        success: false,
+        results: [],
+        summary: "Parameter name is required"
+      };
+    }
+    
     const values = generateSweepValues(start, end, step);
     
     if (values.length === 0) {
@@ -207,7 +258,7 @@ export async function runParameterSweep(
       return {
         success: false,
         results: [],
-        summary: `Too many sweep points (${values.length}). Maximum is 50.`
+        summary: `Too many sweep points (${values.length}). Maximum is 50. Try increasing step size.`
       };
     }
 
@@ -235,18 +286,35 @@ export async function runRegressionTest(
   baseConfig: { startDate: string; endDate: string; capital: number; sessionId?: string }
 ): Promise<{ success: boolean; comparison: any; summary: string }> {
   try {
-    // Fetch benchmark run
+    // Validation
+    if (!benchmarkRunId || benchmarkRunId.trim() === '') {
+      return {
+        success: false,
+        comparison: null,
+        summary: "Benchmark run ID is required"
+      };
+    }
+    
+    // CRITICAL FIX: Use maybeSingle() instead of single() to handle missing benchmark gracefully
     const { data: benchmarkRun, error: fetchError } = await supabaseClient
       .from('backtest_runs')
       .select('*')
       .eq('id', benchmarkRunId)
-      .single();
+      .maybeSingle();
 
-    if (fetchError || !benchmarkRun) {
+    if (fetchError) {
       return {
         success: false,
         comparison: null,
-        summary: `Failed to fetch benchmark run: ${fetchError?.message || 'Not found'}`
+        summary: `Failed to fetch benchmark run: ${fetchError.message}`
+      };
+    }
+    
+    if (!benchmarkRun) {
+      return {
+        success: false,
+        comparison: null,
+        summary: `Benchmark run with ID ${benchmarkRunId} not found`
       };
     }
 
@@ -356,6 +424,31 @@ export async function runCrossValidation(
   try {
     const { startDate, endDate, inSampleRatio, numFolds } = config;
     
+    // Validation
+    if (inSampleRatio <= 0 || inSampleRatio >= 1) {
+      return {
+        success: false,
+        folds: [],
+        summary: "In-sample ratio must be between 0 and 1 (e.g., 0.7 for 70%)"
+      };
+    }
+    
+    if (numFolds < 2) {
+      return {
+        success: false,
+        folds: [],
+        summary: "Number of folds must be at least 2"
+      };
+    }
+    
+    if (numFolds > 10) {
+      return {
+        success: false,
+        folds: [],
+        summary: "Number of folds cannot exceed 10 (too computationally expensive)"
+      };
+    }
+    
     // Calculate date splits
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -366,7 +459,17 @@ export async function runCrossValidation(
       return {
         success: false,
         folds: [],
-        summary: `Period too short for ${numFolds} folds. Need at least ${numFolds * 30} days.`
+        summary: `Period too short for ${numFolds} folds. Need at least ${numFolds * 30} days (have ${totalDays} days).`
+      };
+    }
+    
+    // Check out-of-sample period is meaningful
+    const outOfSampleDays = Math.floor(daysPerFold * (1 - inSampleRatio));
+    if (outOfSampleDays < 7) {
+      return {
+        success: false,
+        folds: [],
+        summary: `Out-of-sample period too short (${outOfSampleDays} days). Increase fold size or decrease in-sample ratio.`
       };
     }
 

@@ -463,6 +463,19 @@ This document outlines the phased implementation plan for completing the Quant C
 - [ ] Verify all results save to DB correctly
 - [ ] Verify summary outputs are accurate and actionable
 
+### Hardening Complete ✅
+- **Input Validation**: All parameters validated (dates, ratios, limits)
+- **Error Handling**: Comprehensive try-catch with descriptive messages
+- **Edge Cases**: Last fold coverage, failed backtests, missing benchmarks
+- **Supabase Safety**: Using `.maybeSingle()` instead of `.single()`
+- **Parameter Grid Bug**: Fixed object reference issue in combination generation
+- **Drawdown Logic**: Fixed regression test to properly detect degradation
+- **Environment Validation**: All executors check for Supabase credentials
+- **Failure Reporting**: Batch summaries include failure counts and examples
+- **Sweep Validation**: Validates step > 0, start <= end
+- **CV Validation**: Validates in-sample ratio (0-1), fold count (2-10), minimum period lengths
+- **Date Coverage**: Last fold uses actual end date for full data coverage
+
 ---
 
 ## Phase 6: Data Access & Inspection (🟢 MEDIUM PRIORITY)
