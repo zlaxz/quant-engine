@@ -3,13 +3,18 @@ import fs from 'fs/promises';
 import path from 'path';
 import { glob } from 'glob';
 
-if (!process.env.ROTATION_ENGINE_ROOT) {
-  throw new Error('ROTATION_ENGINE_ROOT environment variable is not set');
+// Get rotation engine root dynamically at runtime
+function getRotationEngineRoot(): string {
+  const root = process.env.ROTATION_ENGINE_ROOT;
+  if (!root) {
+    throw new Error('No project directory configured. Go to Settings to set one.');
+  }
+  return root;
 }
-const ROTATION_ENGINE_ROOT = process.env.ROTATION_ENGINE_ROOT;
 
 // Validate path is within rotation-engine to prevent directory traversal
 function validatePath(filePath: string): string {
+  const ROTATION_ENGINE_ROOT = getRotationEngineRoot();
   const resolved = path.resolve(ROTATION_ENGINE_ROOT, filePath);
   if (!resolved.startsWith(ROTATION_ENGINE_ROOT)) {
     throw new Error('Invalid path: outside rotation-engine directory');
@@ -66,8 +71,14 @@ export function registerFileOperationHandlers() {
           type: entry.isDirectory() ? 'directory' : 'file',
         })),
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error listing directory:', error);
+      
+      // Provide helpful error for missing config
+      if (error.message?.includes('No project directory configured')) {
+        throw new Error('No project directory configured. Go to Settings to set one.');
+      }
+      
       throw error;
     }
   });
@@ -75,6 +86,7 @@ export function registerFileOperationHandlers() {
   // Search code - returns flat array matching edge function shape
   ipcMain.handle('search-code', async (_event, query: string, dirPath?: string) => {
     try {
+      const ROTATION_ENGINE_ROOT = getRotationEngineRoot();
       const searchRoot = dirPath ? validatePath(dirPath) : ROTATION_ENGINE_ROOT;
       const pattern = '**/*.py';
       const files = await glob(pattern, { cwd: searchRoot, absolute: true });
@@ -103,14 +115,20 @@ export function registerFileOperationHandlers() {
       }
 
       return { results };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error searching code:', error);
+      
+      // Provide helpful error for missing config
+      if (error.message?.includes('No project directory configured')) {
+        throw new Error('No project directory configured. Go to Settings to set one.');
+      }
+      
       throw error;
     }
   });
 
   // Get rotation engine root
   ipcMain.handle('get-rotation-engine-root', async () => {
-    return ROTATION_ENGINE_ROOT;
+    return getRotationEngineRoot();
   });
 }
