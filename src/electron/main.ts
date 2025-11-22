@@ -95,6 +95,28 @@ app.whenReady().then(() => {
     }
   });
 
+  // API Keys handlers
+  ipcMain.handle('get-api-keys', () => {
+    return {
+      gemini: store.get('apiKeys.gemini') || '',
+      openai: store.get('apiKeys.openai') || '',
+      deepseek: store.get('apiKeys.deepseek') || '',
+    };
+  });
+
+  ipcMain.handle('set-api-keys', (_event, keys: { gemini: string; openai: string; deepseek: string }) => {
+    store.set('apiKeys.gemini', keys.gemini);
+    store.set('apiKeys.openai', keys.openai);
+    store.set('apiKeys.deepseek', keys.deepseek);
+    
+    // Update environment variables for edge functions
+    if (keys.gemini) process.env.GEMINI_API_KEY = keys.gemini;
+    if (keys.openai) process.env.OPENAI_API_KEY = keys.openai;
+    if (keys.deepseek) process.env.DEEPSEEK_API_KEY = keys.deepseek;
+    
+    return { success: true };
+  });
+
   // Register all IPC handlers
   registerFileOperationHandlers();
   registerPythonExecutionHandlers();

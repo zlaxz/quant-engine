@@ -39,6 +39,10 @@ interface ElectronAPI {
   setProjectDirectory: (dirPath: string) => Promise<{ success: boolean }>;
   pickDirectory: () => Promise<string | null>;
   createDefaultProjectDirectory: () => Promise<{ success: boolean; path?: string }>;
+  
+  // API Keys
+  getAPIKeys: () => Promise<{ gemini: string; openai: string; deepseek: string }>;
+  setAPIKeys: (keys: { gemini: string; openai: string; deepseek: string }) => Promise<{ success: boolean }>;
 }
 
 declare global {

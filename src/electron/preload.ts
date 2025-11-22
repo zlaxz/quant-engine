@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('electron', {
   setProjectDirectory: (dirPath: string) => ipcRenderer.invoke('set-project-directory', dirPath),
   pickDirectory: () => ipcRenderer.invoke('pick-directory'),
   createDefaultProjectDirectory: () => ipcRenderer.invoke('create-default-project-directory'),
+  
+  // API Keys
+  getAPIKeys: () => ipcRenderer.invoke('get-api-keys'),
+  setAPIKeys: (keys: { gemini: string; openai: string; deepseek: string }) => ipcRenderer.invoke('set-api-keys', keys),
 });
 
 // Type definition for window.electron
@@ -64,6 +68,8 @@ export interface ElectronAPI {
   setProjectDirectory: (dirPath: string) => Promise<{ success: boolean }>;
   pickDirectory: () => Promise<string | null>;
   createDefaultProjectDirectory: () => Promise<{ success: boolean; path?: string }>;
+  getAPIKeys: () => Promise<{ gemini: string; openai: string; deepseek: string }>;
+  setAPIKeys: (keys: { gemini: string; openai: string; deepseek: string }) => Promise<{ success: boolean }>;
 }
 
 declare global {
