@@ -221,16 +221,18 @@ serve(async (req) => {
       content
     });
 
-    // 4. Save user message to database BEFORE calling OpenAI
+    // 4. Save user message to database BEFORE calling LLM
     console.log('[Chat API - SWARM] Saving user message to database');
+    // Get actual provider/model from config for user message logging
+    const userMsgConfig = getConfigForTier('swarm');
     const { error: userMessageError } = await supabase
       .from('messages')
       .insert({
         session_id: sessionId,
         role: 'user',
         content,
-        provider: 'openai',
-        model: model || 'gpt-5.1'
+        provider: userMsgConfig.provider,
+        model: userMsgConfig.model
       });
 
     if (userMessageError) {

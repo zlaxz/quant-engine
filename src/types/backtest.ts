@@ -48,7 +48,7 @@ export interface BacktestRun {
   status: 'pending' | 'running' | 'completed' | 'failed';
   metrics: BacktestMetrics | null;
   equity_curve: EquityPoint[] | null;
-  engine_source: 'external' | 'stub' | 'stub_fallback' | null;
+  engine_source: 'external' | 'stub' | 'stub_fallback' | 'rotation-engine-bridge' | null;
   label?: string | null;
   notes?: string | null;
   tags?: string[] | null;

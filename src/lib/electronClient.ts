@@ -59,7 +59,7 @@ export async function listDir(dirPath: string): Promise<{ entries: Array<{ name:
   return data;
 }
 
-export async function searchCode(query: string, dirPath?: string): Promise<{ results: Array<{ file: string; line: number; content: string }> }> {
+export async function searchCode(query: string, dirPath?: string): Promise<{ results: Array<{ file: string; line: number; context: string }> }> {
   if (isElectron) {
     return window.electron.searchCode(query, dirPath);
   }

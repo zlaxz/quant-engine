@@ -72,36 +72,34 @@ export function registerFileOperationHandlers() {
     }
   });
 
-  // Search code
+  // Search code - returns flat array matching edge function shape
   ipcMain.handle('search-code', async (_event, query: string, dirPath?: string) => {
     try {
       const searchRoot = dirPath ? validatePath(dirPath) : ROTATION_ENGINE_ROOT;
       const pattern = '**/*.py';
       const files = await glob(pattern, { cwd: searchRoot, absolute: true });
 
-      const results = [];
+      const results: Array<{ file: string; line: number; context: string }> = [];
       const regex = new RegExp(query, 'gi');
+      const maxResults = 100;
 
       for (const file of files) {
+        if (results.length >= maxResults) break;
+
         const content = await fs.readFile(file, 'utf-8');
         const lines = content.split('\n');
-        const matches = [];
+        const relativePath = path.relative(ROTATION_ENGINE_ROOT, file);
 
         lines.forEach((line, idx) => {
+          if (results.length >= maxResults) return;
           if (regex.test(line)) {
-            matches.push({
+            results.push({
+              file: relativePath,
               line: idx + 1,
-              content: line.trim(),
+              context: line.trim(),
             });
           }
         });
-
-        if (matches.length > 0) {
-          results.push({
-            file: path.relative(ROTATION_ENGINE_ROOT, file),
-            matches,
-          });
-        }
       }
 
       return { results };

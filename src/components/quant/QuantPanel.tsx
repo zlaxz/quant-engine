@@ -423,10 +423,10 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h4 className="text-xs font-semibold font-mono">Results</h4>
-              {currentRun.engine_source === 'external' && (
+              {(currentRun.engine_source === 'external' || currentRun.engine_source === 'rotation-engine-bridge') && (
                 <Badge variant="default" className="h-5 text-[10px]">
                   <Zap className="h-2.5 w-2.5 mr-1" />
-                  Live Engine
+                  {currentRun.engine_source === 'rotation-engine-bridge' ? 'Bridge' : 'Live Engine'}
                 </Badge>
               )}
               {currentRun.engine_source === 'stub' && (
