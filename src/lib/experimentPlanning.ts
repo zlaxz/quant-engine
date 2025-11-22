@@ -1,6 +1,6 @@
 // Experiment planning helpers for Experiment Director mode
 
-import type { BacktestRun } from '@/types/backtest';
+import type { BacktestRun, BacktestParams, BacktestMetrics } from '@/types/backtest';
 
 interface MemoryNote {
   id: string;
@@ -45,21 +45,13 @@ export function buildExperimentRunSummary(runs: BacktestRun[]): string {
 
     // Extract date ranges
     const dateRanges: { start: string; end: string }[] = [];
-    const metrics: { cagr?: number; sharpe?: number; maxDD?: number }[] = [];
+    const metrics: (BacktestMetrics | null)[] = [];
 
     for (const run of strategyRuns) {
-      const params = run.params as unknown as Record<string, unknown>;
-      if (params?.startDate && params?.endDate) {
-        dateRanges.push({ start: String(params.startDate), end: String(params.endDate) });
+      if (run.params?.startDate && run.params?.endDate) {
+        dateRanges.push({ start: run.params.startDate, end: run.params.endDate });
       }
-      if (run.metrics) {
-        const m = run.metrics as unknown as Record<string, unknown>;
-        metrics.push({
-          cagr: typeof m.cagr === 'number' ? m.cagr : undefined,
-          sharpe: typeof m.sharpe === 'number' ? m.sharpe : undefined,
-          maxDD: typeof m.max_drawdown === 'number' ? m.max_drawdown : typeof m.maxDrawdown === 'number' ? m.maxDrawdown : undefined,
-        });
-      }
+      metrics.push(run.metrics);
     }
 
     // Date coverage analysis
@@ -90,9 +82,9 @@ export function buildExperimentRunSummary(runs: BacktestRun[]): string {
 
     // Metrics summary
     if (metrics.length > 0) {
-      const validCAGR = metrics.filter(m => m.cagr !== undefined && m.cagr !== null).map(m => m.cagr!);
-      const validSharpe = metrics.filter(m => m.sharpe !== undefined && m.sharpe !== null).map(m => m.sharpe!);
-      const validMaxDD = metrics.filter(m => m.maxDD !== undefined && m.maxDD !== null).map(m => m.maxDD!);
+      const validCAGR = metrics.filter(m => m?.cagr !== undefined && m?.cagr !== null).map(m => m!.cagr);
+      const validSharpe = metrics.filter(m => m?.sharpe !== undefined && m?.sharpe !== null).map(m => m!.sharpe);
+      const validMaxDD = metrics.filter(m => m?.max_drawdown !== undefined && m?.max_drawdown !== null).map(m => m!.max_drawdown);
 
       if (validCAGR.length > 0) {
         const medianCAGR = validCAGR.sort((a, b) => a - b)[Math.floor(validCAGR.length / 2)];
@@ -117,10 +109,9 @@ export function buildExperimentRunSummary(runs: BacktestRun[]): string {
   
   const allYears = new Set<number>();
   for (const run of runs) {
-    const params = run.params as unknown as Record<string, unknown>;
-    if (params?.startDate && params?.endDate) {
-      const startYear = new Date(String(params.startDate)).getFullYear();
-      const endYear = new Date(String(params.endDate)).getFullYear();
+    if (run.params?.startDate && run.params?.endDate) {
+      const startYear = new Date(run.params.startDate).getFullYear();
+      const endYear = new Date(run.params.endDate).getFullYear();
       for (let year = startYear; year <= endYear; year++) {
         allYears.add(year);
       }

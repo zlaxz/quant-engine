@@ -3,9 +3,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import { glob } from 'glob';
 
-const ROTATION_ENGINE_ROOT = process.env.ROTATION_ENGINE_ROOT || (() => {
+if (!process.env.ROTATION_ENGINE_ROOT) {
   throw new Error('ROTATION_ENGINE_ROOT environment variable is not set');
-})();
+}
+const ROTATION_ENGINE_ROOT = process.env.ROTATION_ENGINE_ROOT;
 
 // Validate path is within rotation-engine to prevent directory traversal
 function validatePath(filePath: string): string {

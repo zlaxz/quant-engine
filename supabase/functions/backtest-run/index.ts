@@ -105,7 +105,11 @@ async function callExternalEngine(
 ): Promise<{ metrics: BacktestMetrics; equityCurve: EquityPoint[]; engineSource: string; trades?: any[] } | null> {
   
   // 1. Try local bridge server first
-  const bridgeUrl = Deno.env.get('BRIDGE_SERVER_URL') || 'http://localhost:8080';
+  const bridgeUrl = Deno.env.get('BRIDGE_SERVER_URL');
+  if (!bridgeUrl) {
+    console.log('[Bridge] BRIDGE_SERVER_URL not configured, skipping bridge server attempt');
+    return null;
+  }
   console.log(`[Bridge] Attempting to connect to bridge server at ${bridgeUrl}...`);
   
   try {

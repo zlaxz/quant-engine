@@ -5,7 +5,7 @@
  * to produce comprehensive research reports.
  */
 
-import type { BacktestRun } from '@/types/backtest';
+import type { BacktestRun, BacktestParams } from '@/types/backtest';
 
 export interface KeyRunSelection {
   bestSharpe: BacktestRun | null;
@@ -111,11 +111,13 @@ export function buildRunPortfolioSummary(runs: BacktestRun[]): string {
 
   // Detect regime coverage from date ranges
   const dateRanges = runs
-    .filter(r => r.params && typeof r.params === 'object' && 'startDate' in r.params && 'endDate' in r.params)
-    .map(r => {
-      const params = r.params as unknown as Record<string, unknown>;
-      return { start: String(params.startDate), end: String(params.endDate) };
-    });
+    .filter((r): r is typeof r & { params: BacktestParams } => 
+      r.params && typeof r.params === 'object' && 'startDate' in r.params && 'endDate' in r.params
+    )
+    .map(r => ({
+      start: r.params.startDate,
+      end: r.params.endDate
+    }));
 
   const uniqueYears = new Set<number>();
   for (const range of dateRanges) {

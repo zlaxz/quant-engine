@@ -51,6 +51,11 @@ export const MemoryPanel = ({ onViewRun }: MemoryPanelProps) => {
   const [filterImportance, setFilterImportance] = useState('all');
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const itemsPerPage = 50;
+  
   // Edit state
   const [editingNote, setEditingNote] = useState<MemoryNote | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -61,6 +66,7 @@ export const MemoryPanel = ({ onViewRun }: MemoryPanelProps) => {
 
   useEffect(() => {
     if (selectedWorkspaceId) {
+      setCurrentPage(1); // Reset to first page on workspace/view change
       loadMemoryNotes();
       setFilterType('all');
       setFilterImportance('all');
@@ -69,19 +75,38 @@ export const MemoryPanel = ({ onViewRun }: MemoryPanelProps) => {
       setSearchResults([]);
     }
   }, [selectedWorkspaceId, viewMode]);
+  
+  useEffect(() => {
+    if (selectedWorkspaceId && !hasSearched) {
+      loadMemoryNotes();
+    }
+  }, [currentPage]);
 
   const loadMemoryNotes = async () => {
     if (!selectedWorkspaceId) return;
 
     setIsLoading(true);
     try {
+      const offset = (currentPage - 1) * itemsPerPage;
+      
+      // Get total count
+      const { count, error: countError } = await supabase
+        .from('memory_notes')
+        .select('*', { count: 'exact', head: true })
+        .eq('workspace_id', selectedWorkspaceId)
+        .eq('archived', viewMode === 'archived');
+      
+      if (countError) throw countError;
+      setTotalCount(count || 0);
+      
+      // Get paginated data
       const { data, error } = await supabase
         .from('memory_notes')
         .select('*')
         .eq('workspace_id', selectedWorkspaceId)
         .eq('archived', viewMode === 'archived')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .range(offset, offset + itemsPerPage - 1);
 
       if (error) throw error;
 
@@ -636,6 +661,38 @@ export const MemoryPanel = ({ onViewRun }: MemoryPanelProps) => {
               )}
             </TabsContent>
           </Tabs>
+
+          {/* Pagination Controls */}
+          {!hasSearched && totalCount > itemsPerPage && (
+            <div className="flex items-center justify-between mt-4 px-2">
+              <div className="text-xs text-muted-foreground">
+                Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="h-7 text-xs"
+                >
+                  Previous
+                </Button>
+                <div className="flex items-center px-3 text-xs">
+                  Page {currentPage} of {Math.ceil(totalCount / itemsPerPage)}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalCount / itemsPerPage), p + 1))}
+                  disabled={currentPage >= Math.ceil(totalCount / itemsPerPage)}
+                  className="h-7 text-xs"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Edit Dialog */}
           <Dialog open={!!editingNote} onOpenChange={(open) => !open && cancelEdit()}>
