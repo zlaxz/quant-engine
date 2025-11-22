@@ -164,6 +164,7 @@ export const QuantPanel = ({ selectedRunIdFromMemory }: QuantPanelProps) => {
       });
 
       if (error) throw error;
+      if (!data?.run?.id) throw new Error('Invalid backtest response structure');
 
       setCurrentRun(data);
       

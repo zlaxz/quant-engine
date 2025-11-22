@@ -43,12 +43,7 @@ export async function deleteFile(filePath: string): Promise<{ success: boolean }
     return window.electron.deleteFile(filePath);
   }
   
-  const { data, error } = await supabase.functions.invoke('delete-file', {
-    body: { path: filePath },
-  });
-  
-  if (error) throw error;
-  return data;
+  throw new Error('deleteFile is only available in Electron environment');
 }
 
 export async function listDir(dirPath: string): Promise<{ entries: Array<{ name: string; type: 'file' | 'directory' }> }> {

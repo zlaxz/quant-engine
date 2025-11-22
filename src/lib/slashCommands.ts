@@ -538,6 +538,10 @@ async function handleAuditRun(args: string, context: CommandContext): Promise<Co
       .order('created_at', { ascending: false })
       .limit(20);
     
+    if (memoryError) {
+      console.error('Failed to fetch memory notes:', memoryError);
+    }
+    
     const memoryNotes: MemoryNote[] = memoryData || [];
     
     // Build summaries
@@ -1909,7 +1913,7 @@ async function handleTradeLog(args: string, context: CommandContext): Promise<Co
     const nMatch = args.match(/^\d+$/);
     if (nMatch) {
       const n = parseInt(args, 10);
-      const { data: runs } = await supabase
+      const { data: runs, error: runsError } = await supabase
         .from('backtest_runs')
         .select('id')
         .eq('session_id', context.sessionId)
@@ -1917,7 +1921,7 @@ async function handleTradeLog(args: string, context: CommandContext): Promise<Co
         .order('completed_at', { ascending: false })
         .limit(n);
       
-      if (!runs || runs.length < n) {
+      if (runsError || !runs || runs.length < n) {
         return {
           success: false,
           message: `❌ Only ${runs?.length || 0} completed runs available`,

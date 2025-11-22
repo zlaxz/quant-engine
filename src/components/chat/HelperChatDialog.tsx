@@ -37,6 +37,7 @@ export function HelperChatDialog({ open, onOpenChange }: HelperChatDialogProps) 
       });
 
       if (error) throw error;
+      if (!data?.response) throw new Error('Invalid response from helper');
 
       setMessages([...newMessages, { role: 'assistant', content: data.response }]);
     } catch (error) {

@@ -390,23 +390,32 @@ function logWriteOperation(operation: WriteOperation, result: WriteResult): void
   };
   
   // Store in localStorage for audit trail
-  const existingLogs = localStorage.getItem('write_operations_log');
-  const logs = existingLogs ? JSON.parse(existingLogs) : [];
-  
-  logs.push(logEntry);
-  
-  // Keep only last 100 operations
-  if (logs.length > 100) {
-    logs.splice(0, logs.length - 100);
+  try {
+    const existingLogs = localStorage.getItem('write_operations_log');
+    const logs = existingLogs ? JSON.parse(existingLogs) : [];
+    
+    logs.push(logEntry);
+    
+    // Keep only last 100 operations
+    if (logs.length > 100) {
+      logs.splice(0, logs.length - 100);
+    }
+    
+    localStorage.setItem('write_operations_log', JSON.stringify(logs));
+  } catch (error) {
+    console.error('Failed to log write operation:', error);
   }
-  
-  localStorage.setItem('write_operations_log', JSON.stringify(logs));
 }
 
 /**
  * Get write operation audit log
  */
 export function getWriteOperationLog(): any[] {
-  const logs = localStorage.getItem('write_operations_log');
-  return logs ? JSON.parse(logs) : [];
+  try {
+    const logs = localStorage.getItem('write_operations_log');
+    return logs ? JSON.parse(logs) : [];
+  } catch (error) {
+    console.error('Failed to retrieve write operation log:', error);
+    return [];
+  }
 }
