@@ -7,7 +7,7 @@ interface ElectronAPI {
   writeFile: (filePath: string, content: string) => Promise<{ success: boolean }>;
   deleteFile: (filePath: string) => Promise<{ success: boolean }>;
   listDir: (dirPath: string) => Promise<{ entries: Array<{ name: string; type: 'file' | 'directory' }> }>;
-  searchCode: (query: string, dirPath?: string) => Promise<{ results: Array<{ file: string; line: number; content: string }> }>;
+  searchCode: (query: string, dirPath?: string) => Promise<{ results: Array<{ file: string; line: number; context: string }> }>;
   
   // Python execution
   runBacktest: (params: {
