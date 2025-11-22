@@ -35,7 +35,7 @@ function createWindow() {
 
   // In development, load from Vite dev server
   if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL('http://localhost:8080');
     mainWindow.webContents.openDevTools();
   } else {
     // In production, load from built files
@@ -61,6 +61,10 @@ app.whenReady().then(() => {
   if (savedGemini) process.env.GEMINI_API_KEY = savedGemini;
   if (savedOpenai) process.env.OPENAI_API_KEY = savedOpenai;
   if (savedDeepseek) process.env.DEEPSEEK_API_KEY = savedDeepseek;
+
+  // Initialize Supabase credentials (public anon key - safe to embed)
+  process.env.SUPABASE_URL = 'https://ynaqtawyynqikfyranda.supabase.co';
+  process.env.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluYXF0YXd5eW5xaWtmeXJhbmRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM1NzM5NjMsImV4cCI6MjA3OTE0OTk2M30.VegcJvLluy8toSYqnR7Ufc5jx5XAl1-XeDRl8KbsIIw';
 
   // Register project directory IPC handlers
   ipcMain.handle('get-project-directory', () => {

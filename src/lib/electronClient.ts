@@ -106,21 +106,22 @@ export async function runBacktest(params: {
   return data;
 }
 
-// LLM Operations - can optionally use Electron for lower latency
-export async function chatPrimary(params: { sessionId: string; workspaceId: string; content: string }): Promise<{ content: string; provider: string; model: string }> {
+// LLM Operations - all calls route through Electron IPC when available
+export async function chatPrimary(messages: Array<{ role: string; content: string }>): Promise<{ content: string; provider: string; model: string }> {
   if (isElectron) {
     try {
-      return await window.electron.chatPrimary(params.sessionId, params.workspaceId, params.content);
+      return await window.electron.chatPrimary(messages);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`LLM call failed: ${errorMsg}`);
     }
   }
-  
+
+  // Fallback to edge function for web-only deployment
   const { data, error } = await supabase.functions.invoke('chat-primary', {
-    body: { sessionId: params.sessionId, workspaceId: params.workspaceId, content: params.content },
+    body: { messages },
   });
-  
+
   if (error) throw new Error(`LLM call failed: ${error.message}`);
   return data;
 }

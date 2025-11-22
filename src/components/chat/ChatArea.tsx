@@ -133,15 +133,43 @@ export const ChatArea = () => {
           });
         }
       } else {
-        // Regular chat message - call PRIMARY chat function via electronClient
-        await chatPrimary({
-          sessionId: selectedSessionId,
-          workspaceId: selectedWorkspaceId,
-          content: messageContent
-        });
+        // Regular chat message - build messages array and call LLM directly
 
-        // Reload messages to show both user and assistant messages
-        await loadMessages();
+        // Add user message optimistically to UI
+        const userMessage: Message = {
+          id: `user-${Date.now()}`,
+          role: 'user',
+          content: messageContent,
+          created_at: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, userMessage]);
+
+        // Build messages array for LLM (system prompt + history + new message)
+        const llmMessages = [
+          { role: 'system', content: 'You are a helpful quantitative finance assistant.' },
+          ...messages.map(m => ({ role: m.role, content: m.content })),
+          { role: 'user', content: messageContent }
+        ];
+
+        // Call LLM via Electron IPC
+        const response = await chatPrimary(llmMessages);
+
+        // Add assistant response to UI
+        const assistantMessage: Message = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: response.content,
+          created_at: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+
+        // Save both messages to database (background, non-blocking)
+        supabase.from('messages').insert([
+          { session_id: selectedSessionId, role: 'user', content: messageContent },
+          { session_id: selectedSessionId, role: 'assistant', content: response.content, provider: response.provider, model: response.model }
+        ]).then(({ error }) => {
+          if (error) console.error('Error saving messages to DB:', error);
+        });
       }
     } catch (error: any) {
       console.error('Error sending message:', error);
@@ -227,6 +255,19 @@ export const ChatArea = () => {
                 </div>
               </div>
             ))}
+
+            {/* Thinking indicator */}
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="bg-muted rounded-lg px-4 py-3 max-w-[80%]">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="font-mono">Thinking...</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div ref={messagesEndRef} />
           </div>
         )}

@@ -27,7 +27,7 @@ interface ElectronAPI {
   }>;
   
   // LLM operations
-  chatPrimary: (sessionId: string, workspaceId: string, content: string) => Promise<{ content: string; provider: string; model: string }>;
+  chatPrimary: (messages: Array<{ role: string; content: string }>) => Promise<{ content: string; provider: string; model: string }>;
   chatSwarm: (messages: Array<{ role: string; content: string }>) => Promise<{ content: string; provider: string; model: string }>;
   chatSwarmParallel: (prompts: Array<{ agentId: string; messages: Array<{ role: string; content: string }> }>) => Promise<Array<{ agentId: string; content: string }>>;
   helperChat: (messages: Array<{ role: string; content: string }>) => Promise<{ content: string }>;

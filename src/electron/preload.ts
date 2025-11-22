@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('electron', {
   }) => ipcRenderer.invoke('run-backtest', params),
 
   // LLM operations
-  chatPrimary: (sessionId: string, workspaceId: string, content: string) => ipcRenderer.invoke('chat-primary', sessionId, workspaceId, content),
+  chatPrimary: (messages: Array<{ role: string; content: string }>) => ipcRenderer.invoke('chat-primary', messages),
   chatSwarm: (messages: Array<{ role: string; content: string }>) => ipcRenderer.invoke('chat-swarm', messages),
   chatSwarmParallel: (prompts: Array<{ agentId: string; messages: Array<{ role: string; content: string }> }>) => ipcRenderer.invoke('chat-swarm-parallel', prompts),
   helperChat: (messages: Array<{ role: string; content: string }>) => ipcRenderer.invoke('helper-chat', messages),

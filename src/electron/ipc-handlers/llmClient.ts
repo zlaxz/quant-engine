@@ -3,10 +3,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 
 // LLM routing config
-const PRIMARY_MODEL = 'gemini-3-pro-preview';
+const PRIMARY_MODEL = 'gemini-2.5-pro-preview-06-05';
 const PRIMARY_PROVIDER = 'gemini';
 const SWARM_MODEL = 'deepseek-reasoner';
 const SWARM_PROVIDER = 'deepseek';
+const HELPER_MODEL = 'gpt-4o-mini';
 
 // Lazy client getters - read API keys at call time, not module load time
 // This allows keys set via Settings to take effect without app restart
@@ -29,27 +30,33 @@ function getDeepSeekClient(): OpenAI | null {
 }
 
 export function registerLlmHandlers() {
-  // Primary tier - routes to Supabase edge function for database + memory integration
-  ipcMain.handle('chat-primary', async (_event, sessionId: string, workspaceId: string, content: string) => {
+  // Primary tier (Gemini) - local call, no edge function
+  ipcMain.handle('chat-primary', async (_event, messages: any[]) => {
     try {
-      // Import supabase client dynamically to avoid circular dependencies
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-      const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
-        throw new Error('Supabase configuration missing');
+      const geminiClient = getGeminiClient();
+      if (!geminiClient) {
+        throw new Error('GEMINI_API_KEY not configured. Go to Settings to add your API key.');
       }
-      
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
-      // Call edge function which handles memory, database, and LLM
-      const { data, error } = await supabase.functions.invoke('chat-primary', {
-        body: { sessionId, workspaceId, content },
-      });
-      
-      if (error) throw new Error(error.message);
-      return data;
+
+      const model = geminiClient.getGenerativeModel({ model: PRIMARY_MODEL });
+
+      // Convert messages to Gemini format
+      const history = messages.slice(0, -1).map(msg => ({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: msg.content }]
+      }));
+
+      const lastMessage = messages[messages.length - 1];
+
+      const chat = model.startChat({ history });
+      const result = await chat.sendMessage(lastMessage.content);
+      const response = result.response.text();
+
+      return {
+        content: response,
+        provider: PRIMARY_PROVIDER,
+        model: PRIMARY_MODEL,
+      };
     } catch (error) {
       console.error('Error in chat-primary:', error);
       throw error;

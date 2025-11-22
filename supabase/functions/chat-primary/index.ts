@@ -243,8 +243,9 @@ serve(async (req) => {
     // 5. Call PRIMARY tier LLM (Gemini 3 Deep Think)
     console.log('[Chat API - PRIMARY] Calling PRIMARY tier LLM with', messages.length, 'messages');
     const llmMessages: LlmChatMessage[] = messages.map(m => ({ role: m.role, content: m.content }));
-  // Enable MCP tools for primary tier (Chief Quant with code access)
-  const assistantResponse = await callLlm('primary', llmMessages, true);
+  // MCP tools disabled - they require local filesystem access via bridge server
+  // TODO: Re-enable when bridge server is implemented
+  const assistantResponse = await callLlm('primary', llmMessages, false);
 
     // 6. Save assistant message to database
     console.log('[Chat API - PRIMARY] Saving assistant response to database');
