@@ -117,19 +117,19 @@ async function handleBacktest(args: string, context: CommandContext): Promise<Co
 
     if (error) throw error;
 
-    if (!data || !data.runId) {
+    if (!data || !data.id) {
       throw new Error('No run ID returned from backtest');
     }
 
     // Poll for completion
     let attempts = 0;
     const maxAttempts = 30;
-    
+
     while (attempts < maxAttempts) {
       const { data: runData, error: fetchError } = await supabase
         .from('backtest_runs')
         .select('*')
-        .eq('id', data.runId)
+        .eq('id', data.id)
         .maybeSingle();
 
       if (fetchError) throw fetchError;
