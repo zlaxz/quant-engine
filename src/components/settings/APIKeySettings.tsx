@@ -22,11 +22,13 @@ export function APIKeySettings() {
 
   const loadAPIKeys = async () => {
     try {
-      const keys = await window.electron?.getAPIKeys?.();
-      if (keys) {
-        setGeminiKey(keys.gemini || '');
-        setOpenaiKey(keys.openai || '');
-        setDeepseekKey(keys.deepseek || '');
+      if (window.electron && 'getAPIKeys' in window.electron) {
+        const keys = await window.electron.getAPIKeys();
+        if (keys) {
+          setGeminiKey(keys.gemini || '');
+          setOpenaiKey(keys.openai || '');
+          setDeepseekKey(keys.deepseek || '');
+        }
       }
     } catch (error) {
       console.error('Failed to load API keys:', error);
@@ -37,16 +39,18 @@ export function APIKeySettings() {
 
   const handleSave = async () => {
     try {
-      await window.electron?.setAPIKeys?.({
-        gemini: geminiKey,
-        openai: openaiKey,
-        deepseek: deepseekKey,
-      });
-      
-      toast({
-        title: 'API Keys Saved',
-        description: 'Your API keys have been securely saved.',
-      });
+      if (window.electron && 'setAPIKeys' in window.electron) {
+        await window.electron.setAPIKeys({
+          gemini: geminiKey,
+          openai: openaiKey,
+          deepseek: deepseekKey,
+        });
+        
+        toast({
+          title: 'API Keys Saved',
+          description: 'Your API keys have been securely saved.',
+        });
+      }
     } catch (error) {
       toast({
         title: 'Save Failed',

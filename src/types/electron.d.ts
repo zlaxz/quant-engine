@@ -1,5 +1,6 @@
 // Global type declarations for Electron API
 // This ensures all components can see the window.electron types
+// Updated: 2025-11-22 with API key support
 
 interface ElectronAPI {
   // File operations

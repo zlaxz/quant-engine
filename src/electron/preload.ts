@@ -38,42 +38,5 @@ contextBridge.exposeInMainWorld('electron', {
   setAPIKeys: (keys: { gemini: string; openai: string; deepseek: string }) => ipcRenderer.invoke('set-api-keys', keys),
 });
 
-// Type definition for window.electron
-export interface ElectronAPI {
-  readFile: (filePath: string) => Promise<{ content: string }>;
-  writeFile: (filePath: string, content: string) => Promise<{ success: boolean }>;
-  deleteFile: (filePath: string) => Promise<{ success: boolean }>;
-  listDir: (dirPath: string) => Promise<{ entries: Array<{ name: string; type: 'file' | 'directory' }> }>;
-  searchCode: (query: string, dirPath?: string) => Promise<{ results: Array<{ file: string; line: number; context: string }> }>;
-  runBacktest: (params: {
-    strategyKey: string;
-    startDate: string;
-    endDate: string;
-    capital: number;
-    profileConfig?: Record<string, unknown>;
-  }) => Promise<{
-    success: boolean;
-    metrics?: Record<string, number>;
-    equityCurve?: Array<{ date: string; value: number }>;
-    trades?: unknown[];
-    rawResultsPath?: string;
-    error?: string;
-  }>;
-  chatPrimary: (messages: Array<{ role: string; content: string }>) => Promise<{ content: string; provider: string; model: string }>;
-  chatSwarm: (messages: Array<{ role: string; content: string }>) => Promise<{ content: string; provider: string; model: string }>;
-  chatSwarmParallel: (prompts: Array<{ agentId: string; messages: Array<{ role: string; content: string }> }>) => Promise<Array<{ agentId: string; content: string }>>;
-  helperChat: (messages: Array<{ role: string; content: string }>) => Promise<{ content: string }>;
-  getRotationEngineRoot: () => Promise<string>;
-  getProjectDirectory: () => Promise<string | null>;
-  setProjectDirectory: (dirPath: string) => Promise<{ success: boolean }>;
-  pickDirectory: () => Promise<string | null>;
-  createDefaultProjectDirectory: () => Promise<{ success: boolean; path?: string }>;
-  getAPIKeys: () => Promise<{ gemini: string; openai: string; deepseek: string }>;
-  setAPIKeys: (keys: { gemini: string; openai: string; deepseek: string }) => Promise<{ success: boolean }>;
-}
-
-declare global {
-  interface Window {
-    electron: ElectronAPI;
-  }
-}
+// The ElectronAPI type is defined in src/types/electron.d.ts as a global type
+// This ensures all components can see window.electron types without imports
