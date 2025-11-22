@@ -61,7 +61,11 @@ export async function listDir(dirPath: string): Promise<{ entries: Array<{ name:
 
 export async function searchCode(query: string, dirPath?: string): Promise<{ results: Array<{ file: string; line: number; context: string }> }> {
   if (isElectron) {
-    return window.electron.searchCode(query, dirPath);
+    const result = await window.electron.searchCode(query, dirPath);
+    // Transform Electron response (content) to match edge function format (context)
+    return {
+      results: result.results.map(r => ({ file: r.file, line: r.line, context: (r as any).content || (r as any).context }))
+    };
   }
   
   const { data, error } = await supabase.functions.invoke('search-code', {

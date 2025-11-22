@@ -10,6 +10,7 @@ import { useChatContext } from '@/contexts/ChatContext';
 import { cn } from '@/lib/utils';
 import { executeCommand, parseCommand, getCommandSuggestions, commands, setWriteConfirmationCallback } from '@/lib/slashCommands';
 import { useWriteConfirmation } from '@/hooks/useWriteConfirmation';
+import { chatPrimary } from '@/lib/electronClient';
 
 interface Message {
   id: string;
@@ -132,16 +133,8 @@ export const ChatArea = () => {
           });
         }
       } else {
-        // Regular chat message - call PRIMARY chat function
-        const { data, error } = await supabase.functions.invoke('chat-primary', {
-          body: {
-            sessionId: selectedSessionId,
-            workspaceId: selectedWorkspaceId,
-            content: messageContent,
-          },
-        });
-
-        if (error) throw error;
+        // Regular chat message - call PRIMARY chat function via electronClient
+        await chatPrimary([{ role: 'user', content: messageContent }]);
 
         // Reload messages to show both user and assistant messages
         await loadMessages();

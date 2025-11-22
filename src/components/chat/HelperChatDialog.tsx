@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send, HelpCircle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { helperChat } from '@/lib/electronClient';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -32,14 +32,9 @@ export function HelperChatDialog({ open, onOpenChange }: HelperChatDialogProps) 
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('helper-chat', {
-        body: { messages: newMessages }
-      });
+      const { content } = await helperChat(newMessages);
 
-      if (error) throw error;
-      if (!data?.response) throw new Error('Invalid response from helper');
-
-      setMessages([...newMessages, { role: 'assistant', content: data.response }]);
+      setMessages([...newMessages, { role: 'assistant', content }]);
     } catch (error) {
       console.error('Helper chat error:', error);
       toast.error('Failed to get response from helper');
