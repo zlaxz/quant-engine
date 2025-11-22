@@ -26,6 +26,12 @@ contextBridge.exposeInMainWorld('electron', {
 
   // Environment
   getRotationEngineRoot: () => ipcRenderer.invoke('get-rotation-engine-root'),
+  
+  // Project directory settings
+  getProjectDirectory: () => ipcRenderer.invoke('get-project-directory'),
+  setProjectDirectory: (dirPath: string) => ipcRenderer.invoke('set-project-directory', dirPath),
+  pickDirectory: () => ipcRenderer.invoke('pick-directory'),
+  createDefaultProjectDirectory: () => ipcRenderer.invoke('create-default-project-directory'),
 });
 
 // Type definition for window.electron
@@ -54,6 +60,10 @@ export interface ElectronAPI {
   chatSwarmParallel: (prompts: Array<{ agentId: string; messages: Array<{ role: string; content: string }> }>) => Promise<Array<{ agentId: string; content: string }>>;
   helperChat: (messages: Array<{ role: string; content: string }>) => Promise<{ content: string }>;
   getRotationEngineRoot: () => Promise<string>;
+  getProjectDirectory: () => Promise<string | null>;
+  setProjectDirectory: (dirPath: string) => Promise<{ success: boolean }>;
+  pickDirectory: () => Promise<string | null>;
+  createDefaultProjectDirectory: () => Promise<{ success: boolean; path?: string }>;
 }
 
 declare global {
