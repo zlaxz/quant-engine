@@ -214,14 +214,14 @@ ${metrics.avg_trade_duration_days ? `• Avg Trade Duration: ${metrics.avg_trade
 
 Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].value.toLocaleString()}`;
 
-      // Send to chat via the chat edge function
-      const { error } = await supabase.functions.invoke('chat', {
-        body: {
-          sessionId: selectedSessionId,
-          workspaceId: selectedWorkspaceId,
+      // Insert summary directly as user message
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          session_id: selectedSessionId,
+          role: 'user',
           content: summary,
-        },
-      });
+        });
 
       if (error) throw error;
 
