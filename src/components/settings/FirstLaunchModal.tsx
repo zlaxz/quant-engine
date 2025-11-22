@@ -14,10 +14,15 @@ export function FirstLaunchModal({ open, onComplete }: FirstLaunchModalProps) {
 
   const handleBrowse = async () => {
     try {
+      if (!window.electron?.pickDirectory) {
+        toast.error('Directory picker only available in desktop app');
+        return;
+      }
+      
       const selectedPath = await window.electron.pickDirectory();
       if (selectedPath) {
-        const result = await window.electron.setProjectDirectory(selectedPath);
-        if (result.success) {
+        const result = await window.electron.setProjectDirectory?.(selectedPath);
+        if (result?.success) {
           toast.success('Project directory configured successfully!');
           onComplete();
         }
@@ -31,10 +36,15 @@ export function FirstLaunchModal({ open, onComplete }: FirstLaunchModalProps) {
   const handleCreateNew = async () => {
     setIsCreating(true);
     try {
+      if (!window.electron?.createDefaultProjectDirectory) {
+        toast.error('Create directory only available in desktop app');
+        return;
+      }
+      
       // Create default directory in user's home
       const result = await window.electron.createDefaultProjectDirectory();
       if (result.success && result.path) {
-        await window.electron.setProjectDirectory(result.path);
+        await window.electron.setProjectDirectory?.(result.path);
         toast.success(`Created project directory at ${result.path}`);
         onComplete();
       }

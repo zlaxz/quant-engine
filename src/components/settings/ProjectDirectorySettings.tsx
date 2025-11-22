@@ -18,6 +18,13 @@ export function ProjectDirectorySettings() {
 
   const loadCurrentPath = async () => {
     try {
+      // Check if running in Electron
+      if (!window.electron?.getProjectDirectory) {
+        setCurrentPath('Not available (web mode)');
+        setIsValid(false);
+        return;
+      }
+      
       const path = await window.electron.getProjectDirectory();
       setCurrentPath(path || 'Not set');
       setIsValid(!!path);
@@ -30,6 +37,11 @@ export function ProjectDirectorySettings() {
 
   const handleBrowse = async () => {
     try {
+      if (!window.electron?.pickDirectory) {
+        toast.error('Directory picker only available in desktop app');
+        return;
+      }
+      
       const selectedPath = await window.electron.pickDirectory();
       if (selectedPath) {
         setCurrentPath(selectedPath);
@@ -44,6 +56,11 @@ export function ProjectDirectorySettings() {
   const handleApply = async () => {
     if (!currentPath || currentPath === 'Not set') {
       toast.error('Please select a directory first');
+      return;
+    }
+
+    if (!window.electron?.setProjectDirectory) {
+      toast.error('Settings only available in desktop app');
       return;
     }
 

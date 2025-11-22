@@ -20,7 +20,7 @@ const App = () => {
   useEffect(() => {
     // Check if project directory is configured on first load (Electron only)
     const checkProjectDirectory = async () => {
-      if (!isRunningInElectron()) {
+      if (!isRunningInElectron() || !window.electron?.getProjectDirectory) {
         setIsCheckingDirectory(false);
         return;
       }
