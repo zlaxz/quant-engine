@@ -2,34 +2,43 @@ import { ipcMain } from 'electron';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 
-// API keys from environment variables
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
-
-// Initialize clients
-const geminiClient = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
-const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
-const deepseekClient = DEEPSEEK_API_KEY
-  ? new OpenAI({ apiKey: DEEPSEEK_API_KEY, baseURL: 'https://api.deepseek.com' })
-  : null;
-
 // LLM routing config
 const PRIMARY_MODEL = 'gemini-3-pro-preview';
 const PRIMARY_PROVIDER = 'gemini';
 const SWARM_MODEL = 'deepseek-reasoner';
 const SWARM_PROVIDER = 'deepseek';
 
+// Lazy client getters - read API keys at call time, not module load time
+// This allows keys set via Settings to take effect without app restart
+function getGeminiClient(): GoogleGenerativeAI | null {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  return new GoogleGenerativeAI(apiKey);
+}
+
+function getOpenAIClient(): OpenAI | null {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  return new OpenAI({ apiKey });
+}
+
+function getDeepSeekClient(): OpenAI | null {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) return null;
+  return new OpenAI({ apiKey, baseURL: 'https://api.deepseek.com' });
+}
+
 export function registerLlmHandlers() {
   // Primary tier (Gemini)
   ipcMain.handle('chat-primary', async (_event, messages: any[]) => {
     try {
+      const geminiClient = getGeminiClient();
       if (!geminiClient) {
-        throw new Error('GEMINI_API_KEY not configured');
+        throw new Error('GEMINI_API_KEY not configured. Go to Settings to add your API key.');
       }
 
       const model = geminiClient.getGenerativeModel({ model: PRIMARY_MODEL });
-      
+
       // Convert messages to Gemini format
       const contents = messages.map(msg => ({
         role: msg.role === 'assistant' ? 'model' : 'user',
@@ -54,8 +63,9 @@ export function registerLlmHandlers() {
   // Swarm tier (DeepSeek)
   ipcMain.handle('chat-swarm', async (_event, messages: any[]) => {
     try {
+      const deepseekClient = getDeepSeekClient();
       if (!deepseekClient) {
-        throw new Error('DEEPSEEK_API_KEY not configured');
+        throw new Error('DEEPSEEK_API_KEY not configured. Go to Settings to add your API key.');
       }
 
       const completion = await deepseekClient.chat.completions.create({
@@ -77,8 +87,9 @@ export function registerLlmHandlers() {
   // Swarm parallel (DeepSeek)
   ipcMain.handle('chat-swarm-parallel', async (_event, prompts: any[]) => {
     try {
+      const deepseekClient = getDeepSeekClient();
       if (!deepseekClient) {
-        throw new Error('DEEPSEEK_API_KEY not configured');
+        throw new Error('DEEPSEEK_API_KEY not configured. Go to Settings to add your API key.');
       }
 
       const promises = prompts.map(async (prompt) => {
@@ -103,8 +114,9 @@ export function registerLlmHandlers() {
   // Helper chat (OpenAI mini)
   ipcMain.handle('helper-chat', async (_event, messages: any[]) => {
     try {
+      const openaiClient = getOpenAIClient();
       if (!openaiClient) {
-        throw new Error('OPENAI_API_KEY not configured');
+        throw new Error('OPENAI_API_KEY not configured. Go to Settings to add your API key.');
       }
 
       const completion = await openaiClient.chat.completions.create({

@@ -21,11 +21,11 @@ const Index = () => {
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
-            size="icon"
             onClick={() => navigate('/settings')}
             title="Settings"
           >
-            <Settings className="h-5 w-5" />
+            <Settings className="h-5 w-5 mr-1" />
+            Settings
           </Button>
           <Button
             variant="ghost"

@@ -2,14 +2,14 @@ import { defineConfig } from 'vite';
 import path from 'path';
 
 // Electron main process config - builds for Node.js, not browser
+// Main uses ES modules, preload needs separate CJS build
 export default defineConfig({
   build: {
     outDir: 'dist-electron',
-    ssr: true, // Build for Node.js environment
+    ssr: true,
     rollupOptions: {
       input: {
         main: 'src/electron/main.ts',
-        preload: 'src/electron/preload.ts',
       },
       output: {
         format: 'es',
@@ -17,12 +17,16 @@ export default defineConfig({
       },
       external: [
         'electron',
+        'electron-store',
         'fs',
         'fs/promises',
         'path',
         'child_process',
         'url',
+        'os',
         'glob',
+        '@google/generative-ai',
+        'openai',
       ],
     },
   },

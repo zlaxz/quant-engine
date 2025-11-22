@@ -12,7 +12,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Initialize electron-store for persistent settings
-const store = new Store<{ projectDirectory?: string }>();
+const store = new Store<{
+  projectDirectory?: string;
+  'apiKeys.gemini'?: string;
+  'apiKeys.openai'?: string;
+  'apiKeys.deepseek'?: string;
+}>();
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -23,7 +28,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 
@@ -47,6 +53,14 @@ app.whenReady().then(() => {
   if (savedDirectory) {
     process.env.ROTATION_ENGINE_ROOT = savedDirectory;
   }
+
+  // Initialize API keys from store
+  const savedGemini = store.get('apiKeys.gemini');
+  const savedOpenai = store.get('apiKeys.openai');
+  const savedDeepseek = store.get('apiKeys.deepseek');
+  if (savedGemini) process.env.GEMINI_API_KEY = savedGemini;
+  if (savedOpenai) process.env.OPENAI_API_KEY = savedOpenai;
+  if (savedDeepseek) process.env.DEEPSEEK_API_KEY = savedDeepseek;
 
   // Register project directory IPC handlers
   ipcMain.handle('get-project-directory', () => {

@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && NODE_ENV=development electron .\"",
     "electron:build": "npm run build && npm run electron:compile && electron-builder --mac",
-    "electron:compile": "vite build --config vite.config.electron.ts"
+    "electron:compile": "vite build --config vite.config.electron.ts && vite build --config vite.config.preload.ts"
   },
   "description": "Desktop workbench for quantitative trading research",
   "author": "Zach",
