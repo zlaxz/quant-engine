@@ -28,6 +28,7 @@ import {
   buildExperimentAgentPrompt,
 } from '@/prompts/researchAgentPrompts';
 import { writeFile, appendFile, deleteFile, renameFile, copyFile, createDirectory, type WriteConfirmationCallback } from '@/lib/codeWriter';
+import { chatPrimary, chatSwarm } from '@/lib/electronClient';
 
 // Global confirmation callback - set by ChatArea
 let globalWriteConfirmationCallback: WriteConfirmationCallback | undefined;
@@ -552,31 +553,17 @@ async function handleAuditRun(args: string, context: CommandContext): Promise<Co
     // Build audit prompt
     const auditPrompt = buildAuditPrompt(runSummary, memorySummary);
     
-    // Call SWARM chat function for agent analysis
-    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat-swarm', {
-      body: {
-        sessionId: context.sessionId,
-        workspaceId: context.workspaceId,
-        content: auditPrompt,
-      },
-    });
-    
-    if (chatError) {
-      throw chatError;
-    }
-    
-    if (!chatData || !chatData.message) {
-      throw new Error('No response from chat function');
-    }
+    // Call SWARM chat function for agent analysis via electronClient
+    const { content } = await chatSwarm([{ role: 'user', content: auditPrompt }]);
     
     // Return the audit analysis
     return {
       success: true,
-      message: `🔍 **Strategy Audit: ${run.strategy_key}**\n\n${chatData.message}`,
+      message: `🔍 **Strategy Audit: ${run.strategy_key}**\n\n${content}`,
       data: {
         runId: run.id,
         strategyKey: run.strategy_key,
-        auditResponse: chatData.message,
+        auditResponse: content,
       },
     };
   } catch (error: any) {
@@ -659,30 +646,18 @@ async function handleMinePatterns(args: string, context: CommandContext): Promis
     // Build pattern mining prompt
     const patternPrompt = buildPatternMinerPrompt(runSummary, memorySummary);
 
-    // Call SWARM chat function for agent analysis
-    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat-swarm', {
-      body: {
-        sessionId: context.sessionId,
-        workspaceId: context.workspaceId,
-        content: patternPrompt,
-      },
-    });
-
-    if (chatError) throw chatError;
-
-    if (!chatData || !chatData.message) {
-      throw new Error('No response from chat function');
-    }
+    // Call SWARM chat function for agent analysis via electronClient
+    const { content } = await chatSwarm([{ role: 'user', content: patternPrompt }]);
 
     // Return pattern mining analysis
     return {
       success: true,
-      message: `🔍 **Pattern Mining Analysis** (${runs.length} runs, ${strategyKeys.length} strategies)\n\n${chatData.message}`,
+      message: `🔍 **Pattern Mining Analysis** (${runs.length} runs, ${strategyKeys.length} strategies)\n\n${content}`,
       data: {
         runsAnalyzed: runs.length,
         strategiesCount: strategyKeys.length,
         memoryNotesCount: memoryNotes.length,
-        analysis: chatData.message,
+        analysis: content,
       },
     };
   } catch (error: any) {
@@ -742,28 +717,16 @@ async function handleCurateMemory(
     // Build curator prompt
     const curatorPrompt = buildMemoryCuratorPrompt(summary);
 
-    // Call SWARM chat function for agent analysis
-    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat-swarm', {
-      body: {
-        sessionId: context.sessionId,
-        workspaceId: context.workspaceId,
-        content: curatorPrompt,
-      },
-    });
-
-    if (chatError) throw chatError;
-
-    if (!chatData || !chatData.message) {
-      throw new Error('No response from chat function');
-    }
+    // Call SWARM chat function for agent analysis via electronClient
+    const { content } = await chatSwarm([{ role: 'user', content: curatorPrompt }]);
 
     // Return curator recommendations
     return {
       success: true,
-      message: `🔧 **Memory Curation Recommendations** (${notes.length} notes reviewed)\n\n${chatData.message}\n\n---\n💡 **Note**: These are recommendations only. Use the Memory panel to edit notes manually.`,
+      message: `🔧 **Memory Curation Recommendations** (${notes.length} notes reviewed)\n\n${content}\n\n---\n💡 **Note**: These are recommendations only. Use the Memory panel to edit notes manually.`,
       data: {
         notesReviewed: notes.length,
-        recommendations: chatData.message,
+        recommendations: content,
       },
     };
   } catch (error: any) {
@@ -842,31 +805,19 @@ async function handleSuggestExperiments(
       focus
     );
 
-    // Call SWARM chat function for agent analysis
-    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat-swarm', {
-      body: {
-        sessionId: context.sessionId,
-        workspaceId: context.workspaceId,
-        content: experimentPrompt,
-      },
-    });
-
-    if (chatError) throw chatError;
-
-    if (!chatData || !chatData.message) {
-      throw new Error('No response from chat function');
-    }
+    // Call SWARM chat function for agent analysis via electronClient
+    const { content } = await chatSwarm([{ role: 'user', content: experimentPrompt }]);
 
     // Return experiment suggestions
     const focusNote = focus ? ` (focus: ${focus})` : '';
     return {
       success: true,
-      message: `🎯 **Experiment Plan**${focusNote}\n\nBased on ${runs.length} completed runs and ${memoryNotes.length} memory notes:\n\n${chatData.message}`,
+      message: `🎯 **Experiment Plan**${focusNote}\n\nBased on ${runs.length} completed runs and ${memoryNotes.length} memory notes:\n\n${content}`,
       data: {
         runsAnalyzed: runs.length,
         memoryNotesCount: memoryNotes.length,
         focus: focus || null,
-        plan: chatData.message,
+        plan: content,
       },
     };
   } catch (error: any) {
@@ -973,31 +924,19 @@ async function handleRiskReview(args: string, context: CommandContext): Promise<
       patternSummary
     );
 
-    // Call SWARM chat function for agent analysis
-    const { data: chatData, error: chatError } = await supabase.functions.invoke('chat-swarm', {
-      body: {
-        sessionId: context.sessionId,
-        workspaceId: context.workspaceId,
-        content: riskPrompt,
-      },
-    });
-
-    if (chatError) throw chatError;
-
-    if (!chatData || !chatData.message) {
-      throw new Error('No response from chat function');
-    }
+    // Call SWARM chat function for agent analysis via electronClient
+    const { content } = await chatSwarm([{ role: 'user', content: riskPrompt }]);
 
     // Return risk review
     const focusNote = focus ? ` (focus: ${focus})` : '';
     return {
       success: true,
-      message: `🛡️ **Risk Review Report**${focusNote}\n\nAnalyzed ${filteredRuns.length} completed runs and ${filteredMemory.length} memory notes:\n\n${chatData.message}`,
+      message: `🛡️ **Risk Review Report**${focusNote}\n\nAnalyzed ${filteredRuns.length} completed runs and ${filteredMemory.length} memory notes:\n\n${content}`,
       data: {
         runsAnalyzed: filteredRuns.length,
         memoryNotesCount: filteredMemory.length,
         focus: focus || null,
-        report: chatData.message,
+        report: content,
       },
     };
   } catch (error: any) {
@@ -1302,33 +1241,21 @@ async function handleAutoAnalyze(args: string, context: CommandContext): Promise
     // Build final synthesis prompt
     const finalPrompt = buildAutoAnalyzePrompt(scope, synthesisInput);
 
-    // Call PRIMARY chat for final synthesis (high-stakes reasoning)
-    const { data: finalData, error: finalError } = await supabase.functions.invoke('chat-primary', {
-      body: {
-        sessionId: context.sessionId,
-        workspaceId: context.workspaceId,
-        content: finalPrompt,
-      },
-    });
-
-    if (finalError) throw finalError;
-
-    if (!finalData || !finalData.message) {
-      throw new Error('No response from chat-primary synthesis');
-    }
+    // Call PRIMARY chat for final synthesis (high-stakes reasoning) via electronClient
+    const { content: finalContent } = await chatPrimary([{ role: 'user', content: finalPrompt }]);
 
     // Return comprehensive report with save tip
     const scopeNote = scope ? ` (scope: ${scope})` : '';
     const successfulAgents = swarmResults.filter(r => !r.error).length;
     return {
       success: true,
-      message: `🤖 **Autonomous Research Report**${scopeNote}\n\nAnalyzed ${filteredRuns.length} runs using ${successfulAgents} parallel research agents:\n\n${finalData.message}\n\n---\n\n💡 **Tip**: Use \`/save_report\` to store this Research Report for later.`,
+      message: `🤖 **Autonomous Research Report**${scopeNote}\n\nAnalyzed ${filteredRuns.length} runs using ${successfulAgents} parallel research agents:\n\n${finalContent}\n\n---\n\n💡 **Tip**: Use \`/save_report\` to store this Research Report for later.`,
       data: {
         runsAnalyzed: filteredRuns.length,
         agentsUsed: successfulAgents,
         memoryNotesReviewed: memoryNotes.length,
         scope: scope || null,
-        report: finalData.message,
+        report: finalContent,
       },
     };
   } catch (error: any) {

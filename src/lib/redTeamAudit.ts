@@ -12,6 +12,7 @@ import {
   buildConsistencyAuditPrompt,
 } from '@/prompts/redTeamPrompts';
 import { runSwarm, type SwarmPrompt } from '@/lib/swarmClient';
+import { chatPrimary } from '@/lib/electronClient';
 
 export interface SubReport {
   role: string;
@@ -129,30 +130,12 @@ Now synthesize this into a final Code Audit Report.`;
   let synthesizedReport = '';
   
   try {
-    const { data, error } = await supabase.functions.invoke('chat-primary', {
-      body: {
-        sessionId,
-        workspaceId,
-        content: synthesisPrompt,
-      },
-    });
-
-    if (error) {
-      synthesizedReport = `⚠️ Synthesis failed: ${error.message}\n\nFalling back to raw sub-reports:\n\n${reportSections.join('\n---\n\n')}`;
-    } else {
-      // Extract synthesized content
-      if (data && typeof data === 'object') {
-        synthesizedReport = data.content || data.message || '';
-      } else if (typeof data === 'string') {
-        synthesizedReport = data;
-      }
-      
-      if (!synthesizedReport) {
-        synthesizedReport = `⚠️ Synthesis returned empty content.\n\nFalling back to raw sub-reports:\n\n${reportSections.join('\n---\n\n')}`;
-      }
-    }
-  } catch (err: any) {
-    synthesizedReport = `⚠️ Synthesis exception: ${err.message}\n\nFalling back to raw sub-reports:\n\n${reportSections.join('\n---\n\n')}`;
+    // Call PRIMARY chat for synthesis via electronClient
+    const { content } = await chatPrimary([{ role: 'user', content: synthesisPrompt }]);
+    synthesizedReport = content;
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    synthesizedReport = `⚠️ Synthesis exception: ${errorMessage}\n\nFalling back to raw sub-reports:\n\n${reportSections.join('\n---\n\n')}`;
   }
 
   return {
