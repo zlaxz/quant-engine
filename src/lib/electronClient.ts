@@ -107,55 +107,73 @@ export async function runBacktest(params: {
 // LLM Operations - can optionally use Electron for lower latency
 export async function chatPrimary(messages: Array<{ role: string; content: string }>): Promise<{ content: string; provider: string; model: string }> {
   if (isElectron) {
-    // Use direct API call via Electron
-    return window.electron.chatPrimary(messages);
+    try {
+      return await window.electron.chatPrimary(messages);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`LLM call failed: ${errorMsg}`);
+    }
   }
   
-  // Use edge function
   const { data, error } = await supabase.functions.invoke('chat-primary', {
     body: { messages },
   });
   
-  if (error) throw error;
+  if (error) throw new Error(`LLM call failed: ${error.message}`);
   return data;
 }
 
 export async function chatSwarm(messages: Array<{ role: string; content: string }>): Promise<{ content: string; provider: string; model: string }> {
   if (isElectron) {
-    return window.electron.chatSwarm(messages);
+    try {
+      return await window.electron.chatSwarm(messages);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`LLM call failed: ${errorMsg}`);
+    }
   }
   
   const { data, error } = await supabase.functions.invoke('chat-swarm', {
     body: { messages },
   });
   
-  if (error) throw error;
+  if (error) throw new Error(`LLM call failed: ${error.message}`);
   return data;
 }
 
 export async function chatSwarmParallel(prompts: Array<{ agentId: string; messages: Array<{ role: string; content: string }> }>): Promise<Array<{ agentId: string; content: string }>> {
   if (isElectron) {
-    return window.electron.chatSwarmParallel(prompts);
+    try {
+      return await window.electron.chatSwarmParallel(prompts);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`LLM call failed: ${errorMsg}`);
+    }
   }
   
   const { data, error } = await supabase.functions.invoke('chat-swarm-parallel', {
     body: { prompts },
   });
   
-  if (error) throw error;
+  if (error) throw new Error(`LLM call failed: ${error.message}`);
   return data;
 }
 
 export async function helperChat(messages: Array<{ role: string; content: string }>): Promise<{ content: string }> {
   if (isElectron) {
-    return window.electron.helperChat(messages);
+    try {
+      return await window.electron.helperChat(messages);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Helper chat failed: ${errorMsg}`);
+    }
   }
   
   const { data, error } = await supabase.functions.invoke('helper-chat', {
     body: { messages },
   });
   
-  if (error) throw error;
+  if (error) throw new Error(`Helper chat failed: ${error.message}`);
   return data;
 }
 

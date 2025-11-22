@@ -1,5 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ProjectDirectorySettings } from '@/components/settings/ProjectDirectorySettings';
+import { APIKeySettings } from '@/components/settings/APIKeySettings';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -31,6 +32,7 @@ export default function Settings() {
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="project">Project Directory</TabsTrigger>
+            <TabsTrigger value="api-keys">API Keys</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general" className="space-y-4">
@@ -41,6 +43,10 @@ export default function Settings() {
 
           <TabsContent value="project" className="space-y-4">
             <ProjectDirectorySettings />
+          </TabsContent>
+
+          <TabsContent value="api-keys" className="space-y-4">
+            <APIKeySettings />
           </TabsContent>
         </Tabs>
       </div>
