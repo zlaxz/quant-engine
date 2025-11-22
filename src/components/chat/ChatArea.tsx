@@ -2,7 +2,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Send, Loader2, Command, Slash } from 'lucide-react';
+import { Send, Loader2, Command, Slash, Wrench } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { executeCommand, parseCommand, getCommandSuggestions, commands, setWriteConfirmationCallback } from '@/lib/slashCommands';
 import { useWriteConfirmation } from '@/hooks/useWriteConfirmation';
 import { chatPrimary } from '@/lib/electronClient';
+import { buildChiefQuantPrompt } from '@/prompts/chiefQuantPrompt';
 
 interface Message {
   id: string;
@@ -144,9 +145,9 @@ export const ChatArea = () => {
         };
         setMessages(prev => [...prev, userMessage]);
 
-        // Build messages array for LLM (system prompt + history + new message)
+        // Build messages array for LLM (Chief Quant system prompt + history + new message)
         const llmMessages = [
-          { role: 'system', content: 'You are a helpful quantitative finance assistant.' },
+          { role: 'system', content: buildChiefQuantPrompt() },
           ...messages.map(m => ({ role: m.role, content: m.content })),
           { role: 'user', content: messageContent }
         ];
@@ -256,13 +257,17 @@ export const ChatArea = () => {
               </div>
             ))}
 
-            {/* Thinking indicator */}
+            {/* Thinking/Tool indicator */}
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-muted rounded-lg px-4 py-3 max-w-[80%]">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     <span className="font-mono">Thinking...</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground/70 mt-1">
+                    <Wrench className="h-3 w-3" />
+                    <span className="font-mono">Tools available: file, git, validation, analysis</span>
                   </div>
                 </div>
               </div>
