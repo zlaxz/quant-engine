@@ -28,3 +28,6 @@ SESSION_STATE.md
 *.njsproj
 *.sln
 *.sw?
+
+# Supabase temp files
+supabase/.temp/
