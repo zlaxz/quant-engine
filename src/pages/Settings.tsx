@@ -1,15 +1,30 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ProjectDirectorySettings } from '@/components/settings/ProjectDirectorySettings';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function Settings() {
+  const navigate = useNavigate();
+
   return (
     <div className="container max-w-4xl mx-auto py-8 px-4">
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="text-muted-foreground mt-2">
-            Configure your Quant Chat Workbench preferences
-          </p>
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/')}
+            title="Back to Chat"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Settings</h1>
+            <p className="text-muted-foreground mt-2">
+              Configure your Quant Chat Workbench preferences
+            </p>
+          </div>
         </div>
 
         <Tabs defaultValue="general" className="w-full">
