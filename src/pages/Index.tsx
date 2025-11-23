@@ -7,6 +7,7 @@ import { ChatArea } from '@/components/chat/ChatArea';
 import { RightPanel } from '@/components/panels/RightPanel';
 import { HelperChatDialog } from '@/components/chat/HelperChatDialog';
 import { Button } from '@/components/ui/button';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { HelpCircle, Settings } from 'lucide-react';
 
 const Index = () => {
@@ -17,7 +18,10 @@ const Index = () => {
     <div className="h-screen flex flex-col bg-background">
       {/* Header with Help and Settings Buttons */}
       <header className="border-b border-border bg-card px-4 py-2 flex items-center justify-between flex-shrink-0">
-        <h1 className="text-lg font-semibold text-foreground">Quant Chat Workbench</h1>
+        <div className="flex items-center gap-3">
+          <SidebarTrigger />
+          <h1 className="text-lg font-semibold text-foreground">Quant Chat Workbench</h1>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
