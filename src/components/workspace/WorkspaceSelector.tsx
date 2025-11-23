@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Plus, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -50,6 +51,10 @@ export const WorkspaceSelector = () => {
 
   return (
     <div className="p-3 border-b border-panel-border">
+      <div className="flex items-center justify-between mb-3">
+        <SidebarTrigger />
+      </div>
+      
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-mono uppercase text-muted-foreground tracking-wider">
           Workspace

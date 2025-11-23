@@ -14,7 +14,7 @@ export const MainLayout = ({ leftPanel, centerPanel, rightPanel }: MainLayoutPro
   return (
     <div className="flex h-full w-full bg-background text-foreground">
       {/* Collapsible Left Panel - Workspaces & Sessions */}
-      <Sidebar collapsible="offcanvas" className="border-r border-border">
+      <Sidebar collapsible="icon" className="border-r border-border">
         <SidebarContent className="bg-panel">
           {leftPanel}
         </SidebarContent>
