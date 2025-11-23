@@ -2,6 +2,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Send, Loader2, Command, Slash, Wrench } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -227,12 +228,15 @@ export const ChatArea = () => {
 
   return (
     <div className="flex-1 flex flex-col h-full">
-      {/* Header */}
-      <div className="border-b border-border p-4">
-        <h2 className="text-lg font-semibold font-mono">Chat Session</h2>
-        <p className="text-sm text-muted-foreground">
-          {isFetchingMessages ? 'Loading messages...' : `${messages.length} messages`}
-        </p>
+      {/* Header with Sidebar Toggle */}
+      <div className="border-b border-border p-4 flex items-center gap-3">
+        <SidebarTrigger />
+        <div className="flex-1">
+          <h2 className="text-lg font-semibold font-mono">Chat Session</h2>
+          <p className="text-sm text-muted-foreground">
+            {isFetchingMessages ? 'Loading messages...' : `${messages.length} messages`}
+          </p>
+        </div>
       </div>
 
       {/* Messages Area */}

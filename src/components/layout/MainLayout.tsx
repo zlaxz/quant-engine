@@ -1,4 +1,9 @@
 import { ReactNode } from 'react';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarProvider,
+} from '@/components/ui/sidebar';
 
 interface MainLayoutProps {
   leftPanel: ReactNode;
@@ -8,21 +13,25 @@ interface MainLayoutProps {
 
 export const MainLayout = ({ leftPanel, centerPanel, rightPanel }: MainLayoutProps) => {
   return (
-    <div className="flex h-screen w-full bg-background text-foreground">
-      {/* Left Panel - Workspaces & Sessions */}
-      <aside className="w-64 border-r border-border bg-panel flex flex-col">
-        {leftPanel}
-      </aside>
+    <SidebarProvider defaultOpen={true}>
+      <div className="flex h-full w-full bg-background text-foreground">
+        {/* Collapsible Left Panel - Workspaces & Sessions */}
+        <Sidebar collapsible="offcanvas" className="border-r border-border">
+          <SidebarContent className="bg-panel">
+            {leftPanel}
+          </SidebarContent>
+        </Sidebar>
 
-      {/* Center Panel - Chat Area */}
-      <main className="flex-1 flex flex-col min-w-0">
-        {centerPanel}
-      </main>
+        {/* Center Panel - Chat Area (includes trigger button in its own header) */}
+        <main className="flex-1 flex flex-col min-w-0">
+          {centerPanel}
+        </main>
 
-      {/* Right Panel - Context/Quant/Memory */}
-      <aside className="w-80 border-l border-border bg-panel flex flex-col">
-        {rightPanel}
-      </aside>
-    </div>
+        {/* Right Panel - Context/Quant/Memory */}
+        <aside className="w-80 border-l border-border bg-panel flex flex-col">
+          {rightPanel}
+        </aside>
+      </div>
+    </SidebarProvider>
   );
 };
