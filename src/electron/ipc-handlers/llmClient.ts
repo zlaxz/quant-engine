@@ -91,140 +91,32 @@ function toolsToOpenAIFormat(): OpenAI.Chat.Completions.ChatCompletionTool[] {
 }
 
 export function registerLlmHandlers() {
-  // Primary tier (Gemini) with tool calling
-  ipcMain.handle('chat-primary', async (_event, messages: Array<{ role: string; content: string }>) => {
-    try {
-      const geminiClient = getGeminiClient();
-      if (!geminiClient) {
-        throw new Error('GEMINI_API_KEY not configured. Go to Settings to add your API key.');
-      }
-
-      // Extract system message for Gemini's systemInstruction
-      const systemMessage = messages.find(m => m.role === 'system');
-      const nonSystemMessages = messages.filter(m => m.role !== 'system');
-
-      // Build system instruction with EXPLICIT tool usage directive
-      const toolDirective = `
-
-CRITICAL INSTRUCTION: You have access to tools that let you ACTUALLY read and modify the codebase.
-DO NOT make up file contents or guess at code structure.
-DO NOT describe what you would do - USE THE TOOLS to actually do it.
-ALWAYS use list_directory and read_file to examine code BEFORE answering questions about it.
-When asked about the codebase, your FIRST action should be to use tools to explore it.
-
-Available tools: read_file, list_directory, search_code, write_file, git_status, git_diff, run_tests, etc.
-`;
-
-      const fullSystemInstruction = (systemMessage?.content || '') + toolDirective;
-
-      // Get model with tools enabled and system instruction
-      const model = geminiClient.getGenerativeModel({
-        model: PRIMARY_MODEL,
-        tools: [{ functionDeclarations: ALL_TOOLS }],
-        systemInstruction: fullSystemInstruction,
-      });
-
-      // Convert messages to Gemini format (excluding system messages)
-      const history = nonSystemMessages.slice(0, -1).map(msg => ({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
-      }));
-
-      const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
-      const chat = model.startChat({ history });
-
-      // Tool execution loop
-      let response = await withRetry(() => chat.sendMessage(lastMessage.content));
-      let iterations = 0;
-      let allToolOutputs: string[] = [];
-      let toolCallLog: string[] = []; // Visible log for user
-
-      while (iterations < MAX_TOOL_ITERATIONS) {
-        const candidate = response.response.candidates?.[0];
-        if (!candidate) break;
-
-        // Check if model wants to call tools
-        const functionCalls = candidate.content?.parts?.filter(
-          (part: any) => part.functionCall
-        );
-
-        if (!functionCalls || functionCalls.length === 0) {
-          // No more tool calls, we have the final response
-          break;
-        }
-
-        console.log(`[LLM] Executing ${functionCalls.length} tool calls (iteration ${iterations + 1})`);
-
-        // Execute all tool calls
-        const toolResults: Array<{
-          functionResponse: {
-            name: string;
-            response: { content: string };
-          };
-        }> = [];
-
-        for (const part of functionCalls) {
-          const call = (part as any).functionCall;
-          const toolName = call.name;
-          const toolArgs = call.args || {};
-
-          console.log(`[Tool] Calling: ${toolName}`, toolArgs);
-
-          // Add to visible log
-          const argsStr = Object.entries(toolArgs).map(([k, v]) => `${k}="${v}"`).join(', ');
-          toolCallLog.push(`🔧 ${toolName}(${argsStr})`);
-
-          try {
-            const result = await executeTool(toolName, toolArgs);
-            const output = result.success ? result.content : `Error: ${result.error}`;
-
-            toolResults.push({
-              functionResponse: {
-                name: toolName,
-                response: { content: output }
-              }
-            });
-
-            // Add result preview to log
-            const preview = output.slice(0, 200).replace(/\n/g, ' ');
-            toolCallLog.push(`   → ${result.success ? '✓' : '✗'} ${preview}${output.length > 200 ? '...' : ''}`);
-
-            allToolOutputs.push(`[${toolName}]: ${output.slice(0, 500)}${output.length > 500 ? '...' : ''}`);
-          } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : String(error);
-            toolCallLog.push(`   → ✗ Error: ${errorMsg}`);
-            toolResults.push({
-              functionResponse: {
-                name: toolName,
-                response: { content: `Tool execution error: ${errorMsg}` }
-              }
-            });
-          }
-        }
-
-        // Send tool results back to the model
-        response = await withRetry(() => chat.sendMessage(toolResults));
-        iterations++;
-      }
-
-      // Get final text response
-      const finalText = response.response.text();
-
-      // Build visible tool call log
-      const toolSummary = toolCallLog.length > 0
-        ? `\n\n---\n**🔧 Tool Calls (${iterations} iteration${iterations !== 1 ? 's' : ''}):**\n\`\`\`\n${toolCallLog.join('\n')}\n\`\`\``
-        : '';
-
-      return {
-        content: finalText + toolSummary,
-        provider: PRIMARY_PROVIDER,
-        model: PRIMARY_MODEL,
-        toolsUsed: iterations
-      };
-    } catch (error) {
-      console.error('Error in chat-primary:', error);
-      throw error;
+  // Primary tier - delegates to Supabase edge function which handles workspace/memory/message loading
+  ipcMain.handle('chat-primary', async (_event, sessionId: string, workspaceId: string, content: string) => {
+    // Get Supabase credentials from environment
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase credentials not configured');
     }
+
+    // Call the Supabase edge function
+    const response = await fetch(`${supabaseUrl}/functions/v1/chat-primary`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({ sessionId, workspaceId, content })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Chat request failed');
+    }
+
+    return await response.json();
   });
 
   // Swarm tier (DeepSeek) with tool calling
@@ -274,6 +166,8 @@ Available tools: read_file, list_directory, search_code, write_file, git_status,
 
         // Execute tools and add results
         for (const toolCall of message.tool_calls) {
+          if (toolCall.type !== 'function') continue;
+          
           const toolName = toolCall.function.name;
           let toolArgs: Record<string, any> = {};
 
