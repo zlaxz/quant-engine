@@ -250,14 +250,11 @@ export const ChatArea = () => {
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={cn(
-                  'flex',
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
-                )}
+                className="w-full"
               >
                 <div
                   className={cn(
-                    'max-w-[80%] rounded-lg px-4 py-2 whitespace-pre-wrap',
+                    'w-full rounded-lg px-4 py-2 whitespace-pre-wrap',
                     message.role === 'user'
                       ? 'bg-primary text-primary-foreground'
                       : message.role === 'assistant'
