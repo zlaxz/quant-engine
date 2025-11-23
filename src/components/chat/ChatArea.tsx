@@ -163,8 +163,12 @@ export const ChatArea = () => {
           { role: 'user', content: messageContent }
         ];
 
-        // Call LLM via Electron IPC
-        const response = await chatPrimary(llmMessages);
+        // Call LLM via Electron IPC (removed - now using direct params)
+        const response = await chatPrimary({
+          sessionId: selectedSessionId,
+          workspaceId: selectedWorkspaceId,
+          content: messageContent
+        });
 
         // Add assistant response to UI
         const assistantMessage: Message = {
@@ -297,7 +301,7 @@ export const ChatArea = () => {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="border-t border-border p-4">
+      <div className="border-t border-border p-2">
         {/* Command Suggestions */}
         {commandSuggestions.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
@@ -369,7 +373,7 @@ export const ChatArea = () => {
           <Textarea
             placeholder="Type your message or use /help for commands... (Shift+Enter for new line)"
             className="resize-none font-mono text-sm"
-            rows={3}
+            rows={2}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={handleKeyPress}

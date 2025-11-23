@@ -182,7 +182,7 @@ async function callGemini(model: string, messages: ChatMessage[], enableTools: b
           arguments: JSON.stringify(fc.functionCall.args)
         }
       })),
-      engineRoot
+      engineRoot || ''
     );
 
     // Add assistant message with function calls
@@ -282,7 +282,7 @@ async function callOpenAI(model: string, messages: ChatMessage[], enableTools: b
 
     // Execute tool calls
     console.log(`[OpenAI MCP] Executing ${message.tool_calls.length} tool calls`);
-    const toolResults = await executeMcpToolCalls(message.tool_calls, engineRoot);
+    const toolResults = await executeMcpToolCalls(message.tool_calls, engineRoot || '');
 
     // Add assistant message and tool results
     currentMessages = [
@@ -371,7 +371,7 @@ async function callDeepSeek(model: string, messages: ChatMessage[], enableTools:
 
     // Execute tool calls
     console.log(`[DeepSeek MCP] Executing ${message.tool_calls.length} tool calls`);
-    const toolResults = await executeMcpToolCalls(message.tool_calls, engineRoot);
+    const toolResults = await executeMcpToolCalls(message.tool_calls, engineRoot || '');
 
     // Add assistant message and tool results
     currentMessages = [

@@ -15,7 +15,7 @@ const execAsync = promisify(exec);
 const TOOL_TIMEOUT_MS = 30000;
 
 // Wrapper for execAsync with timeout
-async function execWithTimeout(command: string, options?: { cwd?: string }): Promise<{ stdout: string; stderr: string }> {
+async function execWithTimeout(command: string, options?: { cwd?: string; maxBuffer?: number; timeout?: number }): Promise<{ stdout: string; stderr: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TOOL_TIMEOUT_MS);
 
