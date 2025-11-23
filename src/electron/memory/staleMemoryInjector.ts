@@ -23,7 +23,7 @@ export class StaleMemoryInjector {
   /**
    * Get CRITICAL memories that haven't been recalled in their expected interval
    */
-  async getStaleMemories(workspaceId: string): Promise<StaleMemory[]> {
+  async getStaleMemories(workspaceId: string, maxResults: number = 20): Promise<StaleMemory[]> {
     // Protection level recall intervals (days)
     const RECALL_INTERVALS = {
       0: 3, // IMMUTABLE - every 3 days
@@ -66,7 +66,7 @@ export class StaleMemoryInjector {
       }
     }
 
-    return staleMemories.sort((a, b) => {
+    const sorted = staleMemories.sort((a, b) => {
       // Priority: protection_level asc, financial_impact desc, days_since_recall desc
       if (a.protection_level !== b.protection_level) {
         return a.protection_level - b.protection_level;
@@ -76,6 +76,8 @@ export class StaleMemoryInjector {
       }
       return b.days_since_recall - a.days_since_recall;
     });
+
+    return sorted.slice(0, maxResults);
   }
 
   /**
@@ -96,7 +98,8 @@ export class StaleMemoryInjector {
       formatted += `---\n\n`;
     }
 
-    formatted += `*These are PROTECTED memories (Level ${memories[0]?.protection_level}). Confirm understanding before proceeding.*\n`;
+    const minLevel = Math.min(...memories.map(m => m.protection_level));
+    formatted += `*These are PROTECTED memories (Level ${minLevel}). Confirm understanding before proceeding.*\n`;
 
     return formatted;
   }

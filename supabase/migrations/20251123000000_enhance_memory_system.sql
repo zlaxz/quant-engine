@@ -82,6 +82,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_symbols ON memories USING GIN(symbols);
 CREATE INDEX IF NOT EXISTS idx_memories_strategies ON memories USING GIN(strategies);
 CREATE INDEX IF NOT EXISTS idx_memories_type_importance ON memories(workspace_id, memory_type, importance_score DESC);
 CREATE INDEX IF NOT EXISTS idx_memories_protection_level ON memories(protection_level);
+CREATE INDEX IF NOT EXISTS idx_memories_protection_financial ON memories(protection_level, financial_impact DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_memories_regime ON memories USING GIN(regime_context jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS idx_memories_last_recalled ON memories(last_recalled_at);
 

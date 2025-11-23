@@ -71,8 +71,11 @@ export class TriggerRecall {
         // Filter by protection level if specified
         let memories = result.memories;
         if (rule.protection_level !== undefined) {
-          // Note: This requires memories to have protection_level in response
-          // For now, just add all matching memories
+          memories = memories.filter(m => {
+            // Requires protection_level in memory result
+            // For now, include all since RecallEngine doesn't return this field
+            return true;  // TODO: Add protection_level to RecallEngine response
+          });
         }
 
         // Add to triggered set (deduplicate by ID)
