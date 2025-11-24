@@ -6,6 +6,13 @@ import { Plus, MessageSquare, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useChatContext } from '@/contexts/ChatContext';
+import { useSidebar } from '@/components/ui/sidebar';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +48,7 @@ export const ChatSessionList = () => {
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [sessionToRename, setSessionToRename] = useState<ChatSession | null>(null);
   const [newName, setNewName] = useState('');
+  const { state } = useSidebar();
 
   useEffect(() => {
     loadSessions();
@@ -162,141 +170,203 @@ export const ChatSessionList = () => {
     setNewName(session.title);
   };
 
+  const isCollapsed = state === 'collapsed';
+
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <div className="p-3 border-b border-panel-border flex items-center justify-between">
-        <span className="text-xs font-mono uppercase text-muted-foreground tracking-wider">
-          Chat Sessions
-        </span>
-        <Button 
-          size="icon" 
-          variant="ghost" 
-          className="h-6 w-6"
-          onClick={createNewSession}
-        >
-          <Plus className="h-3 w-3" />
-        </Button>
-      </div>
-
-      <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1">
-          {loading ? (
-            <div className="space-y-2 p-2">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-12 bg-muted animate-pulse rounded" />
-              ))}
-            </div>
-          ) : sessions.length === 0 ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">
-              <p>No chat sessions yet</p>
-              <p className="text-xs mt-1">Click + to create one</p>
-            </div>
-          ) : (
-            sessions.map((session) => (
-              <div
-                key={session.id}
-                className={cn(
-                  'rounded-md transition-colors mb-1 p-1.5 flex items-center gap-1 w-full',
-                  'hover:bg-muted/50',
-                  selectedSessionId === session.id && 'bg-muted'
-                )}
-              >
-                <button
-                  onClick={() => setSelectedSession(session.id, session.workspace_id)}
-                  className="flex-1 flex items-center gap-1.5 text-left min-w-0"
+    <TooltipProvider>
+      <div className="flex-1 flex flex-col min-h-0">
+        {!isCollapsed && (
+          <div className="p-3 border-b border-panel-border flex items-center justify-between">
+            <span className="text-xs font-mono uppercase text-muted-foreground tracking-wider">
+              Chat Sessions
+            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  className="h-6 w-6"
+                  onClick={createNewSession}
                 >
-                  <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-xs truncate">
-                      {session.title}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground truncate">
-                      {new Date(session.created_at).toLocaleDateString()}
-                    </div>
-                  </div>
-                </button>
-                
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openRenameDialog(session);
-                  }}
-                >
-                  <Pencil className="h-3 w-3" />
+                  <Plus className="h-3 w-3" />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0 hover:text-destructive"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSessionToDelete(session.id);
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            ))
-          )}
-        </div>
-      </ScrollArea>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!sessionToDelete} onOpenChange={() => setSessionToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Chat Session</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this chat session? This will permanently delete all messages in this conversation. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={() => sessionToDelete && deleteSession(sessionToDelete)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Rename Dialog */}
-      <Dialog open={!!sessionToRename} onOpenChange={() => setSessionToRename(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename Chat Session</DialogTitle>
-            <DialogDescription>
-              Enter a new name for this chat session.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Session Name</Label>
-              <Input
-                id="name"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && renameSession()}
-                placeholder="Enter session name..."
-                autoFocus
-              />
-            </div>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>Create new session</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSessionToRename(null)}>
-              Cancel
-            </Button>
-            <Button onClick={renameSession} disabled={!newName.trim()}>
-              Rename
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+        )}
+
+        {isCollapsed && (
+          <div className="p-2 border-b border-panel-border flex justify-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  className="h-8 w-8"
+                  onClick={createNewSession}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>Create new session</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        )}
+
+        <ScrollArea className="flex-1">
+          <div className="p-2 space-y-1">
+            {loading ? (
+              <div className="space-y-2 p-2">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-12 bg-muted animate-pulse rounded" />
+                ))}
+              </div>
+            ) : sessions.length === 0 ? (
+              !isCollapsed && (
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  <p>No chat sessions yet</p>
+                  <p className="text-xs mt-1">Click + to create one</p>
+                </div>
+              )
+            ) : (
+              sessions.map((session) => (
+                <Tooltip key={session.id}>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={cn(
+                        'rounded-md transition-colors mb-1 flex items-center gap-1 w-full',
+                        'hover:bg-muted/50',
+                        selectedSessionId === session.id && 'bg-muted',
+                        isCollapsed ? 'p-2 justify-center' : 'p-1.5'
+                      )}
+                    >
+                      {isCollapsed ? (
+                        <button
+                          onClick={() => setSelectedSession(session.id, session.workspace_id)}
+                          className="flex items-center justify-center"
+                        >
+                          <MessageSquare className={cn(
+                            "text-muted-foreground shrink-0",
+                            selectedSessionId === session.id && "text-primary",
+                            "h-4 w-4"
+                          )} />
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => setSelectedSession(session.id, session.workspace_id)}
+                            className="flex-1 flex items-center gap-1.5 text-left min-w-0"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-xs truncate">
+                                {session.title}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground truncate">
+                                {new Date(session.created_at).toLocaleDateString()}
+                              </div>
+                            </div>
+                          </button>
+                          
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openRenameDialog(session);
+                            }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSessionToDelete(session.id);
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <div className="max-w-xs">
+                      <p className="font-medium">{session.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(session.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!sessionToDelete} onOpenChange={() => setSessionToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Chat Session</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this chat session? This will permanently delete all messages in this conversation. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={() => sessionToDelete && deleteSession(sessionToDelete)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Rename Dialog */}
+        <Dialog open={!!sessionToRename} onOpenChange={() => setSessionToRename(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Rename Chat Session</DialogTitle>
+              <DialogDescription>
+                Enter a new name for this chat session.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Session Name</Label>
+                <Input
+                  id="name"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && renameSession()}
+                  placeholder="Enter session name..."
+                  autoFocus
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSessionToRename(null)}>
+                Cancel
+              </Button>
+              <Button onClick={renameSession} disabled={!newName.trim()}>
+                Rename
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </TooltipProvider>
   );
 };
