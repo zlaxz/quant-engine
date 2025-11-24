@@ -55,92 +55,171 @@ export class WarningSystem {
     regimeId: number | null,
     workspaceId: string
   ): Promise<RelevantWarnings> {
-    const [overfittingWarnings, regimeWarnings, criticalLessons] = await Promise.all([
-      this.overfittingDetector.checkSimilarFailures(strategy, workspaceId),
-      this.getRegimeWarnings(regimeId, workspaceId),
-      this.getCriticalLessons(workspaceId),
-    ]);
+    // Input validation
+    if (!strategy || typeof strategy !== 'string') {
+      console.error('[WarningSystem] Invalid strategy string');
+      return {
+        overfitting_warnings: [],
+        regime_warnings: [],
+        critical_lessons: [],
+        total_warnings: 0,
+      };
+    }
+    if (!workspaceId || typeof workspaceId !== 'string') {
+      console.error('[WarningSystem] Invalid workspaceId');
+      return {
+        overfitting_warnings: [],
+        regime_warnings: [],
+        critical_lessons: [],
+        total_warnings: 0,
+      };
+    }
 
-    return {
-      overfitting_warnings: overfittingWarnings,
-      regime_warnings: regimeWarnings,
-      critical_lessons: criticalLessons,
-      total_warnings: overfittingWarnings.length + regimeWarnings.length + criticalLessons.length,
-    };
+    try {
+      const [overfittingWarnings, regimeWarnings, criticalLessons] = await Promise.all([
+        this.overfittingDetector.checkSimilarFailures(strategy, workspaceId),
+        this.getRegimeWarnings(regimeId, workspaceId),
+        this.getCriticalLessons(workspaceId),
+      ]);
+
+      return {
+        overfitting_warnings: Array.isArray(overfittingWarnings) ? overfittingWarnings : [],
+        regime_warnings: Array.isArray(regimeWarnings) ? regimeWarnings : [],
+        critical_lessons: Array.isArray(criticalLessons) ? criticalLessons : [],
+        total_warnings:
+          (Array.isArray(overfittingWarnings) ? overfittingWarnings.length : 0) +
+          (Array.isArray(regimeWarnings) ? regimeWarnings.length : 0) +
+          (Array.isArray(criticalLessons) ? criticalLessons.length : 0),
+      };
+    } catch (error) {
+      console.error('[WarningSystem] Error getting relevant warnings:', error);
+      return {
+        overfitting_warnings: [],
+        regime_warnings: [],
+        critical_lessons: [],
+        total_warnings: 0,
+      };
+    }
   }
 
   /**
    * Get warnings specific to a regime
    */
   private async getRegimeWarnings(regimeId: number | null, workspaceId: string): Promise<RegimeWarning[]> {
-    if (!regimeId) return [];
+    if (!regimeId || typeof regimeId !== 'number') return [];
 
-    const { data } = await this.supabase
-      .from('memories')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .eq('memory_type', 'warning')
-      .filter('regime_context->primary_regime', 'eq', regimeId)
-      .gte('importance_score', 0.7)
-      .order('importance_score', { ascending: false })
-      .limit(5);
+    if (!workspaceId || typeof workspaceId !== 'string') {
+      console.error('[WarningSystem] Invalid workspaceId in getRegimeWarnings');
+      return [];
+    }
 
-    return data || [];
+    try {
+      const { data, error } = await this.supabase
+        .from('memories')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .eq('memory_type', 'warning')
+        .filter('regime_context->primary_regime', 'eq', regimeId)
+        .gte('importance_score', 0.7)
+        .order('importance_score', { ascending: false })
+        .limit(5);
+
+      if (error) {
+        console.error('[WarningSystem] Error querying regime warnings:', error);
+        return [];
+      }
+
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error('[WarningSystem] Error in getRegimeWarnings:', error);
+      return [];
+    }
   }
 
   /**
    * Get all CRITICAL (protection level 0-1) lessons
    */
   private async getCriticalLessons(workspaceId: string): Promise<CriticalLesson[]> {
-    const { data } = await this.supabase
-      .from('memories')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .lte('protection_level', 1)
-      .order('protection_level', { ascending: true })
-      .order('financial_impact', { ascending: false })
-      .limit(10);
+    if (!workspaceId || typeof workspaceId !== 'string') {
+      console.error('[WarningSystem] Invalid workspaceId in getCriticalLessons');
+      return [];
+    }
 
-    return data || [];
+    try {
+      const { data, error } = await this.supabase
+        .from('memories')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .lte('protection_level', 1)
+        .order('protection_level', { ascending: true })
+        .order('financial_impact', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.error('[WarningSystem] Error querying critical lessons:', error);
+        return [];
+      }
+
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error('[WarningSystem] Error in getCriticalLessons:', error);
+      return [];
+    }
   }
 
   /**
    * Format warnings for display
    */
   formatWarnings(warnings: RelevantWarnings): string {
-    if (warnings.total_warnings === 0) {
+    // Input validation
+    if (!warnings || typeof warnings !== 'object') {
+      return '⚠️ Invalid warnings object';
+    }
+
+    const totalWarnings = warnings.total_warnings ?? 0;
+    if (totalWarnings === 0) {
       return '✅ No warnings found. Proceed with caution.';
     }
 
-    let formatted = `## ⚠️ PRE-BACKTEST WARNINGS (${warnings.total_warnings} total)\n\n`;
+    try {
+      let formatted = `## ⚠️ PRE-BACKTEST WARNINGS (${totalWarnings} total)\n\n`;
 
-    if (warnings.overfitting_warnings.length > 0) {
-      formatted += '### 🔴 OVERFITTING WARNINGS (Similar Approaches Failed)\n\n';
-      warnings.overfitting_warnings.forEach((w, i) => {
-        formatted += `${i + 1}. **${w.warning_message}**\n`;
-        const similarity = w.similarity ?? 0;
-        formatted += `   - Similarity: ${(similarity * 100).toFixed(0)}%\n`;
-        formatted += `   - Evidence: ${w.evidence_detail}\n\n`;
-      });
+      // Safe array iteration with validation
+      if (Array.isArray(warnings.overfitting_warnings) && warnings.overfitting_warnings.length > 0) {
+        formatted += '### 🔴 OVERFITTING WARNINGS (Similar Approaches Failed)\n\n';
+        warnings.overfitting_warnings.forEach((w, i) => {
+          if (!w || typeof w !== 'object') return;
+          formatted += `${i + 1}. **${w.warning_message || 'Unknown warning'}**\n`;
+          const similarity = w.similarity ?? 0;
+          formatted += `   - Similarity: ${(similarity * 100).toFixed(0)}%\n`;
+          formatted += `   - Evidence: ${w.evidence_detail || 'No evidence'}\n\n`;
+        });
+      }
+
+      if (Array.isArray(warnings.regime_warnings) && warnings.regime_warnings.length > 0) {
+        formatted += '### ⚠️ REGIME-SPECIFIC WARNINGS\n\n';
+        warnings.regime_warnings.forEach((w, i) => {
+          if (!w || typeof w !== 'object') return;
+          const summaryText = w.summary || (w.content ? w.content.slice(0, 100) : 'Unknown warning');
+          formatted += `${i + 1}. ${summaryText}\n\n`;
+        });
+      }
+
+      if (Array.isArray(warnings.critical_lessons) && warnings.critical_lessons.length > 0) {
+        formatted += '### 🚨 CRITICAL LESSONS (Must Review)\n\n';
+        warnings.critical_lessons.forEach((l, i) => {
+          if (!l || typeof l !== 'object') return;
+          const cost = l.financial_impact ? ` ($${l.financial_impact.toLocaleString()} cost)` : '';
+          formatted += `${i + 1}. [Level ${l.protection_level ?? 0}]${cost} ${l.summary || 'Unknown lesson'}\n\n`;
+        });
+      }
+
+      formatted += '\n**⚠️ Review all warnings before proceeding. These represent expensive lessons learned.**\n';
+
+      return formatted;
+    } catch (error) {
+      console.error('[WarningSystem] Error formatting warnings:', error);
+      return '⚠️ Error formatting warnings. Please review manually.';
     }
-
-    if (warnings.regime_warnings.length > 0) {
-      formatted += '### ⚠️ REGIME-SPECIFIC WARNINGS\n\n';
-      warnings.regime_warnings.forEach((w, i) => {
-        formatted += `${i + 1}. ${w.summary || w.content.slice(0, 100)}\n\n`;
-      });
-    }
-
-    if (warnings.critical_lessons.length > 0) {
-      formatted += '### 🚨 CRITICAL LESSONS (Must Review)\n\n';
-      warnings.critical_lessons.forEach((l, i) => {
-        const cost = l.financial_impact ? ` ($${l.financial_impact.toLocaleString()} cost)` : '';
-        formatted += `${i + 1}. [Level ${l.protection_level}]${cost} ${l.summary}\n\n`;
-      });
-    }
-
-    formatted += '\n**⚠️ Review all warnings before proceeding. These represent expensive lessons learned.**\n';
-
-    return formatted;
   }
 }

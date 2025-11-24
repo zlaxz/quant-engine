@@ -24,6 +24,17 @@ export class StaleMemoryInjector {
    * Get CRITICAL memories that haven't been recalled in their expected interval
    */
   async getStaleMemories(workspaceId: string, maxResults: number = 20): Promise<StaleMemory[]> {
+    // CRASH FIX #21: Input validation
+    if (!workspaceId || typeof workspaceId !== 'string') {
+      console.error('[StaleMemoryInjector] Invalid workspaceId');
+      return [];
+    }
+
+    if (typeof maxResults !== 'number' || maxResults < 1 || maxResults > 1000) {
+      console.error('[StaleMemoryInjector] Invalid maxResults: must be between 1 and 1000');
+      maxResults = 20;
+    }
+
     // Protection level recall intervals (days)
     const RECALL_INTERVALS = {
       0: 3, // IMMUTABLE - every 3 days
@@ -37,32 +48,73 @@ export class StaleMemoryInjector {
 
     // Query for each protection level
     for (const [level, interval] of Object.entries(RECALL_INTERVALS)) {
-      const threshold = new Date(now.getTime() - interval * 24 * 60 * 60 * 1000);
+      try {
+        // CRASH FIX #22: Validate interval and date math
+        if (typeof interval !== 'number' || interval < 0) {
+          console.error(`[StaleMemoryInjector] Invalid interval for level ${level}`);
+          continue;
+        }
 
-      const { data, error } = await this.supabase
-        .from('memories')
-        .select('id, content, summary, protection_level, financial_impact, last_recalled_at')
-        .eq('workspace_id', workspaceId)
-        .eq('protection_level', parseInt(level))
-        .or(`last_recalled_at.is.null,last_recalled_at.lt.${threshold.toISOString()}`)
-        .order('protection_level', { ascending: true })
-        .order('financial_impact', { ascending: false })
-        .limit(10);
+        const threshold = new Date(now.getTime() - interval * 24 * 60 * 60 * 1000);
 
-      if (error) {
-        console.error(`[StaleMemoryInjector] Error querying level ${level}:`, error);
-        continue;
-      }
+        // CRASH FIX #23: Validate threshold is a valid date
+        if (isNaN(threshold.getTime())) {
+          console.error(`[StaleMemoryInjector] Invalid threshold date for level ${level}`);
+          continue;
+        }
 
-      if (data && data.length > 0) {
+        const { data, error } = await this.supabase
+          .from('memories')
+          .select('id, content, summary, protection_level, financial_impact, last_recalled_at')
+          .eq('workspace_id', workspaceId)
+          .eq('protection_level', parseInt(level))
+          .or(`last_recalled_at.is.null,last_recalled_at.lt.${threshold.toISOString()}`)
+          .order('protection_level', { ascending: true })
+          .order('financial_impact', { ascending: false })
+          .limit(10);
+
+        if (error) {
+          console.error(`[StaleMemoryInjector] Error querying level ${level}:`, error);
+          continue;
+        }
+
+        // CRASH FIX #24: Type checking on data
+        if (!Array.isArray(data) || data.length === 0) {
+          continue;
+        }
+
         staleMemories.push(
-          ...data.map((m) => ({
-            ...m,
-            days_since_recall: m.last_recalled_at
-              ? Math.floor((now.getTime() - new Date(m.last_recalled_at).getTime()) / (24 * 60 * 60 * 1000))
-              : 9999,
-          }))
+          ...data.map((m: any) => {
+            // Validate memory object structure
+            if (!m || typeof m !== 'object') return null;
+
+            // CRASH FIX #25: Safe date parsing with fallback
+            let daysSince = 9999;
+            if (m.last_recalled_at && typeof m.last_recalled_at === 'string') {
+              try {
+                const lastRecalledDate = new Date(m.last_recalled_at);
+                if (!isNaN(lastRecalledDate.getTime())) {
+                  daysSince = Math.floor((now.getTime() - lastRecalledDate.getTime()) / (24 * 60 * 60 * 1000));
+                }
+              } catch (e) {
+                console.error(`[StaleMemoryInjector] Error parsing date for memory ${m.id}:`, e);
+              }
+            }
+
+            return {
+              id: m.id || '',
+              content: m.content || '',
+              summary: m.summary || '',
+              protection_level: m.protection_level ?? 0,
+              financial_impact: m.financial_impact ?? null,
+              last_recalled_at: m.last_recalled_at ?? null,
+              days_since_recall: daysSince,
+            };
+          }).filter((item): item is StaleMemory => item !== null)
         );
+      } catch (error) {
+        console.error(`[StaleMemoryInjector] Unexpected error for level ${level}:`, error);
+        continue;
       }
     }
 

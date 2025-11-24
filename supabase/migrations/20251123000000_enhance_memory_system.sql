@@ -413,6 +413,7 @@ RETURNS TABLE(
   avg_cagr NUMERIC,
   total_runs INTEGER,
   confidence_score NUMERIC,
+  run_ids UUID[],
   last_updated TIMESTAMPTZ
 ) AS $$
 BEGIN
@@ -424,6 +425,7 @@ BEGIN
     rpp.avg_cagr,
     rpp.total_runs,
     rpp.confidence_score,
+    rpp.run_ids,
     rpp.last_updated
   FROM regime_profile_performance rpp
   WHERE rpp.workspace_id = match_workspace_id

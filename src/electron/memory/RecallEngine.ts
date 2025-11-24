@@ -46,6 +46,7 @@ interface MemoryResult {
   relevanceScore: number;
   source: 'cache' | 'local' | 'remote';
   createdAt: string;
+  protection_level: number;
 }
 
 export interface RecallResult {
@@ -182,8 +183,13 @@ export class RecallEngine {
       results = candidates.slice(0, limit);
     }
 
-    // Update access metrics
-    await this.updateAccessMetrics(results.map((r) => r.id));
+    // CRASH FIX #5: Update access metrics with error handling (don't await, handle rejection)
+    const memoryIds = results?.map?.((r) => r.id) || [];
+    if (memoryIds.length > 0) {
+      this.updateAccessMetrics(memoryIds).catch((err) => {
+        console.error('[RecallEngine] Failed to update access metrics:', err);
+      });
+    }
 
     const recallResult: RecallResult = {
       memories: results,
@@ -263,7 +269,8 @@ export class RecallEngine {
           mc.symbols,
           mc.importance_score as importance,
           bm25(memory_fts) as bm25_score,
-          mc.created_at as createdAt
+          mc.created_at as createdAt,
+          COALESCE(mc.protection_level, 2) as protection_level
         FROM memory_fts
         JOIN memory_cache mc ON memory_fts.id = mc.id
         WHERE memory_fts MATCH ?
@@ -284,9 +291,15 @@ export class RecallEngine {
       const results = stmt.all(...params) as any[];
 
       return results.map((r) => {
-        const symbols = r.symbols
-          ? safeJSONParse<string[]>(r.symbols, null)
-          : null;
+        // Handle symbols: either array or JSON string
+        let symbols = null;
+        if (r.symbols) {
+          if (Array.isArray(r.symbols)) {
+            symbols = r.symbols;
+          } else if (typeof r.symbols === 'string') {
+            symbols = safeJSONParse<string[]>(r.symbols, null);
+          }
+        }
 
         return {
           id: r.id,
@@ -300,6 +313,7 @@ export class RecallEngine {
           bm25Score: r.bm25_score,
           source: 'local' as const,
           createdAt: new Date(r.createdAt).toISOString(),
+          protection_level: r.protection_level,
         };
       });
     } catch (error) {
@@ -368,6 +382,7 @@ export class RecallEngine {
         vectorScore: r.vector_score,
         source: 'remote' as const,
         createdAt: r.created_at,
+        protection_level: r.protection_level || 2,
       }));
     } catch (error) {
       console.error('[RecallEngine] Vector search error:', error);
@@ -508,28 +523,48 @@ export class RecallEngine {
   async warmCache(workspaceId: string): Promise<void> {
     console.log('[RecallEngine] Warming cache for workspace:', workspaceId);
 
-    // Pre-load high-importance memories into cache
-    const stmt = this.localDb.prepare(`
-      SELECT * FROM memory_cache
-      WHERE workspace_id = ? AND importance_score > 0.7
-      ORDER BY importance_score DESC, last_accessed DESC
-      LIMIT 50
-    `);
-
-    const hotMemories = stmt.all(workspaceId);
-
-    // Pre-compute only top 3 most critical queries to populate cache (performance optimization)
-    const commonQueries = [
-      'entry rules',
-      'risk management',
-      'mistakes to avoid',
-    ];
-
-    for (const q of commonQueries) {
-      await this.recall(q, workspaceId, { limit: 5, useCache: true, rerank: false });
+    // CRASH FIX #7: Input validation for workspaceId
+    if (!workspaceId || typeof workspaceId !== 'string') {
+      console.error('[RecallEngine] Invalid workspaceId for cache warming');
+      return;
     }
 
-    console.log(`[RecallEngine] Cache warmed with ${hotMemories.length} hot memories`);
+    try {
+      // Pre-load high-importance memories into cache
+      const stmt = this.localDb.prepare(`
+        SELECT * FROM memory_cache
+        WHERE workspace_id = ? AND importance_score > 0.7
+        ORDER BY importance_score DESC, last_accessed DESC
+        LIMIT 50
+      `);
+
+      // CRASH FIX #8: Null/type check on stmt.all result
+      const hotMemories = stmt.all(workspaceId);
+      if (!Array.isArray(hotMemories)) {
+        console.error('[RecallEngine] stmt.all did not return array');
+        return;
+      }
+
+      // Pre-compute only top 3 most critical queries to populate cache (performance optimization)
+      const commonQueries = [
+        'entry rules',
+        'risk management',
+        'mistakes to avoid',
+      ];
+
+      for (const q of commonQueries) {
+        if (!q || typeof q !== 'string') continue;
+        try {
+          await this.recall(q, workspaceId, { limit: 5, useCache: true, rerank: false });
+        } catch (error) {
+          console.error(`[RecallEngine] Error warming cache for query "${q}":`, error);
+        }
+      }
+
+      console.log(`[RecallEngine] Cache warmed with ${hotMemories.length} hot memories`);
+    } catch (error) {
+      console.error('[RecallEngine] Error during cache warming:', error);
+    }
   }
 
   /**
@@ -600,7 +635,12 @@ export class RecallEngine {
       formatted += '\n';
     }
 
-    formatted += `*Retrieved ${memories.length} memories in ${memories[0]?.source === 'cache' ? '<1' : this.queryCache.size}ms*\n`;
+    // CRASH FIX #6: Array bounds check before accessing memories[0]
+    let sourceInfo = '<unknown>';
+    if (memories && memories.length > 0 && memories[0]) {
+      sourceInfo = memories[0].source === 'cache' ? '<1' : `${this.queryCache.size}`;
+    }
+    formatted += `*Retrieved ${memories.length} memories in ${sourceInfo}ms*\n`;
 
     return formatted;
   }

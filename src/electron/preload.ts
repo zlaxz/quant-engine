@@ -46,6 +46,10 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.invoke('memory:warmCache', workspaceId),
   memoryDaemonStatus: () =>
     ipcRenderer.invoke('memory:daemon:status'),
+  checkMemoryTriggers: (message: string, workspaceId: string) =>
+    ipcRenderer.invoke('memory:check-triggers', message, workspaceId),
+  markMemoriesRecalled: (memoryIds: string[]) =>
+    ipcRenderer.invoke('memory:mark-recalled', memoryIds),
 });
 
 // The ElectronAPI type is defined in src/types/electron.d.ts as a global type

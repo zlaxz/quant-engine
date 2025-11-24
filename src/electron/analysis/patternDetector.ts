@@ -130,60 +130,105 @@ export class PatternDetector {
   }
 
   private textSimilarity(text1: string, text2: string): number {
-    const words1 = new Set(text1.toLowerCase().split(/\s+/));
-    const words2 = new Set(text2.toLowerCase().split(/\s+/));
-    const intersection = new Set([...words1].filter((x) => words2.has(x)));
-    const union = new Set([...words1, ...words2]);
-    return intersection.size / union.size;
+    // CRASH FIX #9: Input validation and division by zero protection
+    if (!text1 || !text2 || typeof text1 !== 'string' || typeof text2 !== 'string') {
+      return 0;
+    }
+
+    try {
+      const words1 = new Set(text1.toLowerCase().split(/\s+/).filter(w => w.length > 0));
+      const words2 = new Set(text2.toLowerCase().split(/\s+/).filter(w => w.length > 0));
+      const intersection = new Set([...words1].filter((x) => words2.has(x)));
+      const union = new Set([...words1, ...words2]);
+
+      // CRASH FIX #10: Prevent division by zero
+      if (union.size === 0) {
+        return 0;
+      }
+
+      return intersection.size / union.size;
+    } catch (error) {
+      console.error('[PatternDetector] Text similarity calculation error:', error);
+      return 0;
+    }
   }
 
   /**
    * Detect regime-profile performance correlations
    */
   async detectRegimeProfilePatterns(workspaceId: string): Promise<Pattern[]> {
-    const { data } = await this.supabase.rpc('get_regime_performance', {
-      match_workspace_id: workspaceId,
-      min_confidence: 0.5,
-    });
-
-    if (!data || data.length === 0) return [];
-
-    const patterns: Pattern[] = [];
-
-    // Group by profile, find regime dependencies
-    for (let profile = 1; profile <= 6; profile++) {
-      const profileData = data.filter((d: any) => d.profile_id === profile);
-
-      if (profileData.length === 0) continue;
-
-      // Find best and worst regimes
-      const sorted = [...profileData].sort((a: any, b: any) => (b.avg_sharpe || 0) - (a.avg_sharpe || 0));
-      if (sorted.length === 0) continue;
-
-      const best = sorted[0];
-      const worst = sorted[sorted.length - 1];
-
-      if (best.total_runs >= 5 && best.avg_sharpe > 0.5) {
-        patterns.push({
-          type: 'regime_profile_correlation',
-          description: `Profile ${profile} performs best in Regime ${best.regime_id} (Sharpe ${best.avg_sharpe.toFixed(2)})`,
-          evidence_count: best.total_runs,
-          confidence: best.confidence_score || 0.5,
-          supporting_ids: best.run_ids || [],
-        });
+    try {
+      // CRASH FIX #11: Input validation
+      if (!workspaceId || typeof workspaceId !== 'string') {
+        console.error('[PatternDetector] Invalid workspaceId for regime pattern detection');
+        return [];
       }
 
-      if (worst.total_runs >= 5 && worst.avg_sharpe < 0) {
-        patterns.push({
-          type: 'regime_profile_correlation',
-          description: `Profile ${profile} FAILS in Regime ${worst.regime_id} (Sharpe ${worst.avg_sharpe.toFixed(2)})`,
-          evidence_count: worst.total_runs,
-          confidence: worst.confidence_score || 0.5,
-          supporting_ids: worst.run_ids || [],
-        });
+      const { data, error } = await this.supabase.rpc('get_regime_performance', {
+        match_workspace_id: workspaceId,
+        min_confidence: 0.5,
+      });
+
+      // CRASH FIX #12: Handle RPC errors
+      if (error) {
+        console.error('[PatternDetector] RPC error in detectRegimeProfilePatterns:', error);
+        return [];
       }
+
+      // CRASH FIX #13: Type checking on data
+      if (!Array.isArray(data) || data.length === 0) {
+        return [];
+      }
+
+      const patterns: Pattern[] = [];
+
+      // Group by profile, find regime dependencies
+      for (let profile = 1; profile <= 6; profile++) {
+        const profileData = data.filter((d: any) => d?.profile_id === profile);
+
+        if (profileData.length === 0) continue;
+
+        // Find best and worst regimes
+        const sorted = [...profileData].sort((a: any, b: any) => (b?.avg_sharpe || 0) - (a?.avg_sharpe || 0));
+        if (sorted.length === 0) continue;
+
+        // CRASH FIX #14: Array bounds checks before accessing sorted[0] and sorted[length-1]
+        const best = sorted[0];
+        const worst = sorted[sorted.length - 1];
+
+        if (!best || !worst) {
+          console.warn(`[PatternDetector] Invalid best/worst data for profile ${profile}`);
+          continue;
+        }
+
+        // CRASH FIX #15: Null checks and type validation before property access
+        if (best.total_runs >= 5 && typeof best.avg_sharpe === 'number' && best.avg_sharpe > 0.5) {
+          const bestRegimeId = best.regime_id ?? 'unknown';
+          patterns.push({
+            type: 'regime_profile_correlation',
+            description: `Profile ${profile} performs best in Regime ${bestRegimeId} (Sharpe ${best.avg_sharpe.toFixed(2)})`,
+            evidence_count: best.total_runs,
+            confidence: best.confidence_score || 0.5,
+            supporting_ids: Array.isArray(best.run_ids) ? best.run_ids : [],
+          });
+        }
+
+        if (worst.total_runs >= 5 && typeof worst.avg_sharpe === 'number' && worst.avg_sharpe < 0) {
+          const worstRegimeId = worst.regime_id ?? 'unknown';
+          patterns.push({
+            type: 'regime_profile_correlation',
+            description: `Profile ${profile} FAILS in Regime ${worstRegimeId} (Sharpe ${worst.avg_sharpe.toFixed(2)})`,
+            evidence_count: worst.total_runs,
+            confidence: worst.confidence_score || 0.5,
+            supporting_ids: Array.isArray(worst.run_ids) ? worst.run_ids : [],
+          });
+        }
+      }
+
+      return patterns;
+    } catch (error) {
+      console.error('[PatternDetector] Error in detectRegimeProfilePatterns:', error);
+      return [];
     }
-
-    return patterns;
   }
 }

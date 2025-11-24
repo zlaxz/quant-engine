@@ -194,7 +194,16 @@ export class MemoryDaemon extends EventEmitter {
       }
     }
 
+    // CRASH FIX #4: Array bounds check before accessing last element
+    if (messages.length === 0) {
+      console.warn('[MemoryDaemon] No messages to extract state from');
+      return;
+    }
     const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || !lastMessage.id) {
+      console.error('[MemoryDaemon] Invalid last message structure');
+      return;
+    }
     this.updateExtractionState(sessionId, workspaceId, lastMessage.id, messages.length);
   }
 
@@ -312,7 +321,7 @@ export class MemoryDaemon extends EventEmitter {
               memory.importance,
               memory.type,
               memory.category || null,
-              memory.symbols ? JSON.stringify(memory.symbols) : null,
+              memory.symbols ? memory.symbols : null,
               now,
               now
             );
@@ -322,10 +331,28 @@ export class MemoryDaemon extends EventEmitter {
         }
       );
 
-      const transactionData = data.map((item: any, i: number) => ({
-        memory: memoriesWithEmbeddings[i],
-        id: item.id,
-      }));
+      // CRASH FIX #2: Array bounds check - validate data array exists and has length
+      if (!data || data.length === 0) {
+        console.warn('[MemoryDaemon] No data returned from insert, skipping transaction');
+        return;
+      }
+
+      const transactionData = data.map((item: any, i: number) => {
+        // CRASH FIX #3: Bounds check when accessing memoriesWithEmbeddings
+        if (i >= memoriesWithEmbeddings.length) {
+          console.error(`[MemoryDaemon] Index ${i} out of bounds for memoriesWithEmbeddings (length: ${memoriesWithEmbeddings.length})`);
+          return null;
+        }
+        return {
+          memory: memoriesWithEmbeddings[i],
+          id: item.id,
+        };
+      }).filter((item): item is any => item !== null);
+
+      if (transactionData.length === 0) {
+        console.warn('[MemoryDaemon] No valid transaction data after filtering');
+        return;
+      }
 
       try {
         insertTransaction(transactionData);
@@ -335,7 +362,7 @@ export class MemoryDaemon extends EventEmitter {
     }
   }
 
-  // FIX #3: Error handling in embedding generation
+  // FIX #3: Error handling in embedding generation with array bounds checking
   private async generateEmbedding(text: string): Promise<number[] | null> {
     if (!this.openaiClient) return null;
 
@@ -345,7 +372,19 @@ export class MemoryDaemon extends EventEmitter {
         input: text.trim(),
       });
 
-      return response.data[0].embedding;
+      // CRASH FIX #1: Array bounds check before accessing [0]
+      if (!response.data || response.data.length === 0) {
+        console.error('[MemoryDaemon] Invalid embedding response - no data');
+        return null;
+      }
+
+      const embedding = response.data[0]?.embedding;
+      if (!embedding || !Array.isArray(embedding)) {
+        console.error('[MemoryDaemon] Invalid embedding structure');
+        return null;
+      }
+
+      return embedding;
     } catch (error) {
       console.error('[MemoryDaemon] Embedding generation error:', error);
       return null;

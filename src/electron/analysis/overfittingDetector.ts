@@ -159,7 +159,11 @@ export class OverfittingDetector {
           model: 'text-embedding-3-small',
           input: description,
         });
-        strategyEmbedding = response.data[0]?.embedding || null;
+
+        // CRASH FIX #16: Array bounds check before accessing response.data[0]
+        if (response.data && response.data.length > 0 && response.data[0]) {
+          strategyEmbedding = response.data[0].embedding || null;
+        }
       } catch (error) {
         console.error('[OverfittingDetector] Failed to generate strategy embedding:', error);
       }
@@ -202,14 +206,33 @@ export class OverfittingDetector {
     }
 
     try {
+      // CRASH FIX #17: Input validation
+      if (!strategyDescription || typeof strategyDescription !== 'string') {
+        console.error('[OverfittingDetector] Invalid strategyDescription');
+        return [];
+      }
+      if (!workspaceId || typeof workspaceId !== 'string') {
+        console.error('[OverfittingDetector] Invalid workspaceId');
+        return [];
+      }
+
       // Generate embedding for proposed approach
       const response = await this.openaiClient.embeddings.create({
         model: 'text-embedding-3-small',
         input: strategyDescription,
       });
 
+      // CRASH FIX #18: Array bounds check before accessing response.data[0]
+      if (!response.data || response.data.length === 0) {
+        console.error('[OverfittingDetector] No embedding data returned');
+        return [];
+      }
+
       const embedding = response.data[0]?.embedding;
-      if (!embedding) return [];
+      if (!embedding || !Array.isArray(embedding)) {
+        console.error('[OverfittingDetector] Invalid embedding structure');
+        return [];
+      }
 
       // Query for similar failed approaches
       const { data, error } = await this.supabase.rpc('find_similar_warnings', {
@@ -218,12 +241,19 @@ export class OverfittingDetector {
         threshold: 0.7,
       });
 
+      // CRASH FIX #19: Error handling for RPC call
       if (error) {
         console.error('[OverfittingDetector] Error querying similar failures:', error);
         return [];
       }
 
-      return data || [];
+      // CRASH FIX #20: Type checking on returned data
+      if (!Array.isArray(data)) {
+        console.error('[OverfittingDetector] RPC returned non-array data');
+        return [];
+      }
+
+      return data;
     } catch (error) {
       console.error('[OverfittingDetector] Error in checkSimilarFailures:', error);
       return [];

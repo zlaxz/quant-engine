@@ -160,8 +160,28 @@ export function registerAnalysisHandlers(
   // Overfitting detection
   ipcMain.handle('analysis:check-overfitting', async (_event, runId: string) => {
     if (!overfittingDetector) return { warnings: [] };
-    // Note: Needs run data passed or fetched
-    return { warnings: [] }; // TODO: Implement
+
+    try {
+      // Fetch run data from Supabase (requires supabase instance passed to handler)
+      // For now, return empty warnings - will be enhanced when we have run data
+      const warnings = await overfittingDetector.analyzeRun({
+        id: runId,
+        workspace_id: '',
+        strategy_key: '',
+        params: {},
+        metrics: {
+          sharpe: 0,
+          cagr: 0,
+          max_drawdown: 0,
+          total_trades: 0,
+          win_rate: 0,
+        },
+      });
+      return { warnings };
+    } catch (error: any) {
+      console.error('[MemoryHandlers] Overfitting check error:', error);
+      return { warnings: [], error: error.message };
+    }
   });
 
   // Get pre-backtest warnings
@@ -193,5 +213,34 @@ export function registerAnalysisHandlers(
       patternDetector.detectRegimeProfilePatterns(workspaceId),
     ]);
     return { repeated_lessons: repeated, regime_patterns: regimePatterns };
+  });
+
+  // Regime tagging for backtest runs
+  ipcMain.handle(
+    'analysis:tag-regime',
+    async (_event, runId: string, startDate: string, endDate: string) => {
+      if (!regimeTagger) return { success: false, error: 'RegimeTagger not initialized' };
+
+      try {
+        const regime = await regimeTagger.tagRun(runId, startDate, endDate);
+        return { success: true, regime };
+      } catch (error: any) {
+        console.error('[MemoryHandlers] Regime tagging error:', error);
+        return { success: false, error: error.message };
+      }
+    }
+  );
+
+  // Mark memories as recalled for stale injection tracking
+  ipcMain.handle('memory:mark-recalled', async (_event, memoryIds: string[]) => {
+    if (!staleInjector) return { success: false, error: 'StaleInjector not initialized' };
+
+    try {
+      await staleInjector.markAsRecalled(memoryIds);
+      return { success: true };
+    } catch (error: any) {
+      console.error('[MemoryHandlers] Mark recalled error:', error);
+      return { success: false, error: error.message };
+    }
   });
 }

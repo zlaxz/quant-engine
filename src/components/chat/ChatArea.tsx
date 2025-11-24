@@ -159,18 +159,30 @@ export const ChatArea = () => {
 
         if (selectedWorkspaceId) {
           try {
-            const result = await window.electron.memoryRecall(memoryQuery, selectedWorkspaceId, {
-              limit: 10,
-              minImportance: 0.4,
-              useCache: true,
-              rerank: true,
-            });
+            // Parallel: semantic recall + trigger-based recall
+            const [recallResult, triggeredMemories] = await Promise.all([
+              window.electron.memoryRecall(memoryQuery, selectedWorkspaceId, {
+                limit: 10,
+                minImportance: 0.4,
+                useCache: true,
+                rerank: true,
+              }),
+              window.electron.checkMemoryTriggers(messageContent, selectedWorkspaceId).catch(() => []),
+            ]);
 
-            // Validate result structure
-            if (result && typeof result === 'object') {
-              memoryRecallResult = result;
+            // Validate recall result structure
+            if (recallResult && typeof recallResult === 'object') {
+              memoryRecallResult = recallResult;
             } else {
               console.warn('[ChatArea] Invalid memory recall result structure');
+            }
+
+            // Merge triggered memories (deduplicate by ID)
+            if (Array.isArray(triggeredMemories) && triggeredMemories.length > 0) {
+              const existingIds = new Set(memoryRecallResult.memories.map((m: any) => m.id));
+              const newTriggered = triggeredMemories.filter((m: any) => !existingIds.has(m.id));
+              memoryRecallResult.memories = [...memoryRecallResult.memories, ...newTriggered];
+              console.log(`[ChatArea] Added ${newTriggered.length} trigger-based memories to ${existingIds.size} recalled memories`);
             }
           } catch (memoryError) {
             console.error('[ChatArea] Memory recall failed, continuing without memories:', memoryError);
@@ -216,12 +228,8 @@ export const ChatArea = () => {
           { role: 'user', content: messageContent }
         ];
 
-        // Call LLM via Electron IPC (removed - now using direct params)
-        const response = await chatPrimary({
-          sessionId: selectedSessionId,
-          workspaceId: selectedWorkspaceId,
-          content: messageContent
-        });
+        // Call LLM via Electron IPC with correct signature
+        const response = await chatPrimary(selectedSessionId, selectedWorkspaceId, messageContent);
 
         // Add assistant response to UI
         const assistantMessage: Message = {
