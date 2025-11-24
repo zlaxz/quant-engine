@@ -45,6 +45,14 @@ export const MODELS = {
     description: 'Swarm model for parallel agent tasks and specialist workflows'
   },
 
+  // Architect tier - complex code mutation and evolutionary strategy design
+  // Uses Gemini 3 Pro for advanced code understanding and generation
+  ARCHITECT: {
+    provider: (import.meta.env?.VITE_ARCHITECT_PROVIDER || 'google') as ProviderName,
+    model: import.meta.env?.VITE_ARCHITECT_MODEL || 'gemini-3-pro-preview',
+    description: 'The Architect - for complex code mutation and evolutionary strategy design'
+  },
+
   // Helper tier - quick responses, no tools needed
   HELPER: {
     provider: 'openai' as ProviderName,

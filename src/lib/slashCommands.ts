@@ -20,7 +20,14 @@ import { selectKeyRuns, buildRunPortfolioSummary, assembleAgentInputs } from '@/
 import { buildAutoAnalyzePrompt } from '@/prompts/autoAnalyzePrompt';
 import { buildDefaultReportTitle, extractSummaryFromReport, buildTagsFromReport } from '@/lib/researchReports';
 import { runRedTeamAuditForFile } from '@/lib/redTeamAudit';
-import { runSwarm, type SwarmPrompt } from '@/lib/swarmClient';
+import { runSwarm, dispatchMassiveSwarm, type SwarmPrompt } from '@/lib/swarmClient';
+import {
+  getMutationAssignments,
+  buildMutationPrompt,
+  parseEvolveCommand,
+  MUTATION_AGENT_SYSTEM,
+  EVOLVE_STRATEGY_CONFIG,
+} from '@/prompts/evolutionPrompts';
 import {
   buildPatternMinerAgentPrompt,
   buildCuratorAgentPrompt,
@@ -2462,6 +2469,132 @@ async function handleResume(args: string, context: CommandContext): Promise<Comm
 }
 
 /**
+ * /evolve_strategy command - run genetic algorithm evolution on a strategy
+ * Usage: /evolve_strategy <strategy_ref> [--agents=N] [--generations=N]
+ * Examples:
+ *   /evolve_strategy path:strategies/skew_convexity.py
+ *   /evolve_strategy path:src/strategies/momentum.py --agents=30
+ *   /evolve_strategy skew_convexity_v1 (looks up in database)
+ */
+async function handleEvolveStrategy(args: string, context: CommandContext): Promise<CommandResult> {
+  const { strategyRef, agentCount } = parseEvolveCommand(args);
+
+  if (!strategyRef) {
+    return {
+      success: false,
+      message: `Usage: ${EVOLVE_STRATEGY_CONFIG.usage}\n\nExamples:\n  /evolve_strategy path:strategies/skew_convexity.py\n  /evolve_strategy path:src/strategies/momentum.py --agents=30\n  /evolve_strategy skew_convexity_v1 (database lookup)`,
+    };
+  }
+
+  try {
+    let strategyCode = '';
+    let strategyDescription = strategyRef;
+    let strategyPath = '';
+
+    // Check if this is a file path reference (path:...)
+    if (strategyRef.startsWith('path:')) {
+      strategyPath = strategyRef.slice(5); // Remove 'path:' prefix
+
+      // Fetch strategy code via read-file edge function
+      const { data: fileData, error: fileError } = await supabase.functions.invoke('read-file', {
+        body: { path: strategyPath },
+      });
+
+      if (fileError || !fileData?.success) {
+        return {
+          success: false,
+          message: `❌ Failed to read strategy file: ${fileError?.message || fileData?.error || 'File not found'}\n\nMake sure the path exists in the rotation-engine codebase.`,
+        };
+      }
+
+      strategyCode = fileData.content;
+      strategyDescription = `Strategy file: ${strategyPath}`;
+      console.log(`[EvolveStrategy] Loaded ${strategyCode.length} chars from ${strategyPath}`);
+    } else {
+      // Try to fetch strategy from database
+      const { data: strategyData } = await supabase
+        .from('strategies')
+        .select('code, description')
+        .eq('key', strategyRef)
+        .maybeSingle();
+
+      if (strategyData?.code) {
+        strategyCode = strategyData.code;
+        strategyDescription = strategyData.description || strategyRef;
+      } else {
+        return {
+          success: false,
+          message: `❌ Strategy "${strategyRef}" not found.\n\nUse path: prefix for file-based strategies:\n  /evolve_strategy path:strategies/my_strategy.py`,
+        };
+      }
+    }
+
+    // Get mutation assignments for each agent
+    const mutations = getMutationAssignments(agentCount);
+
+    // Build input contexts for each agent
+    const inputContexts = mutations.map((mutation, idx) =>
+      buildMutationPrompt(strategyCode, strategyDescription, mutation, idx, agentCount)
+    );
+
+    // Dispatch the massive swarm with shared_context for code caching
+    const { jobId, taskCount, estimatedDuration } = await dispatchMassiveSwarm({
+      workspaceId: context.workspaceId,
+      objective: `Evolve strategy: ${strategyRef}\n\nMutate this code to increase convexity. Vary lookback periods, standard deviations, and exit logic.\n\nConstraint: Output VALID Python code only.`,
+      agentCount,
+      mode: 'evolution',
+      config: {
+        systemPrompt: MUTATION_AGENT_SYSTEM,
+        agentRoles: mutations,
+        inputContexts,
+        // Pass code to shared_context for caching (avoids re-uploading for each agent)
+        sharedContext: {
+          code_content: strategyCode,
+          strategy_path: strategyPath || strategyRef,
+          code_hash: hashCode(strategyCode),
+        },
+      },
+    });
+
+    // Return success with job ID for SwarmMonitor
+    // SECURITY: Code mutations are presented as TEXT SUGGESTIONS only
+    // User must explicitly click "Apply" to write to disk
+    return {
+      success: true,
+      message: JSON.stringify({
+        type: 'swarm_job',
+        jobId,
+        objective: `Evolving ${strategyPath || strategyRef}`,
+        agentCount: taskCount,
+        estimatedDuration,
+        mode: 'evolution',
+        strategyPath: strategyPath || undefined,
+      }),
+      data: { jobId, taskCount, mode: 'evolution', strategyPath },
+    };
+  } catch (error: any) {
+    console.error('Evolve strategy command error:', error);
+    return {
+      success: false,
+      message: `❌ Failed to start evolution: ${error.message || 'Unknown error'}`,
+    };
+  }
+}
+
+/**
+ * Simple hash function for code content (for cache invalidation)
+ */
+function hashCode(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return `hash_${Math.abs(hash).toString(16)}`;
+}
+
+/**
  * /help command - show available commands
  */
 async function handleHelp(): Promise<CommandResult> {
@@ -2826,6 +2959,13 @@ export const commands: Record<string, Command> = {
     usage: '/create_profile strategy:<key> name:<name>',
     handler: handleCreateProfile,
     tier: undefined,
+  },
+  evolve_strategy: {
+    name: 'evolve_strategy',
+    description: 'Run genetic algorithm evolution on a strategy using 20+ mutation agents',
+    usage: '/evolve_strategy <strategy_key> [--agents=N]',
+    handler: handleEvolveStrategy,
+    tier: 'swarm', // Massive swarm mode
   },
   help: {
     name: 'help',

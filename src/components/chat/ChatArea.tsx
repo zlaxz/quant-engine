@@ -19,6 +19,8 @@ import { getSuggestions, type AppState } from '@/lib/contextualSuggestions';
 import { CommandSuggestions } from './CommandSuggestions';
 import { RunResultCard } from './RunResultCard';
 import { isBacktestResult } from '@/types/chat';
+import { SwarmStatusBar } from '@/components/swarm';
+import { getJobProgress, type SwarmProgress } from '@/lib/swarmClient';
 
 interface Message {
   id: string;
@@ -51,6 +53,11 @@ export const ChatArea = () => {
   }>>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [activeSwarmJob, setActiveSwarmJob] = useState<{
+    jobId: string;
+    objective: string;
+    progress: SwarmProgress;
+  } | null>(null);
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -248,6 +255,26 @@ export const ChatArea = () => {
           } else if (commandName === 'note') {
             setAppState(prev => ({ ...prev, lastAction: 'insight' }));
             setShowContextualSuggestions(true);
+          }
+
+          // Check if this is a swarm job result (e.g., /evolve_strategy)
+          if (result.data?.jobId && result.data?.mode) {
+            try {
+              // Parse the swarm job details from the result message
+              const swarmJobData = JSON.parse(result.message);
+              if (swarmJobData.type === 'swarm_job') {
+                // Fetch initial progress and activate swarm monitor
+                const initialProgress = await getJobProgress(result.data.jobId);
+                setActiveSwarmJob({
+                  jobId: result.data.jobId,
+                  objective: swarmJobData.objective || `Swarm: ${result.data.mode}`,
+                  progress: initialProgress,
+                });
+              }
+            } catch (parseError) {
+              // Not a JSON swarm job message, that's fine
+              console.log('[ChatArea] Not a swarm job result, continuing normally');
+            }
           }
         }
 
@@ -528,8 +555,33 @@ export const ChatArea = () => {
               );
             })}
 
+            {/* Swarm Monitor - shows when a massive swarm job is active */}
+            {activeSwarmJob && (
+              <SwarmStatusBar
+                jobId={activeSwarmJob.jobId}
+                objective={activeSwarmJob.objective}
+                progress={activeSwarmJob.progress}
+                onComplete={(synthesis) => {
+                  // Add synthesis result as a message
+                  if (synthesis) {
+                    const synthesisMessage: Message = {
+                      id: `swarm-synthesis-${Date.now()}`,
+                      role: 'assistant',
+                      content: `## Swarm Synthesis\n\n${synthesis}`,
+                      created_at: new Date().toISOString(),
+                    };
+                    setMessages(prev => [...prev, synthesisMessage]);
+                  }
+                  // Clear active swarm job
+                  setActiveSwarmJob(null);
+                  setIsLoading(false);
+                }}
+                className="mb-4"
+              />
+            )}
+
             {/* Thinking/Tool indicator with real-time progress */}
-            {isLoading && (
+            {isLoading && !activeSwarmJob && (
               <div className="flex justify-start">
                 <div className="bg-muted rounded-lg px-4 py-3 w-full max-w-[90%]">
                   {/* Streaming content */}

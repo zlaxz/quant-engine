@@ -25,6 +25,16 @@ verify_jwt = false
 [functions.chat-swarm-parallel]
 verify_jwt = false
 
+# Massive Swarm Architecture (50+ parallel agents)
+[functions.swarm-dispatch]
+verify_jwt = false
+
+[functions.swarm-worker]
+verify_jwt = false
+
+[functions.swarm-synthesize]
+verify_jwt = false
+
 [functions.backtest-run]
 verify_jwt = false
 
