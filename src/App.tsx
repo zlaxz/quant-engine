@@ -12,6 +12,7 @@ import NotFound from "./pages/NotFound";
 import { FirstLaunchModal } from './components/settings/FirstLaunchModal';
 import { isRunningInElectron } from './lib/electronClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { CommandPalette } from '@/components/ui/CommandPalette';
 
 const queryClient = new QueryClient();
 
@@ -68,6 +69,7 @@ const App = () => {
           <ChatProvider>
             <Toaster />
             <Sonner />
+            <CommandPalette />
             <HashRouter>
               <Routes>
                 <Route path="/" element={<Index />} />

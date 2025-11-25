@@ -10,6 +10,7 @@ import { registerFileOperationHandlers } from './ipc-handlers/fileOperations';
 import { registerPythonExecutionHandlers } from './ipc-handlers/pythonExecution';
 import { registerLlmHandlers } from './ipc-handlers/llmClient';
 import { registerMemoryHandlers, setMemoryServices, registerAnalysisHandlers } from './ipc-handlers/memoryHandlers';
+import { registerDaemonHandlers, stopDaemonOnExit } from './ipc-handlers/daemonManager';
 import { setFileSystemRoot } from './services/FileSystemService';
 import { MemoryDaemon } from './memory/MemoryDaemon';
 import { RecallEngine } from './memory/RecallEngine';
@@ -30,6 +31,12 @@ const store = new Store<{
   'apiKeys.gemini'?: string;
   'apiKeys.openai'?: string;
   'apiKeys.deepseek'?: string;
+  // Infrastructure settings
+  'infra.massiveApiKey'?: string;
+  'infra.polygonApiKey'?: string;
+  'infra.telegramBotToken'?: string;
+  'infra.telegramChatId'?: string;
+  'infra.dataDrivePath'?: string;
 }>();
 
 let mainWindow: BrowserWindow | null = null;
@@ -145,13 +152,103 @@ app.whenReady().then(() => {
     store.set('apiKeys.gemini', keys.gemini);
     store.set('apiKeys.openai', keys.openai);
     store.set('apiKeys.deepseek', keys.deepseek);
-    
+
     // Update environment variables for edge functions
     if (keys.gemini) process.env.GEMINI_API_KEY = keys.gemini;
     if (keys.openai) process.env.OPENAI_API_KEY = keys.openai;
     if (keys.deepseek) process.env.DEEPSEEK_API_KEY = keys.deepseek;
-    
+
     return { success: true };
+  });
+
+  // Infrastructure settings handlers
+  ipcMain.handle('get-infra-config', () => {
+    return {
+      massiveApiKey: store.get('infra.massiveApiKey') || '',
+      polygonApiKey: store.get('infra.polygonApiKey') || '',
+      telegramBotToken: store.get('infra.telegramBotToken') || '',
+      telegramChatId: store.get('infra.telegramChatId') || '',
+      dataDrivePath: store.get('infra.dataDrivePath') || '/Volumes/VelocityData/market_data',
+    };
+  });
+
+  ipcMain.handle('set-infra-config', (_event, config: {
+    massiveApiKey: string;
+    polygonApiKey: string;
+    telegramBotToken: string;
+    telegramChatId: string;
+    dataDrivePath: string;
+  }) => {
+    store.set('infra.massiveApiKey', config.massiveApiKey);
+    store.set('infra.polygonApiKey', config.polygonApiKey);
+    store.set('infra.telegramBotToken', config.telegramBotToken);
+    store.set('infra.telegramChatId', config.telegramChatId);
+    store.set('infra.dataDrivePath', config.dataDrivePath);
+
+    // Update environment variables
+    if (config.massiveApiKey) process.env.AWS_ACCESS_KEY_ID = config.massiveApiKey;
+    if (config.polygonApiKey) {
+      process.env.POLYGON_API_KEY = config.polygonApiKey;
+      process.env.AWS_SECRET_ACCESS_KEY = config.polygonApiKey;
+    }
+    if (config.dataDrivePath) process.env.DATA_DIR = config.dataDrivePath;
+
+    return { success: true };
+  });
+
+  ipcMain.handle('test-data-drive', async (_event, drivePath: string) => {
+    try {
+      if (!fs.existsSync(drivePath)) {
+        return { success: false, error: 'Path does not exist' };
+      }
+      const stats = fs.statSync(drivePath);
+      if (!stats.isDirectory()) {
+        return { success: false, error: 'Path is not a directory' };
+      }
+      // Count files in directory
+      const files = fs.readdirSync(drivePath);
+      return { success: true, fileCount: files.length };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('test-polygon-api', async (_event, apiKey: string) => {
+    try {
+      const response = await fetch(
+        `https://api.polygon.io/v2/aggs/ticker/SPY/prev?apiKey=${apiKey}`
+      );
+      if (response.ok) {
+        return { success: true };
+      } else {
+        const data = await response.json();
+        return { success: false, error: data.error || 'API request failed' };
+      }
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('test-telegram', async (_event, botToken: string, chatId: string) => {
+    try {
+      const message = '🧪 Test from Quant Chat Workbench';
+      const response = await fetch(
+        `https://api.telegram.org/bot${botToken}/sendMessage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text: message }),
+        }
+      );
+      const data = await response.json();
+      if (data.ok) {
+        return { success: true };
+      } else {
+        return { success: false, error: data.description || 'Telegram API failed' };
+      }
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   });
 
   // Initialize memory system
@@ -184,6 +281,7 @@ app.whenReady().then(() => {
   registerFileOperationHandlers();
   registerPythonExecutionHandlers();
   registerLlmHandlers();
+  registerDaemonHandlers();
 
   // Connect memory services to handlers BEFORE registering handlers
   setMemoryServices(memoryDaemon, recallEngine);
@@ -219,6 +317,9 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', async () => {
+  // Stop research daemon (Night Shift)
+  stopDaemonOnExit();
+
   // Stop memory daemon gracefully
   if (memoryDaemon) {
     await memoryDaemon.stop();

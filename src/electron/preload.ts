@@ -37,6 +37,19 @@ contextBridge.exposeInMainWorld('electron', {
   getAPIKeys: () => ipcRenderer.invoke('get-api-keys'),
   setAPIKeys: (keys: { gemini: string; openai: string; deepseek: string }) => ipcRenderer.invoke('set-api-keys', keys),
 
+  // Infrastructure Settings
+  getInfraConfig: () => ipcRenderer.invoke('get-infra-config'),
+  setInfraConfig: (config: {
+    massiveApiKey: string;
+    polygonApiKey: string;
+    telegramBotToken: string;
+    telegramChatId: string;
+    dataDrivePath: string;
+  }) => ipcRenderer.invoke('set-infra-config', config),
+  testDataDrive: (path: string) => ipcRenderer.invoke('test-data-drive', path),
+  testPolygonApi: (apiKey: string) => ipcRenderer.invoke('test-polygon-api', apiKey),
+  testTelegram: (botToken: string, chatId: string) => ipcRenderer.invoke('test-telegram', botToken, chatId),
+
   // Memory System
   memoryRecall: (query: string, workspaceId: string, options?: any) =>
     ipcRenderer.invoke('memory:recall', query, workspaceId, options),
@@ -83,6 +96,29 @@ contextBridge.exposeInMainWorld('electron', {
   // Remove listeners (cleanup)
   removeToolProgressListener: () => ipcRenderer.removeAllListeners('tool-progress'),
   removeLLMStreamListener: () => ipcRenderer.removeAllListeners('llm-stream'),
+
+  // Daemon Management (Night Shift)
+  startDaemon: () => ipcRenderer.invoke('daemon:start'),
+  stopDaemon: () => ipcRenderer.invoke('daemon:stop'),
+  restartDaemon: () => ipcRenderer.invoke('daemon:restart'),
+  getDaemonStatus: () => ipcRenderer.invoke('daemon:status'),
+  getDaemonLogs: () => ipcRenderer.invoke('daemon:logs'),
+
+  // System Health
+  getSystemHealth: () => ipcRenderer.invoke('system:health'),
+  panicStop: () => ipcRenderer.invoke('system:panic'),
+
+  // Daemon log streaming
+  onDaemonLog: (callback: (log: string) => void) => {
+    ipcRenderer.on('daemon-log', (_event, log) => callback(log));
+    return () => ipcRenderer.removeAllListeners('daemon-log');
+  },
+
+  // Daemon status updates
+  onDaemonStatus: (callback: (data: { status: string; pid: number | null; timestamp: number }) => void) => {
+    ipcRenderer.on('daemon-status', (_event, data) => callback(data));
+    return () => ipcRenderer.removeAllListeners('daemon-status');
+  },
 });
 
 // The ElectronAPI type is defined in src/types/electron.d.ts as a global type

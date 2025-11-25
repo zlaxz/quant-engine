@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ProjectDirectorySettings } from '@/components/settings/ProjectDirectorySettings';
 import { APIKeySettings } from '@/components/settings/APIKeySettings';
+import { InfrastructureSettings } from '@/components/settings/InfrastructureSettings';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -28,25 +29,30 @@ export default function Settings() {
           </div>
         </div>
 
-        <Tabs defaultValue="general" className="w-full">
-          <TabsList>
+        <Tabs defaultValue="infrastructure" className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="infrastructure">Infrastructure</TabsTrigger>
+            <TabsTrigger value="api-keys">LLM Keys</TabsTrigger>
+            <TabsTrigger value="project">Project</TabsTrigger>
             <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="project">Project Directory</TabsTrigger>
-            <TabsTrigger value="api-keys">API Keys</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="general" className="space-y-4">
-            <div className="text-muted-foreground">
-              General settings coming soon...
-            </div>
+          <TabsContent value="infrastructure" className="space-y-4">
+            <InfrastructureSettings />
+          </TabsContent>
+
+          <TabsContent value="api-keys" className="space-y-4">
+            <APIKeySettings />
           </TabsContent>
 
           <TabsContent value="project" className="space-y-4">
             <ProjectDirectorySettings />
           </TabsContent>
 
-          <TabsContent value="api-keys" className="space-y-4">
-            <APIKeySettings />
+          <TabsContent value="general" className="space-y-4">
+            <div className="text-muted-foreground">
+              General settings coming soon...
+            </div>
           </TabsContent>
         </Tabs>
       </div>

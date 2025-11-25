@@ -45,6 +45,25 @@ interface ElectronAPI {
   getAPIKeys: () => Promise<{ gemini: string; openai: string; deepseek: string }>;
   setAPIKeys: (keys: { gemini: string; openai: string; deepseek: string }) => Promise<{ success: boolean }>;
 
+  // Infrastructure Settings
+  getInfraConfig: () => Promise<{
+    massiveApiKey: string;
+    polygonApiKey: string;
+    telegramBotToken: string;
+    telegramChatId: string;
+    dataDrivePath: string;
+  }>;
+  setInfraConfig: (config: {
+    massiveApiKey: string;
+    polygonApiKey: string;
+    telegramBotToken: string;
+    telegramChatId: string;
+    dataDrivePath: string;
+  }) => Promise<{ success: boolean }>;
+  testDataDrive: (path: string) => Promise<{ success: boolean; fileCount?: number; error?: string }>;
+  testPolygonApi: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  testTelegram: (botToken: string, chatId: string) => Promise<{ success: boolean; error?: string }>;
+
   // Memory System
   memoryRecall: (
     query: string,
@@ -123,6 +142,37 @@ interface ElectronAPI {
   // Remove listeners (cleanup)
   removeToolProgressListener: () => void;
   removeLLMStreamListener: () => void;
+
+  // Daemon Management (Night Shift)
+  startDaemon: () => Promise<{ success: boolean; pid?: number; error?: string }>;
+  stopDaemon: () => Promise<{ success: boolean; error?: string }>;
+  restartDaemon: () => Promise<{ success: boolean; pid?: number; error?: string }>;
+  getDaemonStatus: () => Promise<{
+    running: boolean;
+    pid: number | null;
+    autoRestart: boolean;
+    restartAttempts: number;
+  }>;
+  getDaemonLogs: () => Promise<string[]>;
+
+  // System Health
+  getSystemHealth: () => Promise<{
+    daemon: boolean;
+    dataDrive: boolean;
+    api: boolean;
+    bridge: boolean;
+  }>;
+  panicStop: () => Promise<{ success: boolean; error?: string }>;
+
+  // Daemon log streaming
+  onDaemonLog: (callback: (log: string) => void) => () => void;
+
+  // Daemon status updates
+  onDaemonStatus: (callback: (data: {
+    status: 'online' | 'offline' | 'starting' | 'crashed';
+    pid: number | null;
+    timestamp: number;
+  }) => void) => () => void;
 }
 
 declare global {
