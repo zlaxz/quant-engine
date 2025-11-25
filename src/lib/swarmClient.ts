@@ -12,7 +12,6 @@
 
 import { chatSwarmParallel, isRunningInElectron } from './electronClient';
 import { supabase } from '@/integrations/supabase/client';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // ============================================================================
 // Types
@@ -294,12 +293,11 @@ export function subscribeToJob(
   jobId: string,
   onProgress: SwarmProgressCallback
 ): () => void {
-  let currentProgress: SwarmProgress | null = null;
-
   // Fetch initial state
   getJobProgress(jobId).then(progress => {
-    currentProgress = progress;
-    onProgress(progress);
+    if (progress) {
+      onProgress(progress);
+    }
   });
 
   // Subscribe to job changes
@@ -316,8 +314,9 @@ export function subscribeToJob(
       async () => {
         // Refetch full progress on any job change
         const progress = await getJobProgress(jobId);
-        currentProgress = progress;
-        onProgress(progress);
+        if (progress) {
+          onProgress(progress);
+        }
       }
     )
     .subscribe();
@@ -336,8 +335,9 @@ export function subscribeToJob(
       async () => {
         // Refetch full progress on any task change
         const progress = await getJobProgress(jobId);
-        currentProgress = progress;
-        onProgress(progress);
+        if (progress) {
+          onProgress(progress);
+        }
       }
     )
     .subscribe();

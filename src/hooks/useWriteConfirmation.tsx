@@ -1,14 +1,7 @@
 import { useState, useCallback } from "react";
 import {
-  type WriteOperation,
   type WriteResult,
   type ConfirmationContext,
-  writeFile,
-  appendFile,
-  deleteFile,
-  renameFile,
-  copyFile,
-  createDirectory
 } from "@/lib/codeWriter";
 import { WriteConfirmationDialog } from "@/components/code/WriteConfirmationDialog";
 

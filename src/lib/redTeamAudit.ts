@@ -3,7 +3,6 @@
  * Runs multiple specialized auditors against rotation-engine code
  */
 
-import { supabase } from '@/integrations/supabase/client';
 import {
   buildStrategyLogicAuditPrompt,
   buildOverfitAuditPrompt,

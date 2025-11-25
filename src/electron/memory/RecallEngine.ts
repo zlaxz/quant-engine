@@ -420,7 +420,7 @@ export class RecallEngine {
    * Rerank results using LLM as cross-encoder
    */
   private async rerankResults(
-    query: string,
+    _query: string,
     candidates: MemoryResult[],
     limit: number
   ): Promise<MemoryResult[]> {

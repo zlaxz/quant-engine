@@ -4,7 +4,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import type { BacktestRun, BacktestParams, BacktestMetrics } from '@/types/backtest';
+import type { BacktestRun } from '@/types/backtest';
 import type { LlmTier } from '@/config/llmRouting';
 import { buildAuditPrompt } from '@/prompts/auditorPrompt';
 import { buildRunSummary, buildMemorySummary, type MemoryNote } from '@/lib/auditSummaries';
@@ -16,9 +16,9 @@ import { buildExperimentDirectorPrompt } from '@/prompts/experimentDirectorPromp
 import { buildExperimentRunSummary, buildExperimentMemorySummary } from '@/lib/experimentPlanning';
 import { buildRiskOfficerPrompt } from '@/prompts/riskOfficerPrompt';
 import { buildRiskRunSummary, buildRiskMemorySummary } from '@/lib/riskSummaries';
-import { selectKeyRuns, buildRunPortfolioSummary, assembleAgentInputs } from '@/lib/autoAnalyze';
+import { buildRunPortfolioSummary } from '@/lib/autoAnalyze';
 import { buildAutoAnalyzePrompt } from '@/prompts/autoAnalyzePrompt';
-import { buildDefaultReportTitle, extractSummaryFromReport, buildTagsFromReport } from '@/lib/researchReports';
+import { extractSummaryFromReport, buildTagsFromReport } from '@/lib/researchReports';
 import { runRedTeamAuditForFile } from '@/lib/redTeamAudit';
 import { runSwarm, dispatchMassiveSwarm, type SwarmPrompt } from '@/lib/swarmClient';
 import {
@@ -989,7 +989,7 @@ async function handleRiskReview(args: string, context: CommandContext): Promise<
  * /open_file command - read rotation-engine file contents
  * Usage: /open_file path:profiles/skew.py
  */
-async function handleOpenFile(args: string, context: CommandContext): Promise<CommandResult> {
+async function handleOpenFile(args: string, _context: CommandContext): Promise<CommandResult> {
   const pathMatch = args.match(/path:(\S+)/);
   
   if (!pathMatch) {
@@ -1033,7 +1033,7 @@ async function handleOpenFile(args: string, context: CommandContext): Promise<Co
  * /list_dir command - list rotation-engine directory contents
  * Usage: /list_dir path:profiles OR /list_dir path:.
  */
-async function handleListDir(args: string, context: CommandContext): Promise<CommandResult> {
+async function handleListDir(args: string, _context: CommandContext): Promise<CommandResult> {
   const pathMatch = args.match(/path:(\S+)/);
   const path = pathMatch ? pathMatch[1] : '.';
 
@@ -1083,7 +1083,7 @@ async function handleListDir(args: string, context: CommandContext): Promise<Com
  * /search_code command - search rotation-engine code for terms
  * Usage: /search_code peakless OR /search_code path:profiles peakless
  */
-async function handleSearchCode(args: string, context: CommandContext): Promise<CommandResult> {
+async function handleSearchCode(args: string, _context: CommandContext): Promise<CommandResult> {
   const pathMatch = args.match(/path:(\S+)/);
   let query = args;
   let path = '.';
@@ -1221,7 +1221,6 @@ async function handleAutoAnalyze(args: string, context: CommandContext): Promise
     const riskRunSummary = buildRiskRunSummary(filteredRuns);
     const riskMemorySummary = buildRiskMemorySummary(memoryNotes as unknown as any);
     const experimentRunSummary = buildExperimentRunSummary(filteredRuns);
-    const experimentMemorySummary = buildExperimentMemorySummary(memoryNotes as unknown as any);
     const curationSummary = buildCurationSummary(memoryNotes as unknown as any);
 
     // Build swarm prompts for parallel execution
@@ -1583,7 +1582,7 @@ async function handleRedTeamFile(args: string, context: CommandContext): Promise
 /**
  * /write_file command - create or overwrite file
  */
-async function handleWriteFile(args: string, context: CommandContext): Promise<CommandResult> {
+async function handleWriteFile(args: string, _context: CommandContext): Promise<CommandResult> {
   // Parse: /write_file <path> <content>
   const match = args.match(/^(\S+)\s+(.+)$/s);
   if (!match) {
@@ -1619,7 +1618,7 @@ async function handleWriteFile(args: string, context: CommandContext): Promise<C
 /**
  * /append_file command - append content to file
  */
-async function handleAppendFile(args: string, context: CommandContext): Promise<CommandResult> {
+async function handleAppendFile(args: string, _context: CommandContext): Promise<CommandResult> {
   const match = args.match(/^(\S+)\s+(.+)$/s);
   if (!match) {
     return { 
@@ -1657,7 +1656,7 @@ async function handleAppendFile(args: string, context: CommandContext): Promise<
 /**
  * /delete_file command - delete file with backup
  */
-async function handleDeleteFile(args: string, context: CommandContext): Promise<CommandResult> {
+async function handleDeleteFile(args: string, _context: CommandContext): Promise<CommandResult> {
   const path = args.trim();
   if (!path) {
     return { 
@@ -1690,7 +1689,7 @@ async function handleDeleteFile(args: string, context: CommandContext): Promise<
 /**
  * /rename_file command - rename or move file
  */
-async function handleRenameFile(args: string, context: CommandContext): Promise<CommandResult> {
+async function handleRenameFile(args: string, _context: CommandContext): Promise<CommandResult> {
   const match = args.match(/^(\S+)\s+(\S+)$/);
   if (!match) {
     return { 
@@ -1725,7 +1724,7 @@ async function handleRenameFile(args: string, context: CommandContext): Promise<
 /**
  * /copy_file command - copy file
  */
-async function handleCopyFile(args: string, context: CommandContext): Promise<CommandResult> {
+async function handleCopyFile(args: string, _context: CommandContext): Promise<CommandResult> {
   const match = args.match(/^(\S+)\s+(\S+)$/);
   if (!match) {
     return { 
@@ -1755,7 +1754,7 @@ async function handleCopyFile(args: string, context: CommandContext): Promise<Co
 /**
  * /create_dir command - create directory
  */
-async function handleCreateDir(args: string, context: CommandContext): Promise<CommandResult> {
+async function handleCreateDir(args: string, _context: CommandContext): Promise<CommandResult> {
   const path = args.trim();
   if (!path) {
     return { 
@@ -2573,18 +2572,9 @@ async function handleEvolveStrategy(args: string, context: CommandContext): Prom
   }
 }
 
-/**
- * Simple hash function for code content (for cache invalidation)
- */
-function hashCode(str: string): string {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return `hash_${Math.abs(hash).toString(16)}`;
-}
+// ============================================================================
+// Helper functions
+// ============================================================================
 
 /**
  * /help command - show available commands

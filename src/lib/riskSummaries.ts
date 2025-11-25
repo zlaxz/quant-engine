@@ -40,9 +40,6 @@ export function buildRiskRunSummary(runs: BacktestRun[]): string {
   const allSharpes = runs
     .map(r => r.metrics?.sharpe)
     .filter((s): s is number => typeof s === 'number');
-  const allCAGRs = runs
-    .map(r => r.metrics?.cagr)
-    .filter((c): c is number => typeof c === 'number');
 
   if (allDrawdowns.length > 0) {
     const maxDD = Math.max(...allDrawdowns);

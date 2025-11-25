@@ -80,7 +80,7 @@ export function buildRunsAggregate(runs: BacktestRun[]): string {
 /**
  * Build memory summary prioritizing rules, warnings, and high-importance items
  */
-export function buildRelevantMemory(notes: MemoryNote[], strategyKeys: string[]): string {
+export function buildRelevantMemory(notes: MemoryNote[], _strategyKeys: string[]): string {
   if (notes.length === 0) {
     return 'No relevant memory notes found.';
   }
