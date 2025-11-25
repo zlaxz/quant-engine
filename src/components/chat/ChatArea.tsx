@@ -136,8 +136,13 @@ export const ChatArea = () => {
     }
   }, [selectedSessionId, selectedWorkspaceId, toast]);
 
-  // Subscribe to IPC events for tool progress and streaming
+  // Subscribe to IPC events for tool progress and streaming (Electron only)
   useEffect(() => {
+    // Skip if not running in Electron
+    if (!window.electron?.onToolProgress || !window.electron?.onLLMStream) {
+      return;
+    }
+
     // Subscribe to tool progress
     const unsubscribeTool = window.electron.onToolProgress((data) => {
       setToolProgress(prev => [...prev, data]);
