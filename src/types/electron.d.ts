@@ -64,6 +64,25 @@ interface ElectronAPI {
   testPolygonApi: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   testTelegram: (botToken: string, chatId: string) => Promise<{ success: boolean; error?: string }>;
 
+  // Data Inventory
+  getDataInventory: () => Promise<{
+    assets: Array<{
+      symbol: string;
+      dataType: string;
+      startDate: string;
+      endDate: string;
+      totalDays: number;
+      gapCount: number;
+      qualityScore: number;
+      sizeGB: number;
+    }>;
+    disk: {
+      totalGB: number;
+      usedGB: number;
+      freeGB: number;
+    } | null;
+  }>;
+
   // Memory System
   memoryRecall: (
     query: string,

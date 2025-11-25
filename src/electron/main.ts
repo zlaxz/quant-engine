@@ -251,6 +251,14 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('get-data-inventory', async () => {
+    // Stub implementation - returns empty inventory
+    return {
+      assets: [],
+      disk: null
+    };
+  });
+
   // Initialize memory system
   const memoryDbPath = path.join(app.getPath('userData'), 'memory.db');
   localDb = new Database(memoryDbPath);

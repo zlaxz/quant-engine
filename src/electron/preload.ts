@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld('electron', {
   testPolygonApi: (apiKey: string) => ipcRenderer.invoke('test-polygon-api', apiKey),
   testTelegram: (botToken: string, chatId: string) => ipcRenderer.invoke('test-telegram', botToken, chatId),
 
+  // Data Inventory
+  getDataInventory: () => ipcRenderer.invoke('get-data-inventory'),
+
   // Memory System
   memoryRecall: (query: string, workspaceId: string, options?: any) =>
     ipcRenderer.invoke('memory:recall', query, workspaceId, options),
