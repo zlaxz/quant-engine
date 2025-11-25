@@ -11,6 +11,7 @@ import { registerPythonExecutionHandlers } from './ipc-handlers/pythonExecution'
 import { registerLlmHandlers } from './ipc-handlers/llmClient';
 import { registerMemoryHandlers, setMemoryServices, registerAnalysisHandlers } from './ipc-handlers/memoryHandlers';
 import { registerDaemonHandlers, stopDaemonOnExit } from './ipc-handlers/daemonManager';
+import { registerContextHandlers } from './ipc-handlers/contextHandlers';
 import { setFileSystemRoot } from './services/FileSystemService';
 import { MemoryDaemon } from './memory/MemoryDaemon';
 import { RecallEngine } from './memory/RecallEngine';
@@ -296,6 +297,9 @@ app.whenReady().then(() => {
 
   // THEN register memory handlers so they have access to services
   registerMemoryHandlers();
+
+  // Register context management handlers
+  registerContextHandlers();
 
   // Register analysis handlers
   registerAnalysisHandlers(

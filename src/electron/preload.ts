@@ -122,6 +122,26 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on('daemon-status', (_event, data) => callback(data));
     return () => ipcRenderer.removeAllListeners('daemon-status');
   },
+
+  // Context Management
+  contextGetProtectedCanon: (workspaceId: string) =>
+    ipcRenderer.invoke('context-get-protected-canon', workspaceId),
+  contextGetBudgetStatus: (
+    tier0Content: string,
+    tier1Content: string,
+    tier2Content: string,
+    messages: Array<{ role: string; content: string }>
+  ) => ipcRenderer.invoke('context-get-budget-status', tier0Content, tier1Content, tier2Content, messages),
+  contextBuildLLMMessages: (params: {
+    baseSystemPrompt: string;
+    workspaceId: string;
+    workingMemory: string;
+    retrievedMemories: string;
+    conversationHistory: Array<{ role: string; content: string }>;
+    newUserMessage: string;
+  }) => ipcRenderer.invoke('context-build-llm-messages', params),
+  contextClearCanonCache: (workspaceId?: string) =>
+    ipcRenderer.invoke('context-clear-canon-cache', workspaceId),
 });
 
 // The ElectronAPI type is defined in src/types/electron.d.ts as a global type

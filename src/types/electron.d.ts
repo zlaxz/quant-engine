@@ -192,6 +192,63 @@ interface ElectronAPI {
     pid: number | null;
     timestamp: number;
   }) => void) => () => void;
+
+  // Context Management
+  contextGetProtectedCanon: (workspaceId: string) => Promise<{
+    success: boolean;
+    canon?: {
+      formattedContent: string;
+      tokenEstimate: number;
+      lessonCount: number;
+      ruleCount: number;
+    };
+    error?: string;
+  }>;
+  contextGetBudgetStatus: (
+    tier0Content: string,
+    tier1Content: string,
+    tier2Content: string,
+    messages: Array<{ role: string; content: string }>
+  ) => Promise<{
+    success: boolean;
+    status?: {
+      totalTokens: number;
+      maxTokens: number;
+      usagePercent: number;
+      tierBreakdown: {
+        tier0: number;
+        tier1: number;
+        tier2: number;
+        tier3: number;
+      };
+      needsCompression: boolean;
+      needsSummarization: boolean;
+      atHardLimit: boolean;
+    };
+    error?: string;
+  }>;
+  contextBuildLLMMessages: (params: {
+    baseSystemPrompt: string;
+    workspaceId: string;
+    workingMemory: string;
+    retrievedMemories: string;
+    conversationHistory: Array<{ role: string; content: string }>;
+    newUserMessage: string;
+  }) => Promise<{
+    success: boolean;
+    messages?: Array<{ role: string; content: string }>;
+    status?: {
+      totalTokens: number;
+      maxTokens: number;
+      usagePercent: number;
+      needsCompression: boolean;
+      needsSummarization: boolean;
+      atHardLimit: boolean;
+    };
+    canonIncluded?: boolean;
+    error?: string;
+  }>;
+  contextClearCanonCache: (workspaceId?: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {

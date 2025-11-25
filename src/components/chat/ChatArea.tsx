@@ -396,28 +396,80 @@ export const ChatArea = () => {
           }
         }
 
-        // Build enriched system prompt with memories
-        const enrichedSystemPrompt = memoryContext
-          ? `${basePrompt}\n\n${memoryContext}\n\n---\n\nThe above memories were automatically recalled based on the conversation context (${triggeredMemories.length} triggered, ${staleMemories.length} stale, ${semanticMemories.length} semantic). Use them to inform your response.`
-          : basePrompt;
+        // ============ BUILD LLM MESSAGES WITH CONTEXT MANAGEMENT ============
+        // Uses tiered context protection:
+        // - Tier 0: Protected canon (LESSONS_LEARNED) - never dropped
+        // - Tier 1: Working memory - current task state
+        // - Tier 2: Retrieved memories - just-in-time recall
+        // - Tier 3: Conversation history - summarized if needed
 
-        // ============ BUILD LLM MESSAGES ============
-        // Truncate history to stay within context limits (~100k tokens ≈ 400k chars)
-        const MAX_HISTORY_CHARS = 400000;
-        let historyMessages = messages.map(m => ({ role: m.role, content: m.content }));
+        let llmMessages: Array<{ role: string; content: string }>;
 
-        // Calculate total chars and truncate from the beginning if needed
-        let totalChars = historyMessages.reduce((sum, m) => sum + m.content.length, 0);
-        while (totalChars > MAX_HISTORY_CHARS && historyMessages.length > 0) {
-          const removed = historyMessages.shift();
-          if (removed) totalChars -= removed.content.length;
+        // Use intelligent context management if available (Electron mode)
+        if (window.electron?.contextBuildLLMMessages) {
+          try {
+            const contextResult = await window.electron.contextBuildLLMMessages({
+              baseSystemPrompt: basePrompt,
+              workspaceId: selectedWorkspaceId,
+              workingMemory: '', // TODO: Add working memory/scratchpad
+              retrievedMemories: memoryContext,
+              conversationHistory: messages.map(m => ({ role: m.role, content: m.content })),
+              newUserMessage: messageContent,
+            });
+
+            if (contextResult.success && contextResult.messages) {
+              llmMessages = contextResult.messages;
+
+              // Log context status for monitoring
+              if (contextResult.status) {
+                const pct = (contextResult.status.usagePercent * 100).toFixed(1);
+                console.log(`[ChatArea] Context: ${pct}% used (${contextResult.status.totalTokens}/${contextResult.status.maxTokens} tokens)`);
+                if (contextResult.status.needsSummarization) {
+                  console.log('[ChatArea] Context was summarized to fit budget');
+                }
+                if (contextResult.canonIncluded) {
+                  console.log('[ChatArea] Protected canon (LESSONS_LEARNED) included');
+                }
+              }
+            } else {
+              // Fallback to simple approach if context management fails
+              console.warn('[ChatArea] Context management failed, using fallback:', contextResult.error);
+              llmMessages = [
+                { role: 'system', content: basePrompt + (memoryContext ? `\n\n${memoryContext}` : '') },
+                ...messages.slice(-20).map(m => ({ role: m.role, content: m.content })),
+                { role: 'user', content: messageContent }
+              ];
+            }
+          } catch (contextError) {
+            console.error('[ChatArea] Context management error:', contextError);
+            // Fallback
+            llmMessages = [
+              { role: 'system', content: basePrompt + (memoryContext ? `\n\n${memoryContext}` : '') },
+              ...messages.slice(-20).map(m => ({ role: m.role, content: m.content })),
+              { role: 'user', content: messageContent }
+            ];
+          }
+        } else {
+          // Browser mode fallback (no Electron)
+          const enrichedSystemPrompt = memoryContext
+            ? `${basePrompt}\n\n${memoryContext}`
+            : basePrompt;
+
+          // Simple truncation for browser mode
+          const MAX_HISTORY_CHARS = 400000;
+          let historyMessages = messages.map(m => ({ role: m.role, content: m.content }));
+          let totalChars = historyMessages.reduce((sum, m) => sum + m.content.length, 0);
+          while (totalChars > MAX_HISTORY_CHARS && historyMessages.length > 0) {
+            const removed = historyMessages.shift();
+            if (removed) totalChars -= removed.content.length;
+          }
+
+          llmMessages = [
+            { role: 'system', content: enrichedSystemPrompt },
+            ...historyMessages,
+            { role: 'user', content: messageContent }
+          ];
         }
-
-        const llmMessages = [
-          { role: 'system', content: enrichedSystemPrompt },
-          ...historyMessages,
-          { role: 'user', content: messageContent }
-        ];
 
         // Call LLM via Electron IPC
         const response = await chatPrimary(llmMessages);
@@ -600,12 +652,12 @@ export const ChatArea = () => {
 
             {/* Live Agent Activity - Streaming, Tools, Thinking */}
             {isLoading && !activeSwarmJob && (
-              <div className="flex justify-start">
-                <div className="bg-gradient-to-r from-blue-950/50 to-purple-950/50 border border-blue-500/20 rounded-lg px-4 py-3 w-full max-w-[95%]">
+              <div className="w-full">
+                <div className="bg-muted rounded-lg px-4 py-3 w-full">
                   {/* Header */}
-                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-blue-500/20">
-                    <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                    <span className="text-xs font-medium text-blue-400">Agent Working</span>
+                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border">
+                    <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                    <span className="text-xs font-medium text-muted-foreground">Agent Working</span>
                     {toolProgress.filter(p => p.type === 'completed').length > 0 && (
                       <span className="text-xs text-muted-foreground ml-auto">
                         {toolProgress.filter(p => p.type === 'completed').length} tools executed
@@ -615,40 +667,40 @@ export const ChatArea = () => {
 
                   {/* Streaming content - main response text */}
                   {streamingContent && (
-                    <div className="text-sm mb-3 whitespace-pre-wrap prose prose-invert prose-sm max-w-none">
+                    <div className="text-sm mb-3 whitespace-pre-wrap">
                       {streamingContent}
-                      <span className="inline-block w-2 h-4 bg-blue-400 animate-pulse ml-1" />
+                      <span className="inline-block w-2 h-4 bg-foreground/50 animate-pulse ml-1" />
                     </div>
                   )}
 
                   {/* Tool progress - collapsible activity log */}
                   {toolProgress.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-blue-500/20">
+                    <div className="mt-2 pt-2 border-t border-border">
                       <details open className="text-xs">
-                        <summary className="cursor-pointer text-blue-400 font-medium mb-1">
+                        <summary className="cursor-pointer text-muted-foreground font-medium mb-1">
                           Tool Activity ({toolProgress.length} events)
                         </summary>
-                        <div className="space-y-1 mt-1 max-h-40 overflow-y-auto font-mono">
+                        <div className="space-y-1 mt-1 max-h-40 overflow-y-auto font-mono text-muted-foreground">
                           {toolProgress.map((progress, idx) => (
                             <div key={idx} className="flex items-start gap-2">
                               {progress.type === 'thinking' && (
-                                <span className="text-purple-400">🧠 {progress.message || 'Processing...'}</span>
+                                <span>• {progress.message || 'Processing...'}</span>
                               )}
                               {progress.type === 'tools-starting' && (
-                                <span className="text-blue-400">🔧 Starting {progress.count} tool(s)</span>
+                                <span>• Starting {progress.count} tool(s)</span>
                               )}
                               {progress.type === 'executing' && (
-                                <span className="text-yellow-400">
-                                  <span className="animate-pulse">⚡</span> {progress.tool}
-                                  <span className="text-muted-foreground ml-1">
+                                <span>
+                                  <span className="animate-pulse">→</span> {progress.tool}
+                                  <span className="opacity-60 ml-1">
                                     ({Object.entries(progress.args || {}).map(([k,v]) => `${k}="${String(v).slice(0,20)}${String(v).length > 20 ? '...' : ''}"`).join(', ')})
                                   </span>
                                 </span>
                               )}
                               {progress.type === 'completed' && (
-                                <span className={progress.success ? 'text-green-400' : 'text-red-400'}>
+                                <span className={progress.success ? 'text-foreground' : 'text-destructive'}>
                                   {progress.success ? '✓' : '✗'} {progress.tool}
-                                  <span className="text-muted-foreground ml-1 text-[10px]">
+                                  <span className="opacity-60 ml-1 text-[10px]">
                                     {progress.preview?.slice(0, 60)}...
                                   </span>
                                 </span>
@@ -662,9 +714,9 @@ export const ChatArea = () => {
 
                   {/* Fallback spinner when no content yet */}
                   {!streamingContent && toolProgress.length === 0 && (
-                    <div className="flex items-center gap-2 text-sm text-blue-400">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Initializing...</span>
+                      <span>Processing...</span>
                     </div>
                   )}
                 </div>
