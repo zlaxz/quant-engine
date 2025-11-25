@@ -14,7 +14,9 @@ import json
 import subprocess
 import sys
 import os
+import threading
 from pathlib import Path
+from datetime import datetime
 
 class BridgeHandler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -126,6 +128,91 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 'engine': 'rotation-engine-bridge',
                 'version': '1.0.0'
             }).encode())
+
+        elif self.path == '/ingest-data':
+            # Trigger Massive.com data ingestion in background
+            try:
+                content_length = int(self.headers['Content-Length'])
+                body = self.rfile.read(content_length)
+                request = json.loads(body)
+
+                date = request.get('date')  # YYYY-MM-DD
+                tickers = request.get('tickers', [])  # List of symbols
+                data_type = request.get('type', 'stocks_trades')
+
+                if not date:
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        'success': False,
+                        'error': 'date parameter required (YYYY-MM-DD)'
+                    }).encode())
+                    return
+
+                print(f"📥 Starting data ingestion for {date}, type={data_type}")
+                print(f"   Tickers: {tickers if tickers else 'DEFAULT'}")
+
+                # Build ingestor command
+                script_dir = Path(__file__).parent
+                cmd = [
+                    sys.executable,
+                    str(script_dir / 'data_ingestor.py'),
+                    '--date', date,
+                    '--type', data_type
+                ]
+
+                if tickers:
+                    cmd.extend(['--tickers', ','.join(tickers)])
+
+                # Run in background thread
+                def run_ingestor():
+                    try:
+                        result = subprocess.run(
+                            cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=3600,  # 1 hour timeout for large downloads
+                            cwd=script_dir
+                        )
+                        if result.returncode == 0:
+                            print(f"✅ Ingestion completed for {date}")
+                        else:
+                            print(f"❌ Ingestion failed: {result.stderr}")
+                    except subprocess.TimeoutExpired:
+                        print(f"⏱️ Ingestion timed out for {date}")
+                    except Exception as e:
+                        print(f"💥 Ingestion error: {e}")
+
+                thread = threading.Thread(target=run_ingestor, daemon=True)
+                thread.start()
+
+                # Respond immediately (ingestion runs in background)
+                self.send_response(202)  # Accepted
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'success': True,
+                    'message': f'Data ingestion started for {date}',
+                    'date': date,
+                    'data_type': data_type,
+                    'tickers': tickers if tickers else 'DEFAULT',
+                    'status': 'processing'
+                }).encode())
+
+            except Exception as e:
+                print(f"💥 Ingest endpoint error: {e}")
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'success': False,
+                    'error': str(e)
+                }).encode())
+
         else:
             self.send_response(404)
             self.end_headers()

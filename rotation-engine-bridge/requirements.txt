@@ -1,0 +1,29 @@
+# Rotation Engine Bridge Dependencies
+# Install: pip install -r requirements.txt
+
+# Data Ingestor - Massive.com S3 access
+boto3>=1.34.0
+botocore>=1.34.0
+
+# Data processing
+polars>=0.20.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Compression
+zstandard>=0.22.0
+
+# Supabase client
+supabase>=2.3.0
+
+# Parquet support
+pyarrow>=14.0.0
+
+# Research Daemon (Night Shift)
+# Uses asyncio (stdlib), multiprocessing (stdlib)
+
+# Shadow Validator - WebSocket streaming
+websockets>=12.0
+
+# Async HTTP for Supabase calls
+aiohttp>=3.9.0

@@ -7,6 +7,7 @@ import { ChatProvider } from "@/contexts/ChatContext";
 import { useEffect, useState } from 'react';
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
+import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 import { FirstLaunchModal } from './components/settings/FirstLaunchModal';
 import { isRunningInElectron } from './lib/electronClient';
@@ -71,6 +72,7 @@ const App = () => {
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/dashboard" element={<Dashboard />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

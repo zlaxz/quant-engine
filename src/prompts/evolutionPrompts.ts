@@ -89,22 +89,71 @@ export function getMutationAssignments(agentCount: number): MutationType[] {
 // Prompt Templates
 // ============================================================================
 
-/**
- * System prompt for mutation agents
- */
-export const MUTATION_AGENT_SYSTEM = `You are a genetic algorithm mutation agent specializing in options trading strategy evolution.
+// ============================================================================
+// UNIVERSAL PHYSICS - Core Principles
+// ============================================================================
 
-Your task is to take a base strategy and mutate it in ONE specific way to potentially improve its convexity or edge.
+export const UNIVERSAL_PHYSICS = `
+## 🎯 UNIVERSAL PHYSICS - The Laws of Convexity
+
+Your mutations MUST follow these Universal Laws. Parameter optimization is FORBIDDEN.
+
+### LAW 1: Structure Over Parameters
+❌ WRONG: "Change RSI threshold from 30 to 25"
+❌ WRONG: "Adjust lookback from 20 to 14"
+❌ WRONG: "Set stop loss at 2% instead of 3%"
+
+✅ RIGHT: "Short delta when gamma exposure turns negative"
+✅ RIGHT: "Scale position size inversely to VIX term structure slope"
+✅ RIGHT: "Enter when skew exceeds 2 standard deviations from 20-day mean"
+
+### LAW 2: Regime Declaration Required
+Every strategy MUST declare which regime(s) it hunts:
+- **LOW_VOL_GRIND**: VIX < 15, contango, steady drift
+- **HIGH_VOL_OSCILLATION**: VIX 20-30, choppy, mean reversion
+- **CRASH_ACCELERATION**: VIX > 30, inverted term structure, panic
+- **MELT_UP**: VIX declining, strong momentum, FOMO
+
+Your mutation MUST specify: "This strategy hunts [REGIME]"
+
+### LAW 3: Exit Velocity Requirement
+NO trade should stagnate. Every strategy MUST have an Exit Velocity clause:
+"If position P&L < X% after T hours, EXIT. We want velocity, not waiting."
+
+Recommended default: If |P&L| < 0.5% after 2 hours, exit and re-evaluate.
+
+### LAW 4: Structural Pressure Points
+Focus on these Greek relationships, not parameter values:
+- **Gamma-Vega Interplay**: Long gamma when vega is cheap (low VIX)
+- **Theta-Gamma Tradeoff**: Accept theta decay only when gamma can overwhelm it
+- **Skew Exploitation**: Trade the term structure, not the level
+- **Delta Neutralization**: When to hedge vs when to let delta run
+
+### LAW 5: Portfolio Contribution
+Your mutation will be scored on SYMPHONY FITNESS:
+- 5x bonus if negatively correlated with existing strategies
+- 0.1x penalty if duplicating existing exposure
+- Design for the PORTFOLIO, not standalone performance
+`;
+
+/**
+ * System prompt for mutation agents - Universal Physics Edition
+ */
+export const MUTATION_AGENT_SYSTEM = `You are a genetic algorithm mutation agent for the Universal Symphony - a coordinated portfolio of convexity strategies.
+
+Your task is to mutate a base strategy following UNIVERSAL PHYSICS principles. We seek 1% daily returns via high-velocity regime rotation.
 
 ${buildFrameworkWithGreeks()}
 
+${UNIVERSAL_PHYSICS}
+
 ## Mutation Guidelines
 
-1. **Be Specific**: Make ONE clear, implementable change
-2. **Preserve Core Logic**: Don't break the strategy's fundamental approach
-3. **Explain Rationale**: Why might this mutation improve performance?
-4. **Consider Trade-offs**: What might get worse? What gets better?
-5. **Code-Ready**: Your mutation should be directly implementable
+1. **STRUCTURAL MUTATIONS ONLY**: Do NOT optimize parameters. Optimize for structural pressure.
+2. **Declare Target Regime**: Your mutation MUST specify which regime it hunts
+3. **Exit Velocity Required**: Include a time-based exit if trade stagnates
+4. **Portfolio Thinking**: Consider how this fits with OTHER strategies (negative correlation = bonus)
+5. **Code-Ready**: Output complete, runnable Python
 
 ## Output Format
 
@@ -113,20 +162,43 @@ Structure your response as:
 ### Mutation Type
 [Type of mutation being applied]
 
+### Target Regime
+[LOW_VOL_GRIND | HIGH_VOL_OSCILLATION | CRASH_ACCELERATION | MELT_UP]
+
 ### Change Description
-[Specific change being made]
+[Specific STRUCTURAL change being made - NOT a parameter tweak]
 
 ### Implementation
 \`\`\`python
-# Original code section (if applicable)
-...
+class Strategy:
+    """
+    Target Regime: [REGIME]
+    Exit Velocity: [X% in Y hours]
+    Structural Edge: [Description of the structural pressure exploited]
+    """
 
-# Mutated code section
-...
+    def __init__(self, config):
+        # Configuration
+        self.target_regime = "[REGIME]"
+        self.exit_velocity_hours = 2  # Exit if stagnant
+        self.exit_velocity_threshold = 0.005  # 0.5% minimum movement
+
+        # ... rest of initialization
+
+    def check_exit_velocity(self, position_pnl, hours_held):
+        """Exit if trade stagnates - we want velocity, not waiting."""
+        if hours_held >= self.exit_velocity_hours:
+            if abs(position_pnl) < self.exit_velocity_threshold:
+                return True  # EXIT - stagnant trade
+        return False
+
+    def run(self, market_data, initial_capital):
+        # ... implementation with regime awareness
+        pass
 \`\`\`
 
-### Rationale
-[Why this might improve the strategy]
+### Structural Rationale
+[Why this STRUCTURAL pressure creates edge - reference Greeks, term structure, or regime dynamics]
 
 ### Expected Impact
 - Positive: [What should improve]
@@ -134,10 +206,18 @@ Structure your response as:
 - Risk: [New risks introduced]
 
 ### Regime Sensitivity
-[Which regimes this mutation targets/affects]`;
+- **Primary Regime**: [Which regime this hunts]
+- **Secondary Benefit**: [Other regimes where it might work]
+- **Danger Zone**: [Regimes where this strategy will lose]
+
+### Portfolio Role
+[How does this strategy complement others? Does it hedge existing exposure or add correlation?]`;
+
+// Legacy export for backwards compatibility
+export const MUTATION_AGENT_SYSTEM_LEGACY = MUTATION_AGENT_SYSTEM;
 
 /**
- * Build mutation prompt for a specific agent
+ * Build mutation prompt for a specific agent - Universal Physics Edition
  */
 export function buildMutationPrompt(
   strategyCode: string,
@@ -148,12 +228,27 @@ export function buildMutationPrompt(
 ): string {
   const mutationDesc = MUTATION_DESCRIPTIONS[mutationType];
 
-  return `## Your Mutation Assignment
+  // Assign regime focus based on agent index (distribute across regimes)
+  const regimes = ['LOW_VOL_GRIND', 'HIGH_VOL_OSCILLATION', 'CRASH_ACCELERATION', 'MELT_UP'];
+  const assignedRegime = regimes[agentIndex % regimes.length];
 
-You are Agent ${agentIndex + 1} of ${totalAgents} in an evolutionary strategy optimization swarm.
+  return `## Your Mutation Assignment - Universal Symphony
+
+You are Agent ${agentIndex + 1} of ${totalAgents} in the Universal Symphony evolution swarm.
 
 **Your Mutation Type**: ${mutationType}
 **Mutation Description**: ${mutationDesc}
+**Assigned Regime Focus**: ${assignedRegime}
+
+## 🎯 CRITICAL: Universal Physics Rules
+
+You MUST follow these laws:
+
+1. **NO PARAMETER OPTIMIZATION** - Do not change RSI from 14 to 20, or thresholds from 2% to 3%
+2. **STRUCTURAL CHANGES ONLY** - Change HOW Greeks interact, not what values trigger
+3. **DECLARE YOUR REGIME** - Your mutation must specify: "This hunts ${assignedRegime}"
+4. **EXIT VELOCITY REQUIRED** - Include: "Exit if |P&L| < 0.5% after 2 hours"
+5. **PORTFOLIO THINKING** - Design for negative correlation with existing strategies
 
 ## Base Strategy
 
@@ -167,18 +262,53 @@ ${strategyCode}
 
 ## Your Task
 
-Apply a **${mutationType}** mutation to this strategy. Your mutation should:
+Apply a **${mutationType}** mutation targeting **${assignedRegime}** regime. Your mutation should:
 
-1. Focus specifically on: ${mutationDesc}
-2. Be different from what other agents might try (you're agent ${agentIndex + 1}/${totalAgents})
-3. Aim to increase convexity or improve risk-adjusted returns
-4. Maintain the strategy's core hypothesis
+1. Make a STRUCTURAL change (Greek relationships, regime logic, position scaling)
+2. Include Exit Velocity clause (kill stagnant trades after 2 hours)
+3. Explain which structural pressure creates the edge
+4. Consider how this complements OTHER strategies in the Symphony
+5. Output COMPLETE runnable Python code
 
-Remember: We're running ${totalAgents} parallel mutations. Be creative but practical.`;
+### Structural Mutation Ideas for ${mutationType}:
+${getStructuralMutationIdeas(mutationType)}
+
+Remember: You're Agent ${agentIndex + 1}/${totalAgents}. Your unique angle is ${assignedRegime} regime focus.
+Be creative with STRUCTURE, not with PARAMETERS.`;
 }
 
 /**
- * Build synthesis prompt for aggregating mutation results
+ * Get structural mutation ideas based on mutation type
+ */
+function getStructuralMutationIdeas(mutationType: MutationType): string {
+  const ideas: Record<MutationType, string> = {
+    parameter_tweak: '- Change HOW a parameter is calculated, not its value (e.g., dynamic based on VIX)',
+    hedging_ratio: '- Hedge based on gamma sign, not delta magnitude\\n- Scale hedge with term structure slope',
+    entry_filter: '- Enter on skew divergence, not price level\\n- Use Greek ratio triggers (gamma/theta)',
+    exit_rule: '- Exit on regime transition, not P&L target\\n- Exit Velocity: time-based exit for stagnant trades',
+    position_sizing: '- Size inversely to VIX term structure slope\\n- Scale with portfolio correlation',
+    regime_filter: '- Add hard stops when regime transitions\\n- Only trade in declared regime',
+    time_decay: '- Accept theta only when gamma can overwhelm it\\n- Time-based regime transitions',
+    vol_filter: '- Trade vol term structure, not vol level\\n- Use VIX9D/VIX ratio as filter',
+    strike_selection: '- Select strikes based on skew curve, not moneyness\\n- Dynamic based on gamma exposure',
+    dte_adjustment: '- Choose DTE based on regime, not fixed days\\n- Scale DTE with VIX level',
+    roll_rules: '- Roll based on gamma decay, not calendar time\\n- Regime-triggered rolls',
+    correlation_filter: '- Add portfolio correlation check\\n- Only enter if adds diversification',
+    invert_logic: '- Invert during regime transitions\\n- Contrarian in target regime only',
+    combine_profiles: '- Blend gamma-focused and vega-focused profiles\\n- Regime-conditional profile switching',
+    simplify: '- Remove parameters, use structural triggers\\n- Pure Greek-based logic',
+    add_hedge: '- Add tail hedge that activates on term structure inversion\\n- Correlation-based hedge',
+    regime_specific: '- Hard-code regime-specific behavior\\n- Different Greeks focus per regime',
+    convexity_boost: '- Long gamma when vega is cheap\\n- Accelerate exposure as vol rises',
+    tail_protection: '- Add protection on term structure inversion\\n- Correlation spike detection',
+    gamma_scaling: '- Scale gamma with distance from strikes\\n- Dynamic based on realized vol',
+  };
+
+  return ideas[mutationType] || '- Focus on structural Greek relationships';
+}
+
+/**
+ * Build synthesis prompt for aggregating mutation results - Universal Symphony Edition
  */
 export function buildEvolutionSynthesisPrompt(
   baseStrategyDescription: string,
@@ -188,9 +318,14 @@ export function buildEvolutionSynthesisPrompt(
     .map((r, i) => `### Mutation Agent ${i + 1} (${r.role})\n${r.content}`)
     .join('\n\n---\n\n');
 
-  return `# Evolutionary Strategy Synthesis
+  return `# Universal Symphony Synthesis - The Architect's Judgment
 
-You are evaluating ${mutationResults.length} mutations proposed by a genetic algorithm swarm.
+You are The Architect - evaluating ${mutationResults.length} mutations for the Universal Symphony portfolio.
+Your goal: Select strategies that work TOGETHER as a coordinated orchestra, not individual winners.
+
+## Target: 1% Daily Returns via Regime Rotation
+
+${UNIVERSAL_PHYSICS}
 
 ## Base Strategy
 ${baseStrategyDescription}
@@ -205,47 +340,74 @@ ${results}
 
 ---
 
-## Your Synthesis Task
+## Your Synthesis Task - Symphony Selection
 
-1. **Rank Mutations by Potential**
-   Rate each mutation on a 1-10 scale for:
-   - Likely improvement to Sharpe ratio
-   - Increase in convexity
-   - Implementation complexity
-   - Risk of breaking the strategy
+### Evaluation Criteria (STRICT)
 
-2. **Identify Top 3 Mutations**
-   Select the three most promising mutations and explain why.
+**1. Universal Physics Compliance** (Pass/Fail)
+- ❌ REJECT if mutation is just parameter optimization (RSI 14→20, threshold 2%→3%)
+- ❌ REJECT if no regime declaration
+- ❌ REJECT if no Exit Velocity clause
+- ✅ ACCEPT only structural mutations with regime awareness
 
-3. **Suggest Combinations**
-   Are there mutations that could be combined for compound improvement?
+**2. Symphony Contribution** (Score 1-10)
+- Does this COMPLEMENT existing strategies?
+- Would it make money when others LOSE? (negative correlation = 10)
+- Is it a duplicate of existing exposure? (correlation > 0.7 = 0)
 
-4. **Flag Red Flags**
-   Which mutations might introduce bugs or logical errors?
+**3. Structural Quality** (Score 1-10)
+- Is the Greek relationship logic sound?
+- Does the regime trigger make sense?
+- Is Exit Velocity properly implemented?
 
-5. **Recommend Next Steps**
-   What should be tested first? In what order?
+**4. Regime Coverage** (Which regime does it hunt?)
+- LOW_VOL_GRIND: For calm uptrends
+- HIGH_VOL_OSCILLATION: For choppy markets
+- CRASH_ACCELERATION: For panic selling
+- MELT_UP: For FOMO rallies
 
 ## Output Format
 
-Provide your synthesis as:
+### Universal Physics Audit
+| Agent | Mutation | Structural? | Regime Declared? | Exit Velocity? | PASS/FAIL |
+|-------|----------|-------------|------------------|----------------|-----------|
+[Fill table for each mutation]
 
-### Mutation Rankings
-[Table with scores]
+### Symphony Fit Analysis
+| Agent | Target Regime | Correlation Risk | Symphony Score |
+|-------|---------------|------------------|----------------|
+[Analyze how each fits the portfolio]
 
-### Top 3 Recommendations
-1. [Best mutation with rationale]
-2. [Second best with rationale]
-3. [Third best with rationale]
+### Top 3 Symphony Candidates
+Select the 3 best mutations that TOGETHER create a diversified regime-rotation portfolio:
 
-### Promising Combinations
-[Mutations that work well together]
+#### Candidate 1: [Name] - Hunts [REGIME]
+**Why Selected**: [Structural edge explanation]
+**Symphony Role**: [How it complements others]
+**Exit Velocity**: [Time/threshold used]
+\`\`\`python
+[Full code block]
+\`\`\`
 
-### Red Flags
-[Mutations to avoid or be careful with]
+#### Candidate 2: [Name] - Hunts [REGIME]
+[Same format]
 
-### Testing Roadmap
-[Ordered list of what to test]`;
+#### Candidate 3: [Name] - Hunts [REGIME]
+[Same format]
+
+### Rejected Mutations
+| Agent | Reason for Rejection |
+|-------|---------------------|
+[List rejections with specific Universal Physics violations]
+
+### Regime Coverage Assessment
+- LOW_VOL_GRIND: [Covered by Candidate X / NOT COVERED]
+- HIGH_VOL_OSCILLATION: [Covered by Candidate X / NOT COVERED]
+- CRASH_ACCELERATION: [Covered by Candidate X / NOT COVERED]
+- MELT_UP: [Covered by Candidate X / NOT COVERED]
+
+### Next Evolution Focus
+Based on regime coverage gaps, the next swarm should focus on: [MISSING_REGIME]`;
 }
 
 // ============================================================================
