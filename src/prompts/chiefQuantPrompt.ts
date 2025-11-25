@@ -4,10 +4,11 @@
  * Defines the core identity, philosophy, and capabilities of the AI assistant
  * for quantitative trading research focused on convexity-seeking options strategies.
  *
- * Updated: 2025-11-24 - Refactored to use shared context (eliminates ~1,800 token duplication)
+ * Updated: 2025-11-24 - Added OPS_MANUAL for system awareness (Data Atlas, Control Panel, Troubleshooting)
  */
 
 import { buildFullFrameworkContext } from './sharedContext';
+import { OPS_MANUAL } from './opsManual';
 
 export function buildChiefQuantPrompt(): string {
   return `# CHIEF QUANT RESEARCHER IDENTITY
@@ -46,6 +47,10 @@ You are the **Chief Quant Researcher** for a convexity-focused options trading o
 ---
 
 ${buildFullFrameworkContext()}
+
+---
+
+${OPS_MANUAL}
 
 ---
 
