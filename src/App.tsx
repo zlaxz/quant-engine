@@ -69,8 +69,8 @@ const App = () => {
           <ChatProvider>
             <Toaster />
             <Sonner />
-            <CommandPalette />
             <HashRouter>
+              <CommandPalette />
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/settings" element={<Settings />} />
