@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec, execSync, spawn } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { glob } from 'glob';
 import OpenAI from 'openai';
@@ -16,9 +16,6 @@ const fsPromises = fs.promises;
 
 // Tool execution timeout (30 seconds)
 const TOOL_TIMEOUT_MS = 30000;
-
-// Maximum file size for read operations (10MB)
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 // Wrapper for execAsync with timeout
 async function execWithTimeout(command: string, options?: { cwd?: string; maxBuffer?: number; timeout?: number }): Promise<{ stdout: string; stderr: string }> {
@@ -297,7 +294,7 @@ export async function validateStrategy(strategyPath: string): Promise<ToolResult
     }
 
     // Run Python syntax check
-    const { stdout, stderr } = await execWithTimeout(`python -m py_compile "${fullPath}"`, { cwd: root });
+    const { stdout: _stdout, stderr: _stderr } = await execWithTimeout(`python -m py_compile "${fullPath}"`, { cwd: root });
 
     // Check for required functions
     const content = fs.readFileSync(fullPath, 'utf-8');
@@ -407,7 +404,7 @@ export async function typeCheck(filePath: string): Promise<ToolResult> {
     const root = getEngineRoot();
     const fullPath = safeResolvePath(filePath);
 
-    const { stdout, stderr } = await execWithTimeout(`mypy "${fullPath}"`, { cwd: root });
+    const { stdout, stderr: _stderr } = await execWithTimeout(`mypy "${fullPath}"`, { cwd: root });
     return { success: true, content: stdout || 'Type checking passed' };
   } catch (error: any) {
     return { success: false, content: error.stdout || '', error: error.stderr || error.message };
@@ -601,7 +598,6 @@ export async function batchBacktest(
   capital?: number
 ): Promise<ToolResult> {
   try {
-    const root = getEngineRoot();
     const grid = JSON.parse(paramGrid);
     const backtestCapital = capital || 100000;
 
@@ -718,7 +714,6 @@ export async function sweepParams(
   capital?: number
 ): Promise<ToolResult> {
   try {
-    const root = getEngineRoot();
     const backtestCapital = capital || 100000;
 
     // Generate parameter values
@@ -815,7 +810,6 @@ export async function crossValidate(
   capital?: number
 ): Promise<ToolResult> {
   try {
-    const root = getEngineRoot();
     const folds = numFolds || 5;
     const backtestCapital = capital || 100000;
     const paramConfig = JSON.parse(params);
@@ -976,7 +970,6 @@ export async function dataQualityCheck(
   try {
     const content = fs.readFileSync(dataPath, 'utf-8');
     const lines = content.trim().split('\n');
-    const headers = lines[0].split(',');
 
     // Parse data
     const data: Array<{

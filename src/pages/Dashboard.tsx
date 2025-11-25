@@ -9,9 +9,9 @@
  * Polls Supabase for real-time updates from the Night Shift daemon.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, ArrowLeft, Moon, Activity, Database, LayoutGrid, List } from 'lucide-react';
+import { RefreshCw, ArrowLeft, Moon, Activity, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';

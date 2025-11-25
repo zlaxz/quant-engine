@@ -1,6 +1,6 @@
 // Experiment planning helpers for Experiment Director mode
 
-import type { BacktestRun, BacktestParams, BacktestMetrics } from '@/types/backtest';
+import type { BacktestRun, BacktestMetrics } from '@/types/backtest';
 import type { MemoryNote } from '@/types/memory';
 
 /**
@@ -105,7 +105,6 @@ export function buildExperimentRunSummary(runs: BacktestRun[]): string {
     }
   }
 
-  const currentYear = new Date().getFullYear();
   const yearsArray = Array.from(allYears).sort();
 
   summary += `Years with data: ${yearsArray.join(', ')}\n\n`;

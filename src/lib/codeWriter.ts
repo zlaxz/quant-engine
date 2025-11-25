@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
 
 export interface WriteOperation {
   operation: 'write' | 'append' | 'delete' | 'rename' | 'copy' | 'create_dir';
@@ -91,14 +90,6 @@ function validatePythonSyntax(content: string): { valid: boolean; error?: string
     // Skip comments and empty lines
     if (trimmed.startsWith('#') || trimmed === '') continue;
     
-    // Check for unmatched brackets/parens
-    const openBrackets = (line.match(/\[/g) || []).length;
-    const closeBrackets = (line.match(/\]/g) || []).length;
-    const openParens = (line.match(/\(/g) || []).length;
-    const closeParens = (line.match(/\)/g) || []).length;
-    const openBraces = (line.match(/\{/g) || []).length;
-    const closeBraces = (line.match(/\}/g) || []).length;
-    
     // Allow multiline constructs
     if (trimmed.endsWith('\\')) continue;
     
@@ -157,7 +148,7 @@ export async function writeFile(
           existingContent: existingContent || undefined,
           preview
         },
-        async (createBackup) => {
+        async (_createBackup) => {
           const result = await executeWriteOperation(operation);
           logWriteOperation(operation, result);
           resolve(result);
@@ -207,7 +198,7 @@ export async function appendFile(
           existingContent: existingContent || undefined,
           preview
         },
-        async (createBackup) => {
+        async (_createBackup) => {
           const result = await executeWriteOperation(operation);
           logWriteOperation(operation, result);
           resolve(result);
@@ -247,7 +238,7 @@ export async function deleteFile(
           existingContent: existingContent || undefined,
           preview: existingContent || undefined
         },
-        async (createBackup) => {
+        async (_createBackup) => {
           const result = await executeWriteOperation(operation);
           logWriteOperation(operation, result);
           resolve(result);
@@ -281,7 +272,7 @@ export async function renameFile(
     return new Promise((resolve) => {
       confirmCallback(
         { operation },
-        async (createBackup) => {
+        async (_createBackup) => {
           const result = await executeWriteOperation(operation);
           logWriteOperation(operation, result);
           resolve(result);
@@ -314,7 +305,7 @@ export async function copyFile(
     return new Promise((resolve) => {
       confirmCallback(
         { operation },
-        async (createBackup) => {
+        async (_createBackup) => {
           const result = await executeWriteOperation(operation);
           logWriteOperation(operation, result);
           resolve(result);
