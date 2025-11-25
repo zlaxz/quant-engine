@@ -368,11 +368,10 @@ export async function dryRunBacktest(
 
     // Try to check if strategy profile exists
     const profilePath = path.join(root, 'rotation-engine-bridge', 'profiles', `${strategyKey}.json`);
-    if (fs.existsSync(profilePath)) {
-      validationResults.checks['strategyProfile'] = 'PASS - Profile found';
-    } else {
-      validationResults.checks['strategyProfile'] = `WARNING - Profile not found at ${profilePath}`;
-    }
+    const profileCheck = fs.existsSync(profilePath) 
+      ? 'PASS - Profile found' 
+      : `WARNING - Profile not found at ${profilePath}`;
+    (validationResults.checks as any).strategyProfile = profileCheck;
 
     const allPassed = Object.values(validationResults.checks).every(c => c.startsWith('PASS'));
 

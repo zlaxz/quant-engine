@@ -118,12 +118,13 @@ export const RunComparisonPanel = ({
   const normalizedData = selectedRuns
     .filter(run => run.equity_curve && Array.isArray(run.equity_curve) && run.equity_curve.length > 0)
     .map((run, idx) => {
-      const firstValue = run.equity_curve[0]?.value || 1;
+      const curve = run.equity_curve!; // Safe after filter
+      const firstValue = curve[0]?.value || 1;
       return {
         runId: run.id,
         color: CHART_COLORS[idx % CHART_COLORS.length],
         label: `Run ${idx + 1}: ${strategies.find(s => s.key === run.strategy_key)?.name || run.strategy_key}`,
-        data: run.equity_curve.map(point => ({
+        data: curve.map(point => ({
           date: point.date,
           normalizedValue: point.value / firstValue,
         })),

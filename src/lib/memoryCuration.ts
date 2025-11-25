@@ -76,7 +76,7 @@ export function findWeakRules(notes: MemoryNote[]): MemoryNote[] {
     const isLowImportance = rule.importance === 'low' || rule.importance === 'normal';
     
     // Check if rule is old (> 90 days) without high/critical importance
-    const createdDate = new Date(rule.created_at);
+    const createdDate = rule.created_at ? new Date(rule.created_at) : new Date();
     const daysOld = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
     const isOldAndNotCritical = daysOld > 90 && rule.importance !== 'critical' && rule.importance !== 'high';
     
@@ -113,7 +113,9 @@ export function findConflicts(notes: MemoryNote[]): { ruleA: MemoryNote; ruleB: 
       const ruleB = rules[j];
       
       // Check if they share tags (same domain)
-      const sharedTags = ruleA.tags.filter(t => ruleB.tags.includes(t));
+      const tagsA = ruleA.tags || [];
+      const tagsB = ruleB.tags || [];
+      const sharedTags = tagsA.filter(t => tagsB.includes(t));
       if (sharedTags.length === 0) continue;
       
       // Check for opposite keywords
@@ -156,8 +158,10 @@ export function buildCurationSummary(notes: MemoryNote[]): string {
     
     summary += `### ${strategy.toUpperCase()}\n`;
     for (const rule of rules) {
-      summary += `- [${rule.importance.toUpperCase()}] ${rule.content.slice(0, 100)}${rule.content.length > 100 ? '...' : ''}\n`;
-      summary += `  ID: ${rule.id} | Tags: ${rule.tags.join(', ')} | Run-linked: ${rule.run_id ? 'Yes' : 'No'}\n`;
+      const importance = rule.importance || 'normal';
+      const tags = rule.tags || [];
+      summary += `- [${importance.toUpperCase()}] ${rule.content.slice(0, 100)}${rule.content.length > 100 ? '...' : ''}\n`;
+      summary += `  ID: ${rule.id} | Tags: ${tags.join(', ')} | Run-linked: ${rule.run_id ? 'Yes' : 'No'}\n`;
     }
     summary += "\n";
   }
@@ -166,8 +170,10 @@ export function buildCurationSummary(notes: MemoryNote[]): string {
   if (promotions.length > 0) {
     summary += "## PROMOTION CANDIDATES (Insights → Rules)\n\n";
     for (const candidate of promotions) {
-      summary += `- [${candidate.importance.toUpperCase()}] ${candidate.content.slice(0, 100)}${candidate.content.length > 100 ? '...' : ''}\n`;
-      summary += `  ID: ${candidate.id} | Tags: ${candidate.tags.join(', ')} | Run: ${candidate.run_id || 'none'}\n`;
+      const importance = candidate.importance || 'normal';
+      const tags = candidate.tags || [];
+      summary += `- [${importance.toUpperCase()}] ${candidate.content.slice(0, 100)}${candidate.content.length > 100 ? '...' : ''}\n`;
+      summary += `  ID: ${candidate.id} | Tags: ${tags.join(', ')} | Run: ${candidate.run_id || 'none'}\n`;
       summary += `  Reason: ${candidate.importance === 'high' ? 'High importance insight' : 'Multiple tags/run-linked'}\n\n`;
     }
   } else {
@@ -178,8 +184,10 @@ export function buildCurationSummary(notes: MemoryNote[]): string {
   if (weak.length > 0) {
     summary += "## WEAK RULES (Consider Demotion/Archive)\n\n";
     for (const rule of weak) {
-      const age = Math.floor((Date.now() - new Date(rule.created_at).getTime()) / (1000 * 60 * 60 * 24));
-      summary += `- [${rule.importance.toUpperCase()}] ${rule.content.slice(0, 100)}${rule.content.length > 100 ? '...' : ''}\n`;
+      const createdAt = rule.created_at ? new Date(rule.created_at) : new Date();
+      const age = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+      const importance = rule.importance || 'normal';
+      summary += `- [${importance.toUpperCase()}] ${rule.content.slice(0, 100)}${rule.content.length > 100 ? '...' : ''}\n`;
       summary += `  ID: ${rule.id} | Age: ${age} days | Run-linked: ${rule.run_id ? 'Yes' : 'No'}\n`;
       summary += `  Reason: ${!rule.run_id ? 'No run evidence' : 'Old without high importance'}\n\n`;
     }
@@ -194,7 +202,7 @@ export function buildCurationSummary(notes: MemoryNote[]): string {
       summary += `- CONFLICT:\n`;
       summary += `  Rule A [${ruleA.id}]: ${ruleA.content.slice(0, 80)}...\n`;
       summary += `  Rule B [${ruleB.id}]: ${ruleB.content.slice(0, 80)}...\n`;
-      summary += `  Shared tags: ${ruleA.tags.filter(t => ruleB.tags.includes(t)).join(', ')}\n\n`;
+      summary += `  Shared tags: ${(ruleA.tags || []).filter(t => (ruleB.tags || []).includes(t)).join(', ')}\n\n`;
     }
   } else {
     summary += "## CONFLICTS\nNone detected.\n\n";

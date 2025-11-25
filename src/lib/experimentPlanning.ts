@@ -163,8 +163,9 @@ export function buildExperimentMemorySummary(notes: MemoryNote[]): string {
   if (rules.length > 0) {
     summary += `## RULES\n\n`;
     for (const rule of rules) {
-      summary += `- [${rule.importance.toUpperCase()}] ${rule.content.slice(0, 150)}${rule.content.length > 150 ? '...' : ''}\n`;
-      if (rule.tags.length > 0) {
+      const importance = rule.importance || 'normal';
+      summary += `- [${importance.toUpperCase()}] ${rule.content.slice(0, 150)}${rule.content.length > 150 ? '...' : ''}\n`;
+      if (rule.tags && rule.tags.length > 0) {
         summary += `  Tags: ${rule.tags.join(', ')}\n`;
       }
       summary += '\n';
@@ -174,8 +175,9 @@ export function buildExperimentMemorySummary(notes: MemoryNote[]): string {
   if (warnings.length > 0) {
     summary += `## WARNINGS\n\n`;
     for (const warning of warnings) {
-      summary += `- [${warning.importance.toUpperCase()}] ${warning.content.slice(0, 150)}${warning.content.length > 150 ? '...' : ''}\n`;
-      if (warning.tags.length > 0) {
+      const importance = warning.importance || 'normal';
+      summary += `- [${importance.toUpperCase()}] ${warning.content.slice(0, 150)}${warning.content.length > 150 ? '...' : ''}\n`;
+      if (warning.tags && warning.tags.length > 0) {
         summary += `  Tags: ${warning.tags.join(', ')}\n`;
       }
       summary += '\n';
@@ -186,7 +188,7 @@ export function buildExperimentMemorySummary(notes: MemoryNote[]): string {
     summary += `## KEY INSIGHTS\n\n`;
     for (const insight of insightsList) {
       summary += `- ${insight.content.slice(0, 150)}${insight.content.length > 150 ? '...' : ''}\n`;
-      if (insight.tags.length > 0) {
+      if (insight.tags && insight.tags.length > 0) {
         summary += `  Tags: ${insight.tags.join(', ')}\n`;
       }
       summary += '\n';

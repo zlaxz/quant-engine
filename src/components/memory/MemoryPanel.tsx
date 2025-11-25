@@ -392,7 +392,7 @@ export const MemoryPanel = ({ onViewRun }: MemoryPanelProps) => {
                       {getImportanceBadge(note.importance || 'normal')}
                       {getSourceBadge(note.source)}
                       <span className="text-[10px] text-muted-foreground">
-                        {format(new Date(note.created_at), 'MMM d, yyyy HH:mm')}
+                        {note.created_at && format(new Date(note.created_at), 'MMM d, yyyy HH:mm')}
                       </span>
                       {note.updated_at && note.updated_at !== note.created_at && (
                         <span className="text-[10px] text-muted-foreground italic">

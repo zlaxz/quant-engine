@@ -43,9 +43,10 @@ export function registerMemoryHandlers(): void {
         return { memories: [], totalFound: 0, searchTimeMs: 0, usedCache: false, query: '' };
       }
 
+      let query = '';
       try {
         // Validate at IPC boundary
-        const query = validateIPC(MemoryQuerySchema, queryRaw, 'memory query');
+        query = validateIPC(MemoryQuerySchema, queryRaw, 'memory query');
         const workspaceId = validateIPC(WorkspaceIdSchema, workspaceIdRaw, 'workspace ID');
         const options = optionsRaw !== undefined
           ? validateIPC(MemoryOptionsSchema, optionsRaw, 'memory options')
@@ -54,7 +55,7 @@ export function registerMemoryHandlers(): void {
         return await recallEngine.recall(query, workspaceId, options);
       } catch (error: any) {
         console.error('[MemoryHandlers] Recall error:', error);
-        return { memories: [], totalFound: 0, searchTimeMs: 0, usedCache: false, query: query, error: error.message };
+        return { memories: [], totalFound: 0, searchTimeMs: 0, usedCache: false, query, error: error.message };
       }
     }
   );

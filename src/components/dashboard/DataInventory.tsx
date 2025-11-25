@@ -94,8 +94,8 @@ export function DataInventory() {
       setLoading(true);
 
       // Check if running in Electron
-      if (window.electron?.getDataInventory) {
-        const inventory = await window.electron.getDataInventory();
+      if (window.electron && 'getDataInventory' in window.electron) {
+        const inventory = await (window.electron as any).getDataInventory();
         setAssets(inventory.assets || []);
         setDiskStats(inventory.disk || null);
         setError(null);

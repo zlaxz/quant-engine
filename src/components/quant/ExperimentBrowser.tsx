@@ -5,10 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, FileText, Calendar, TrendingUp, Zap, Activity, AlertCircle, Save, Check } from 'lucide-react';
+import { Loader2, FileText, Calendar, Zap, Activity, AlertCircle, Save, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { BacktestRun, BacktestMetrics } from '@/types/backtest';
+import type { BacktestRun } from '@/types/backtest';
 
 interface ExperimentBrowserProps {
   sessionId: string | null;
@@ -215,13 +215,13 @@ export const ExperimentBrowser = ({
                         {run.strategy_key.replace(/_/g, ' ').replace(/v\d+$/, '')}
                       </h5>
                       <Badge variant="secondary" className="text-[9px] h-4 px-1">
-                        {getEngineIcon(run.engine_source)}
-                        <span className="ml-0.5">{getEngineLabel(run.engine_source)}</span>
+                        {getEngineIcon(run.engine_source || undefined)}
+                        <span className="ml-0.5">{getEngineLabel(run.engine_source || undefined)}</span>
                       </Badge>
                     </div>
                     <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                       <Calendar className="h-2.5 w-2.5" />
-                      {formatDate(run.started_at)}
+                      {run.started_at && formatDate(run.started_at)}
                     </div>
                   </div>
                 </div>

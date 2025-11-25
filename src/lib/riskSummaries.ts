@@ -165,18 +165,20 @@ export function buildRiskMemorySummary(notes: MemoryNote[]): string {
   if (critical.length > 0) {
     sections.push('\n**CRITICAL**:');
     critical.forEach(n => {
-      const tags = n.tags.length > 0 ? ` [${n.tags.join(', ')}]` : '';
+      const tags = n.tags || [];
+      const tagsStr = tags.length > 0 ? ` [${tags.join(', ')}]` : '';
       const typeLabel = n.memory_type === 'rule' ? 'Rule' : 'Warning';
-      sections.push(`  - ${typeLabel}${tags}: ${n.content.substring(0, 200)}${n.content.length > 200 ? '...' : ''}`);
+      sections.push(`  - ${typeLabel}${tagsStr}: ${n.content.substring(0, 200)}${n.content.length > 200 ? '...' : ''}`);
     });
   }
 
   if (high.length > 0) {
     sections.push('\n**HIGH**:');
     high.slice(0, 10).forEach(n => {
-      const tags = n.tags.length > 0 ? ` [${n.tags.join(', ')}]` : '';
+      const tags = n.tags || [];
+      const tagsStr = tags.length > 0 ? ` [${tags.join(', ')}]` : '';
       const typeLabel = n.memory_type === 'rule' ? 'Rule' : 'Warning';
-      sections.push(`  - ${typeLabel}${tags}: ${n.content.substring(0, 150)}${n.content.length > 150 ? '...' : ''}`);
+      sections.push(`  - ${typeLabel}${tagsStr}: ${n.content.substring(0, 150)}${n.content.length > 150 ? '...' : ''}`);
     });
   }
 

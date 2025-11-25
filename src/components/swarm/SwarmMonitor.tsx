@@ -192,9 +192,6 @@ function TaskDetailDialog({ task, onClose }: TaskDetailDialogProps) {
             {task.tokens_output && (
               <Badge variant="outline">Output: {task.tokens_output} tokens</Badge>
             )}
-            {task.model_used && (
-              <Badge variant="outline">Model: {task.model_used}</Badge>
-            )}
           </div>
         </div>
       </DialogContent>

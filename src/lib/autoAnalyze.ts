@@ -28,7 +28,7 @@ export function selectKeyRuns(runs: BacktestRun[]): BacktestRun[] {
   const validSharpeRuns = runs.filter(r => r.metrics?.sharpe != null);
   if (validSharpeRuns.length > 0) {
     const bestSharpe = validSharpeRuns.reduce((best, run) => 
-      (run.metrics.sharpe > (best.metrics?.sharpe || -Infinity)) ? run : best
+      (run.metrics!.sharpe > (best.metrics?.sharpe || -Infinity)) ? run : best
     );
     selected.add(bestSharpe);
   }
@@ -37,7 +37,7 @@ export function selectKeyRuns(runs: BacktestRun[]): BacktestRun[] {
   const validDDRuns = runs.filter(r => r.metrics?.max_drawdown != null);
   if (validDDRuns.length > 0) {
     const worstDD = validDDRuns.reduce((worst, run) =>
-      (Math.abs(run.metrics.max_drawdown) > Math.abs(worst.metrics?.max_drawdown || 0)) ? run : worst
+      (Math.abs(run.metrics!.max_drawdown) > Math.abs(worst.metrics?.max_drawdown || 0)) ? run : worst
     );
     selected.add(worstDD);
   }
@@ -56,15 +56,15 @@ export function selectKeyRuns(runs: BacktestRun[]): BacktestRun[] {
   if (validCAGRRuns.length > 0) {
     // Highest CAGR
     const highestCAGR = validCAGRRuns.reduce((max, run) =>
-      (run.metrics.cagr > (max.metrics?.cagr || -Infinity)) ? run : max
+      (run.metrics!.cagr > (max.metrics?.cagr || -Infinity)) ? run : max
     );
     if (selected.size < 5) selected.add(highestCAGR);
 
     // Lowest CAGR (if negative)
     const lowestCAGR = validCAGRRuns.reduce((min, run) =>
-      (run.metrics.cagr < (min.metrics?.cagr || Infinity)) ? run : min
+      (run.metrics!.cagr < (min.metrics?.cagr || Infinity)) ? run : min
     );
-    if (selected.size < 5 && lowestCAGR.metrics.cagr < 0) {
+    if (selected.size < 5 && lowestCAGR.metrics!.cagr < 0) {
       selected.add(lowestCAGR);
     }
   }
@@ -97,10 +97,10 @@ export function buildRunPortfolioSummary(runs: BacktestRun[]): string {
   }
 
   // Calculate aggregate metrics
-  const validCAGR = runs.filter(r => r.metrics?.cagr != null).map(r => r.metrics.cagr);
-  const validSharpe = runs.filter(r => r.metrics?.sharpe != null).map(r => r.metrics.sharpe);
-  const validDD = runs.filter(r => r.metrics?.max_drawdown != null).map(r => r.metrics.max_drawdown);
-  const validWinRate = runs.filter(r => r.metrics?.win_rate != null).map(r => r.metrics.win_rate);
+  const validCAGR = runs.filter(r => r.metrics?.cagr != null).map(r => r.metrics!.cagr);
+  const validSharpe = runs.filter(r => r.metrics?.sharpe != null).map(r => r.metrics!.sharpe);
+  const validDD = runs.filter(r => r.metrics?.max_drawdown != null).map(r => r.metrics!.max_drawdown);
+  const validWinRate = runs.filter(r => r.metrics?.win_rate != null).map(r => r.metrics!.win_rate);
 
   const median = (arr: number[]) => {
     if (arr.length === 0) return null;
@@ -140,8 +140,8 @@ export function buildRunPortfolioSummary(runs: BacktestRun[]): string {
   // Strategy breakdown
   summary += `### By Strategy:\n`;
   for (const [strategy, stratRuns] of byStrategy.entries()) {
-    const stratMedianCAGR = median(stratRuns.filter(r => r.metrics?.cagr != null).map(r => r.metrics.cagr));
-    const stratMedianSharpe = median(stratRuns.filter(r => r.metrics?.sharpe != null).map(r => r.metrics.sharpe));
+    const stratMedianCAGR = median(stratRuns.filter(r => r.metrics?.cagr != null).map(r => r.metrics!.cagr));
+    const stratMedianSharpe = median(stratRuns.filter(r => r.metrics?.sharpe != null).map(r => r.metrics!.sharpe));
     summary += `- **${strategy}**: ${stratRuns.length} runs`;
     if (stratMedianCAGR !== null) summary += `, median CAGR: ${(stratMedianCAGR * 100).toFixed(1)}%`;
     if (stratMedianSharpe !== null) summary += `, median Sharpe: ${stratMedianSharpe.toFixed(2)}`;
@@ -186,10 +186,10 @@ export function buildRunPortfolioSummary(runs: BacktestRun[]): string {
     const bestRun = runs.find(r => r.metrics?.cagr === Math.max(...validCAGR));
     const worstRun = runs.find(r => r.metrics?.cagr === Math.min(...validCAGR));
     summary += `\n### Extremes:\n`;
-    if (bestRun) {
+    if (bestRun && bestRun.metrics) {
       summary += `- **Best performance**: ${bestRun.strategy_key} with ${(bestRun.metrics.cagr * 100).toFixed(1)}% CAGR\n`;
     }
-    if (worstRun && worstRun.metrics.cagr < 0) {
+    if (worstRun && worstRun.metrics && worstRun.metrics.cagr < 0) {
       summary += `- **Worst performance**: ${worstRun.strategy_key} with ${(worstRun.metrics.cagr * 100).toFixed(1)}% CAGR\n`;
     }
   }

@@ -183,7 +183,7 @@ Available tools: read_file, list_directory, search_code, write_file, git_status,
       let toolCallLog: string[] = []; // Visible log for user
 
       while (iterations < MAX_TOOL_ITERATIONS) {
-        const candidate = response.candidates?.[0];
+        const candidate = (response as any).candidates?.[0];
         if (!candidate) break;
 
         // Check if model wants to call tools
@@ -294,7 +294,7 @@ Available tools: read_file, list_directory, search_code, write_file, git_status,
       }
 
       // Get final text response
-      const finalText = response.text();
+      const finalText = (response as any).text();
 
       // Build visible tool call log
       const toolSummary = toolCallLog.length > 0

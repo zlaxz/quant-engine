@@ -15,7 +15,7 @@ import { useChatContext } from '@/contexts/ChatContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ExperimentBrowser } from './ExperimentBrowser';
 import { RunComparisonPanel } from './RunComparisonPanel';
-import type { BacktestRun, BacktestParams, BacktestMetrics } from '@/types/backtest';
+import type { BacktestRun } from '@/types/backtest';
 
 interface Strategy {
   id: string;
@@ -612,9 +612,9 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
                   {strategies.find(s => s.key === currentRun.strategy_key)?.name || currentRun.strategy_key}
                 </div>
                 <div>
-                  <strong>CAGR:</strong> {(currentRun.metrics.cagr * 100).toFixed(2)}%
+                  <strong>CAGR:</strong> {currentRun.metrics ? (currentRun.metrics.cagr * 100).toFixed(2) : 'N/A'}%
                   {' | '}
-                  <strong>Sharpe:</strong> {currentRun.metrics.sharpe.toFixed(2)}
+                  <strong>Sharpe:</strong> {currentRun.metrics ? currentRun.metrics.sharpe.toFixed(2) : 'N/A'}
                 </div>
               </div>
             )}
