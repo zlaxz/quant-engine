@@ -137,9 +137,11 @@ export const ChatArea = () => {
   }, [selectedSessionId, selectedWorkspaceId, toast]);
 
   // Subscribe to IPC events for tool progress and streaming (Electron only)
+  // LOVABLE FIX 2024-11-25: Guard against undefined window.electron
   useEffect(() => {
-    // Skip if not running in Electron
+    // Skip if not running in Electron (required for Lovable/browser mode)
     if (!window.electron?.onToolProgress || !window.electron?.onLLMStream) {
+      console.log('[ChatArea] Skipping IPC subscriptions - not in Electron');
       return;
     }
 
