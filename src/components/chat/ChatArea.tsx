@@ -328,7 +328,8 @@ export const ChatArea = () => {
         const allMemoryIds: string[] = [];
         const basePrompt = buildChiefQuantPrompt();
 
-        if (selectedWorkspaceId) {
+        // LOVABLE FIX: Only attempt memory recall if running in Electron
+        if (selectedWorkspaceId && window.electron?.checkMemoryTriggers) {
           try {
             // 1. TRIGGER-BASED RECALL (Highest Priority - Critical Lessons)
             const triggerResult = await window.electron.checkMemoryTriggers(

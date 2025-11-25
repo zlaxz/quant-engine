@@ -18,7 +18,10 @@ export function useMemoryReinforcement() {
   const [staleMemories, setStaleMemories] = useState<StaleMemory[]>([]);
 
   useEffect(() => {
-    if (!selectedWorkspaceId) return;
+    // LOVABLE FIX: Skip if not running in Electron (browser mode)
+    if (!selectedWorkspaceId || !window.electron?.getStaleMemories) {
+      return;
+    }
 
     const checkStaleMemories = async () => {
       try {
