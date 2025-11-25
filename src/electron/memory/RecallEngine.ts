@@ -14,6 +14,12 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { LRUCache } from 'lru-cache';
 import OpenAI from 'openai';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Safe JSON parse utility
 function safeJSONParse<T>(json: string, fallback: T): T {
@@ -95,8 +101,6 @@ export class RecallEngine {
 
       if (!exists) {
         console.log('[RecallEngine] Initializing database tables');
-        const fs = require('fs');
-        const path = require('path');
         const schemaPath = path.join(__dirname, 'schema.sql');
         const schema = fs.readFileSync(schemaPath, 'utf-8');
         this.localDb.exec(schema);

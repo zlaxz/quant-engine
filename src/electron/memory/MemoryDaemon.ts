@@ -8,7 +8,13 @@ import Database from 'better-sqlite3';
 import { SupabaseClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import pLimit from 'p-limit';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { MODELS } from '../../config/models';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 interface ExtractedMemory {
   content: string;
@@ -393,9 +399,6 @@ export class MemoryDaemon extends EventEmitter {
   }
 
   private initializeLocalDb(): void {
-    const fs = require('fs');
-    const path = require('path');
-
     const schemaPath = path.join(__dirname, 'schema.sql');
     const schema = fs.readFileSync(schemaPath, 'utf-8');
 
