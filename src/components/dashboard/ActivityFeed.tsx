@@ -17,11 +17,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   Activity,
   Dna,
-  LineChart,
   GraduationCap,
   AlertTriangle,
   CheckCircle2,
-  Clock,
   Loader2,
   Play,
   XCircle,

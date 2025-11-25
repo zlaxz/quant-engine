@@ -13,7 +13,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -101,7 +100,7 @@ const DEFAULT_BUDGETS = {
 export function TokenSpendTracker() {
   const [stats, setStats] = useState<TokenStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [_error, setError] = useState<string | null>(null);
 
   const fetchStats = useCallback(async () => {
     try {

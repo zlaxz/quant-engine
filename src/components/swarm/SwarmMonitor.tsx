@@ -9,7 +9,7 @@
  * - Cancel/retry controls
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { X, RefreshCw, CheckCircle, AlertCircle, Clock, Loader2 } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Clock, Loader2 } from 'lucide-react';
 import {
   type SwarmProgress,
   type SwarmTask,
@@ -212,7 +212,7 @@ export function SwarmMonitor({
 }: SwarmMonitorProps) {
   const [progress, setProgress] = useState<SwarmProgress | null>(null);
   const [selectedTask, setSelectedTask] = useState<SwarmTask | null>(null);
-  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [_isSubscribed, setIsSubscribed] = useState(false);
 
   // Subscribe to job updates
   useEffect(() => {

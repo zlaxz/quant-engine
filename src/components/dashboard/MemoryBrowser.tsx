@@ -17,7 +17,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -42,11 +41,7 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
-  Calendar,
   FileText,
-  ExternalLink,
-  Trash2,
-  Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -92,7 +87,7 @@ export function MemoryBrowser() {
   const [searchQuery, setSearchQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
+  const [_selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
   const [projects, setProjects] = useState<string[]>([]);
 
   const fetchMemories = useCallback(async () => {

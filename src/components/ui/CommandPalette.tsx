@@ -10,12 +10,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Command } from 'cmdk';
 import {
-  Play,
   Square,
   Activity,
   FileText,
   Settings,
-  HardDrive,
   Zap,
   Moon,
   AlertTriangle,

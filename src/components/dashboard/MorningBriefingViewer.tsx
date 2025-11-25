@@ -10,14 +10,13 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   FileText,
   TrendingUp,
-  TrendingDown,
   Calendar,
   RefreshCw,
   Loader2,
@@ -29,7 +28,6 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import {
   safeFormat,
-  safeParseISO,
   safeIsToday,
   safeIsYesterday,
 } from '@/lib/dateUtils';

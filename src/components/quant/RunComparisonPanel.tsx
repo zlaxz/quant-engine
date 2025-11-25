@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { AlertCircle, X, Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { toast } from 'sonner';
-import type { BacktestRun, BacktestParams, BacktestMetrics } from '@/types/backtest';
+import type { BacktestRun, BacktestMetrics } from '@/types/backtest';
 
 interface Strategy {
   id: string;

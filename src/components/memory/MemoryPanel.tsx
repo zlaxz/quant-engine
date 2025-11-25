@@ -121,7 +121,7 @@ export const MemoryPanel = ({ onViewRun }: MemoryPanelProps) => {
           .filter(t => t.length > 0)
       ));
 
-      const { error, data } = await supabase.functions.invoke('memory-create', {
+      const { error } = await supabase.functions.invoke('memory-create', {
         body: {
           workspaceId: selectedWorkspaceId,
           content: newNoteContent.trim(),

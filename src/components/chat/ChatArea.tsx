@@ -34,7 +34,7 @@ export const ChatArea = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingMessages, setIsFetchingMessages] = useState(false);
+  const [_isFetchingMessages, setIsFetchingMessages] = useState(false);
   const [commandSuggestions, setCommandSuggestions] = useState<string[]>([]);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [intentSuggestion, setIntentSuggestion] = useState<DetectedIntent | null>(null);
@@ -52,7 +52,7 @@ export const ChatArea = () => {
     timestamp: number;
   }>>([]);
   const [streamingContent, setStreamingContent] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [_isStreaming, setIsStreaming] = useState(false);
   const [activeSwarmJob, setActiveSwarmJob] = useState<{
     jobId: string;
     objective: string;

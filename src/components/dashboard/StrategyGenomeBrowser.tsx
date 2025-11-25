@@ -49,7 +49,6 @@ import {
   ArrowDown,
   Play,
   Eye,
-  Star,
   TrendingUp,
   TrendingDown,
 } from 'lucide-react';
@@ -102,7 +101,7 @@ export function StrategyGenomeBrowser() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('sharpe_ratio');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
+  const [_selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
   const [promoting, setPromoting] = useState<string | null>(null);
 
   const fetchStrategies = useCallback(async () => {

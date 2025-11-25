@@ -21,7 +21,6 @@ import {
   Target,
   Clock,
   DollarSign,
-  BarChart3,
   GraduationCap,
   Loader2,
 } from 'lucide-react';

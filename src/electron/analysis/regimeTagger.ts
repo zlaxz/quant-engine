@@ -76,7 +76,6 @@ export class RegimeTagger {
   private async detectRegime(startDate: string, endDate: string): Promise<RegimeContext | null> {
     // For now, use date-based heuristics (replace with actual market data queries)
     const start = new Date(startDate);
-    const end = new Date(endDate);
 
     // Known regime periods (simplified - replace with actual data)
     const knownRegimes = [

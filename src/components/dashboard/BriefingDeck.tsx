@@ -13,7 +13,6 @@ import React, { useState } from 'react';
 import {
   Sun,
   TrendingUp,
-  TrendingDown,
   AlertTriangle,
   CheckCircle,
   XCircle,
@@ -22,7 +21,6 @@ import {
   Calendar,
   BarChart2,
   Activity,
-  Zap,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

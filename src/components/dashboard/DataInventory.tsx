@@ -199,7 +199,6 @@ export function DataInventory() {
 
   const totalDataGB = assets.reduce((sum, a) => sum + a.sizeGB, 0);
   const assetsWithGaps = assets.filter((a) => a.gapDays > 0).length;
-  const staleAssets = assets.filter((a) => a.status === 'stale').length;
 
   if (loading) {
     return (

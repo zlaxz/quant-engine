@@ -1,6 +1,4 @@
 import { ipcMain } from 'electron';
-import path from 'path';
-import { glob } from 'glob';
 import {
   validateIPC,
   FilePathSchema,

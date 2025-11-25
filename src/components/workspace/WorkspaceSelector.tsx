@@ -18,7 +18,7 @@ interface Workspace {
 }
 
 export const WorkspaceSelector = () => {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [_workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
   const { state } = useSidebar();

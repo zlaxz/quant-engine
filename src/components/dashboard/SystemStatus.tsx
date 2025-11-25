@@ -18,8 +18,6 @@ import {
   Server,
   RefreshCw,
   AlertCircle,
-  CheckCircle2,
-  XCircle,
   Loader2,
 } from 'lucide-react';
 import {

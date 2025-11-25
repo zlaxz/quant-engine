@@ -944,7 +944,7 @@ async function handleRiskReview(args: string, context: CommandContext): Promise<
     let filteredMemory = memoryNotes;
     if (focus) {
       filteredMemory = memoryNotes.filter(n =>
-        n.tags.some(tag => tag.toLowerCase().includes(focus.toLowerCase())) ||
+        n.tags.some((tag: string) => tag.toLowerCase().includes(focus.toLowerCase())) ||
         n.content.toLowerCase().includes(focus.toLowerCase())
       );
     }
@@ -2545,12 +2545,6 @@ async function handleEvolveStrategy(args: string, context: CommandContext): Prom
         systemPrompt: MUTATION_AGENT_SYSTEM,
         agentRoles: mutations,
         inputContexts,
-        // Pass code to shared_context for caching (avoids re-uploading for each agent)
-        sharedContext: {
-          code_content: strategyCode,
-          strategy_path: strategyPath || strategyRef,
-          code_hash: hashCode(strategyCode),
-        },
       },
     });
 

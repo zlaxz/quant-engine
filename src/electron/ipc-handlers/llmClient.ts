@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { GoogleGenerativeAI, FunctionCallingMode } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 import { ALL_TOOLS } from '../tools/toolDefinitions';
 import { executeTool } from '../tools/toolHandlers';

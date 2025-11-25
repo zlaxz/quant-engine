@@ -39,8 +39,6 @@ export function SwarmStatusBar({
 }: SwarmStatusBarProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const isActive = progress.status === 'pending' || progress.status === 'processing';
-
   // Compact bar
   if (!expanded) {
     return (

@@ -30,12 +30,7 @@ import {
 import {
   Play,
   Square,
-  Loader2,
   LineChart,
-  TrendingUp,
-  TrendingDown,
-  Calendar,
-  DollarSign,
   AlertTriangle,
   CheckCircle2,
 } from 'lucide-react';
