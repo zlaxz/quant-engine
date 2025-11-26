@@ -113,9 +113,11 @@ Primary interaction point. All work happens through natural language conversatio
 
 **Purpose**: Show what's happening right now in visual form
 
-**Behavior**: Automatically updates based on current research stage
+**Behavior**: Dual-purpose panel that serves two modes:
 
-#### Stage-Specific Visualizations
+#### Primary Mode: Stage-Specific Visualizations
+
+**Default state** - Always returns here after artifact display
 
 1. **Idle / Getting Started**
    - Quick-start guide with visual examples
@@ -147,7 +149,45 @@ Primary interaction point. All work happens through natural language conversatio
    - Greeks Dashboard: Portfolio risk exposure (delta, gamma, vega, theta)
    - Allocation Sankey: Capital flow between strategies
 
-**Key Feature**: Smooth transitions between visualizations, not jarring switches
+#### Secondary Mode: Contextual Artifacts
+
+**Temporary display** - Triggered by Chief Quant when educational transparency needed
+
+Chief Quant can temporarily switch the visualization panel to show:
+
+1. **Annotated Strategy Code**
+   - Actual strategy implementation with inline explanations
+   - Highlighted key sections (entry logic, exit conditions, risk controls)
+   - "This is what's actually running" transparency
+
+2. **Configuration Files**
+   - Parameter sets with explanations of each value
+   - Why these parameters were chosen
+   - What happens if you change them
+
+3. **Research Reports**
+   - Formatted analysis summaries
+   - Key findings with supporting evidence
+   - Actionable recommendations
+
+4. **Analysis Scripts**
+   - Data analysis code with educational annotations
+   - "Here's how I calculated that metric"
+   - Step-by-step breakdown of complex analysis
+
+**Transition Behavior**:
+- Chief Quant triggers via `[DISPLAY_ARTIFACT: type, content]` directive
+- Smooth fade transition (0.3s) from visualization → artifact
+- Artifact displays with scroll and syntax highlighting
+- Automatic return to visualization after:
+  - User continues conversation (30s timeout)
+  - User explicitly asks to return
+  - New research operation begins
+- Fade transition back to primary visualization
+
+**Design**: Artifacts maintain same panel dimensions, use code editor styling with educational callouts, always include "Back to Visualization" button
+
+**Key Feature**: Smooth transitions between visualizations and artifacts, automatic return to primary mode
 
 ---
 
@@ -353,20 +393,33 @@ Consistent color language throughout:
 
 ### Phase 1: Redesign Foundation (2-3 days)
 
-**Goal**: New layout without breaking existing functionality
+**Goal**: New layout with dual-purpose visualization/artifact display
 
 1. Create new two-column layout component
 2. Move chat to left panel (remove left sidebar entirely)
 3. Create right panel container with split (60/40)
 4. Add status strip to top
-5. Wire up existing visualizations to new right panel top section
-6. Create roadmap component for bottom section (initially empty)
-7. Update Chief Quant prompt with educational teaching instructions
-8. Test all existing features work in new layout
+5. Build dual-purpose display system for right panel top section:
+   - Primary mode: Visualization container (existing viz components)
+   - Secondary mode: Artifact display container (code viewer, report renderer)
+   - Fade transition system between modes
+   - Auto-return timer (30s) and manual return button
+6. Create directive parser for `[DISPLAY_ARTIFACT: ...]` in Chief Quant messages
+7. Build artifact display components:
+   - Annotated code viewer with syntax highlighting
+   - Configuration display with inline explanations
+   - Research report renderer
+   - Analysis script viewer
+8. Create roadmap component for bottom section (initially empty)
+9. Update Chief Quant prompt with educational teaching instructions + artifact display capability
+10. Test all existing features work in new layout
 
 **Success Criteria**:
 - ✓ Two-column layout renders correctly
-- ✓ All existing visualizations display in right panel top
+- ✓ All existing visualizations display in right panel top (primary mode)
+- ✓ Artifact display works with smooth transitions (secondary mode)
+- ✓ Auto-return to visualization after timeout or user action
+- ✓ Chief Quant can trigger artifact display via directives
 - ✓ Chat works in left panel
 - ✓ Status strip shows current stage/progress
 - ✓ No regressions in core functionality
