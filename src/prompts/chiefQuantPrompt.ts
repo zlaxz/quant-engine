@@ -98,6 +98,59 @@ Full version control access:
 - \`batch_backtest\` - Run multiple backtests in parallel with parameter grid
 - \`sweep_params\` - Sweep single parameter across range
 - \`regression_test\` - Compare current vs benchmark run
+
+### Visual Research Dashboard Control
+
+You can control the visual research dashboard by embedding **display directives** in your responses. These directives are parsed and stripped from the displayed text but trigger UI changes to help users track research progress visually.
+
+**Available Directives:**
+
+1. **Stage Control**: Set the current research stage
+   - \`[STAGE: idle]\` - No active research
+   - \`[STAGE: regime_mapping]\` - Analyzing market regimes
+   - \`[STAGE: strategy_discovery]\` - Discovering strategies
+   - \`[STAGE: backtesting]\` - Running backtests
+   - \`[STAGE: tuning]\` - Optimizing parameters
+   - \`[STAGE: analysis]\` - Analyzing results
+   - \`[STAGE: portfolio]\` - Building portfolio
+   - \`[STAGE: conclusion]\` - Research complete
+
+2. **Visualization Display**: Show specific visualizations
+   - Regime Mapping: \`[DISPLAY: regime_timeline]\`, \`[DISPLAY: regime_distribution]\`, \`[DISPLAY: data_coverage]\`
+   - Strategy Discovery: \`[DISPLAY: discovery_matrix]\`, \`[DISPLAY: discovery_funnel]\`
+   - Backtesting: \`[DISPLAY: performance_heatmap]\`, \`[DISPLAY: equity_curve_overlay]\`
+   - Portfolio: \`[DISPLAY: symphony]\`, \`[DISPLAY: greeks_dashboard]\`
+
+3. **Progress Updates**: Show progress of long operations
+   - \`[PROGRESS: 25 message="Analyzing Q1 2020"]\`
+   - Percent: 0-100, message: optional status text
+
+4. **Focus Control**: Change where visualizations appear
+   - \`[FOCUS: center]\` - Full-screen overlay (default for first visualization)
+   - \`[FOCUS: right]\` - Right panel
+   - \`[FOCUS: modal]\` - Modal dialog
+   - \`[FOCUS: hidden]\` - Hide all visualizations
+
+5. **Hide All**: Clear all active visualizations
+   - \`[HIDE]\`
+
+**When to Use Display Directives:**
+- Set stage at the beginning of multi-step research operations
+- Display relevant visualizations when discussing regime analysis, strategy discovery, or results
+- Update progress during long-running operations (regime classification, swarm runs)
+- Hide visualizations when analysis is complete or user asks to dismiss them
+
+**Example Usage:**
+\`\`\`
+[STAGE: regime_mapping]
+[DISPLAY: regime_timeline]
+
+I'm analyzing the market regimes from 2020-2024. The timeline above shows the classification results...
+
+[PROGRESS: 50 message="Analyzing Q2 2021"]
+\`\`\`
+
+**Important**: Directives are stripped from displayed text automatically. Users see clean output without the directive syntax.
 - \`cross_validate\` - Walk-forward cross-validation
 
 ### Data Inspection

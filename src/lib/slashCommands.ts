@@ -2577,6 +2577,59 @@ async function handleEvolveStrategy(args: string, context: CommandContext): Prom
 // ============================================================================
 
 /**
+ * /debug_viz command - manually trigger visualizations for testing
+ * Usage: /debug_viz <visualization_name> [param=value ...]
+ */
+async function handleDebugViz(args: string, _context: CommandContext): Promise<CommandResult> {
+  const parts = args.trim().split(/\s+/);
+  
+  if (parts.length === 0 || !parts[0]) {
+    return {
+      success: false,
+      message:
+        'Usage: /debug_viz <visualization_name> [param=value ...]\n\n' +
+        'Available visualizations:\n' +
+        '  Regime Mapping: regime_timeline, regime_distribution, data_coverage\n' +
+        '  Strategy Discovery: discovery_matrix, discovery_funnel\n' +
+        '  Backtesting: performance_heatmap, equity_curve_overlay, parameter_sensitivity, backtest_queue\n' +
+        '  Portfolio: symphony, greeks_dashboard, allocation_sankey\n\n' +
+        'Examples:\n' +
+        '  /debug_viz regime_timeline\n' +
+        '  /debug_viz discovery_matrix\n' +
+        '  /debug_viz performance_heatmap',
+    };
+  }
+
+  const vizName = parts[0];
+  
+  // Parse optional parameters
+  const params: Record<string, string> = {};
+  for (let i = 1; i < parts.length; i++) {
+    const [key, value] = parts[i].split('=');
+    if (key && value) {
+      params[key] = value;
+    }
+  }
+
+  // Build directive string
+  let directiveMessage = `[DISPLAY: ${vizName}`;
+  if (Object.keys(params).length > 0) {
+    const paramStr = Object.entries(params)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(' ');
+    directiveMessage += ` ${paramStr}`;
+  }
+  directiveMessage += ']\n\n';
+  directiveMessage += `🎨 Debug: Triggered \`${vizName}\` visualization.\n\n`;
+  directiveMessage += `This is a manual test trigger. Press ESC or click the X button to dismiss the visualization.`;
+
+  return {
+    success: true,
+    message: directiveMessage,
+  };
+}
+
+/**
  * /help command - show available commands
  */
 async function handleHelp(): Promise<CommandResult> {
@@ -2948,6 +3001,13 @@ export const commands: Record<string, Command> = {
     usage: '/evolve_strategy <strategy_key> [--agents=N]',
     handler: handleEvolveStrategy,
     tier: 'swarm', // Massive swarm mode
+  },
+  debug_viz: {
+    name: 'debug_viz',
+    description: 'Manually trigger visualizations for testing',
+    usage: '/debug_viz <visualization_name> [param=value ...]',
+    handler: handleDebugViz,
+    tier: undefined, // No chat call, returns directive message
   },
   help: {
     name: 'help',

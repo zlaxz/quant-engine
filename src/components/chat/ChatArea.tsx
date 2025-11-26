@@ -534,6 +534,7 @@ export const ChatArea = () => {
         // Parse display directives from response
         const directives = parseDisplayDirectives(response.content);
         if (directives.length > 0) {
+          console.log('[ChatArea] Parsed display directives:', directives);
           // Update stage if present
           const stage = extractStage(directives);
           if (stage) {
