@@ -46,11 +46,14 @@ export const ResearchDisplayProvider = ({ children }: { children: ReactNode }) =
   }, []);
 
   const hideVisualization = useCallback((viz: VisualizationType) => {
-    setState(prev => ({
-      ...prev,
-      activeVisualizations: prev.activeVisualizations.filter(v => v !== viz),
-      focusArea: prev.activeVisualizations.length <= 1 ? 'hidden' : prev.focusArea,
-    }));
+    setState(prev => {
+      const newVisualizations = prev.activeVisualizations.filter(v => v !== viz);
+      return {
+        ...prev,
+        activeVisualizations: newVisualizations,
+        focusArea: newVisualizations.length === 0 ? 'hidden' : prev.focusArea,
+      };
+    });
   }, []);
 
   const hideAllVisualizations = useCallback(() => {

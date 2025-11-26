@@ -1,5 +1,22 @@
 import { DisplayDirective, ResearchStage, VisualizationType, FocusArea } from '@/types/journey';
 
+// Valid values for type checking
+const VALID_STAGES: ResearchStage[] = [
+  'idle', 'regime_mapping', 'strategy_discovery', 'backtesting',
+  'tuning', 'analysis', 'portfolio', 'conclusion'
+];
+
+const VALID_VISUALIZATIONS: VisualizationType[] = [
+  'regime_timeline', 'regime_distribution', 'data_coverage',
+  'discovery_matrix', 'discovery_funnel', 'swarm_grid',
+  'performance_heatmap', 'equity_curve_overlay', 'parameter_sensitivity',
+  'backtest_queue', 'symphony', 'greeks_dashboard', 'allocation_sankey'
+];
+
+const VALID_FOCUS_AREAS: FocusArea[] = ['center', 'right', 'modal', 'hidden'];
+
+const DIRECTIVE_TYPES = ['stage', 'display', 'hide', 'progress', 'focus'];
+
 /**
  * Parse display directives from Chief Quant responses
  * 
@@ -14,25 +31,37 @@ export function parseDisplayDirectives(text: string): DisplayDirective[] {
   const directives: DisplayDirective[] = [];
   
   // Pattern: [DIRECTIVE: value param1=val1 param2=val2]
-  const directivePattern = /\[(\w+):?\s*([^\]]+)?\]/g;
+  // Only match known directive types to avoid false positives
+  const directivePattern = new RegExp(`\\[(${DIRECTIVE_TYPES.join('|')}):?\\s*([^\\]]+)?\\]`, 'gi');
   
   let match;
   while ((match = directivePattern.exec(text)) !== null) {
     const directiveType = match[1].toLowerCase();
     const directiveValue = match[2]?.trim() || '';
     
+    // Skip empty values (except for HIDE)
+    if (!directiveValue && directiveType !== 'hide') {
+      continue;
+    }
+    
     if (directiveType === 'stage') {
-      directives.push({
-        type: 'stage',
-        value: directiveValue as ResearchStage,
-      });
+      // Validate stage name
+      if (VALID_STAGES.includes(directiveValue as ResearchStage)) {
+        directives.push({
+          type: 'stage',
+          value: directiveValue as ResearchStage,
+        });
+      }
     } else if (directiveType === 'display') {
       const { value, params } = parseDirectiveValue(directiveValue);
-      directives.push({
-        type: 'display',
-        value: value as VisualizationType,
-        params,
-      });
+      // Validate visualization name
+      if (VALID_VISUALIZATIONS.includes(value as VisualizationType)) {
+        directives.push({
+          type: 'display',
+          value: value as VisualizationType,
+          params,
+        });
+      }
     } else if (directiveType === 'hide') {
       directives.push({
         type: 'hide',
@@ -46,10 +75,13 @@ export function parseDisplayDirectives(text: string): DisplayDirective[] {
         params,
       });
     } else if (directiveType === 'focus') {
-      directives.push({
-        type: 'focus',
-        value: directiveValue as FocusArea,
-      });
+      // Validate focus area
+      if (VALID_FOCUS_AREAS.includes(directiveValue as FocusArea)) {
+        directives.push({
+          type: 'focus',
+          value: directiveValue as FocusArea,
+        });
+      }
     }
   }
   
@@ -79,9 +111,11 @@ function parseDirectiveValue(input: string): { value: string; params: Record<str
 
 /**
  * Remove display directives from text for clean chat display
+ * Only removes known directive types to preserve other bracketed content
  */
 export function stripDisplayDirectives(text: string): string {
-  return text.replace(/\[(\w+):?\s*([^\]]+)?\]/g, '').trim();
+  const directivePattern = new RegExp(`\\[(${DIRECTIVE_TYPES.join('|')}):?\\s*([^\\]]+)?\\]`, 'gi');
+  return text.replace(directivePattern, '').trim();
 }
 
 /**
