@@ -234,10 +234,12 @@ export const ChatArea = () => {
   useEffect(() => {
     if (selectedSessionId) {
       loadMessages();
+      // Reset visualizations when switching sessions (cleanup)
+      displayContext.resetState();
     } else {
       setMessages([]);
     }
-  }, [selectedSessionId, loadMessages]);
+  }, [selectedSessionId, loadMessages, displayContext]);
 
   // Auto-scroll to bottom when messages, tool progress, or streaming content change
   useEffect(() => {
