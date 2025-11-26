@@ -585,7 +585,7 @@ export const ChatArea = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div className="flex-1 flex flex-col h-full overflow-hidden w-full">
       {/* Active Experiment Bar */}
       <ActiveExperimentBar
         experiment={activeExperiment}
@@ -596,7 +596,7 @@ export const ChatArea = () => {
       />
 
       {/* Messages Area */}
-      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 p-4 w-full" ref={scrollAreaRef}>
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <div className="text-center space-y-2">
@@ -606,7 +606,7 @@ export const ChatArea = () => {
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 w-full max-w-full">
             {messages.map((message) => {
               // Check for special message types
               const backtestResult = isBacktestResult(message.content);
@@ -642,11 +642,11 @@ export const ChatArea = () => {
               return (
                 <div
                   key={message.id}
-                  className="w-full max-w-full"
+                  className="w-full max-w-full overflow-hidden"
                 >
                   <div
                     className={cn(
-                      'w-full max-w-full rounded-lg px-4 py-2 whitespace-pre-wrap break-words overflow-hidden',
+                      'w-full max-w-full rounded-lg px-4 py-2 whitespace-pre-wrap break-words overflow-wrap-anywhere',
                       message.role === 'user'
                         ? 'bg-primary text-primary-foreground'
                         : message.role === 'assistant'
@@ -660,7 +660,7 @@ export const ChatArea = () => {
                         {message.content.startsWith('Command:') ? 'Slash Command' : 'System'}
                       </div>
                     )}
-                    <div className="text-sm">{message.content}</div>
+                    <div className="text-sm break-words overflow-wrap-anywhere">{message.content}</div>
                     <div className="text-xs opacity-50 mt-1">
                       {new Date(message.created_at).toLocaleTimeString()}
                     </div>
@@ -773,7 +773,7 @@ export const ChatArea = () => {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="border-t border-border p-2">
+      <div className="border-t border-border p-2 w-full">
         {/* Contextual Suggestions */}
         {showContextualSuggestions && (
           <CommandSuggestions
@@ -788,11 +788,11 @@ export const ChatArea = () => {
 
         {/* Intent Suggestion Bar */}
         {intentSuggestion && !inputValue.startsWith('/') && (
-          <div className="mb-2 flex items-center gap-2 p-2 bg-blue-500/10 rounded border border-blue-500/20">
+          <div className="mb-2 flex items-center gap-2 p-2 bg-blue-500/10 rounded border border-blue-500/20 w-full overflow-hidden">
             <span className="text-xs text-blue-400">💡</span>
-            <span className="text-xs flex-1">
+            <span className="text-xs flex-1 min-w-0">
               <span className="text-muted-foreground">Did you mean:</span>{' '}
-              <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono text-blue-300">
+              <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono text-blue-300 break-all">
                 {intentSuggestion.suggestion}
               </code>
               {intentSuggestion.explanation && (
@@ -823,7 +823,7 @@ export const ChatArea = () => {
 
         {/* Command Suggestions */}
         {commandSuggestions.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1">
+          <div className="mb-2 flex flex-wrap gap-1 w-full overflow-hidden">
             {commandSuggestions.slice(0, 5).map(suggestion => (
               <button
                 key={suggestion}
@@ -836,7 +836,7 @@ export const ChatArea = () => {
           </div>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full">
           <Popover open={showCommandMenu} onOpenChange={setShowCommandMenu}>
             <PopoverTrigger asChild>
               <Button
@@ -891,7 +891,7 @@ export const ChatArea = () => {
           
           <Textarea
             placeholder="Type your message or use /help for commands... (Shift+Enter for new line)"
-            className="resize-none font-mono text-sm"
+            className="resize-none font-mono text-sm flex-1 min-w-0"
             rows={2}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
