@@ -8,15 +8,11 @@ import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getContextManager, getProtectedCanonLoader } from '../context';
 
-// Module-level reference (set by registerContextHandlers)
-let supabaseClient: SupabaseClient | null = null;
-
 /**
  * Register all context management IPC handlers
  * @param supabase - Supabase client instance from main.ts
  */
 export function registerContextHandlers(supabase: SupabaseClient): void {
-  supabaseClient = supabase;
   // Get protected canon (LESSONS_LEARNED, critical rules)
   ipcMain.handle(
     'context-get-protected-canon',

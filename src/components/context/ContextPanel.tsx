@@ -1,24 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useChatContext } from '@/contexts/ChatContext';
-import { Loader2, RefreshCw, Shield, AlertTriangle, Brain, MessageSquare, ChevronDown, ChevronRight } from 'lucide-react';
+import { Loader2, RefreshCw, Shield, Brain, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
-
-interface ContextBudgetStatus {
-  totalTokens: number;
-  maxTokens: number;
-  usagePercent: number;
-  tierBreakdown: {
-    tier0: number;
-    tier1: number;
-    tier2: number;
-    tier3: number;
-  };
-  needsCompression: boolean;
-  needsSummarization: boolean;
-  atHardLimit: boolean;
-}
 
 interface ProtectedCanon {
   formattedContent: string;
@@ -38,7 +22,6 @@ export const ContextPanel = () => {
   const { selectedWorkspaceId, selectedSessionId } = useChatContext();
   const [isLoading, setIsLoading] = useState(false);
   const [canon, setCanon] = useState<ProtectedCanon | null>(null);
-  const [budgetStatus, setBudgetStatus] = useState<ContextBudgetStatus | null>(null);
   const [daemonStatus, setDaemonStatus] = useState<MemoryDaemonStatus | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     canon: false,

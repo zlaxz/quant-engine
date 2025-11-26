@@ -1459,6 +1459,8 @@ Follow the coding style you observe in the codebase. Include error handling.`
 
         // Execute each tool call
         for (const toolCall of message.tool_calls) {
+          if (toolCall.type !== 'function') continue;
+          
           const toolName = toolCall.function.name;
           let toolArgs: Record<string, any> = {};
 
@@ -1714,6 +1716,8 @@ Follow the coding style you observe in the codebase. Include error handling.`
       messages.push(message as OpenAI.Chat.ChatCompletionMessageParam);
 
       for (const toolCall of message.tool_calls) {
+        if (toolCall.type !== 'function') continue;
+        
         const toolName = toolCall.function.name;
         let toolArgs: Record<string, any> = {};
 
