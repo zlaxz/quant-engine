@@ -1,4 +1,5 @@
 import { DisplayDirective, ResearchStage, VisualizationType, FocusArea } from '@/types/journey';
+import { Artifact, ArtifactType } from '@/types/api-contract';
 
 // Valid values for type checking
 const VALID_STAGES: ResearchStage[] = [
@@ -10,12 +11,17 @@ const VALID_VISUALIZATIONS: VisualizationType[] = [
   'regime_timeline', 'regime_distribution', 'data_coverage',
   'discovery_matrix', 'discovery_funnel', 'swarm_grid',
   'performance_heatmap', 'equity_curve_overlay', 'parameter_sensitivity',
-  'backtest_queue', 'symphony', 'greeks_dashboard', 'allocation_sankey'
+  'backtest_queue', 'symphony', 'greeks_dashboard', 'allocation_sankey',
+  'scenario_simulator'
 ];
 
 const VALID_FOCUS_AREAS: FocusArea[] = ['center', 'right', 'modal', 'hidden'];
 
-const DIRECTIVE_TYPES = ['stage', 'display', 'hide', 'progress', 'focus'];
+const DIRECTIVE_TYPES = ['stage', 'display', 'display_artifact', 'hide', 'progress', 'focus'];
+
+const VALID_ARTIFACT_TYPES: ArtifactType[] = [
+  'annotated_code', 'configuration', 'research_report', 'analysis_script'
+];
 
 /**
  * Parse display directives from Chief Quant responses
@@ -23,6 +29,7 @@ const DIRECTIVE_TYPES = ['stage', 'display', 'hide', 'progress', 'focus'];
  * Directive formats:
  * [STAGE: regime_mapping]
  * [DISPLAY: regime_timeline from=2020-01-01 to=2024-12-31]
+ * [DISPLAY_ARTIFACT: annotated_code title="Strategy Implementation" content="..."]
  * [PROGRESS: 45 message="Classifying Q2 2021"]
  * [FOCUS: center]
  * [HIDE]
@@ -168,4 +175,37 @@ export function extractFocus(directives: DisplayDirective[]): FocusArea | null {
  */
 export function shouldHide(directives: DisplayDirective[]): boolean {
   return directives.some(d => d.type === 'hide');
+}
+
+/**
+ * Parse DISPLAY_ARTIFACT directive into Artifact object
+ * Format: [DISPLAY_ARTIFACT: type title="Title" content="Content" language="typescript"]
+ */
+export function parseArtifactDirective(text: string): Artifact | null {
+  const artifactPattern = /\[DISPLAY_ARTIFACT:\s*(\w+)\s+([^\]]+)\]/gi;
+  const match = artifactPattern.exec(text);
+  
+  if (!match) return null;
+  
+  const artifactType = match[1] as ArtifactType;
+  if (!VALID_ARTIFACT_TYPES.includes(artifactType)) return null;
+  
+  const paramsText = match[2];
+  const params: Record<string, string> = {};
+  
+  // Parse key="value" pairs
+  const paramPattern = /(\w+)="([^"]+)"/g;
+  let paramMatch;
+  while ((paramMatch = paramPattern.exec(paramsText)) !== null) {
+    params[paramMatch[1]] = paramMatch[2];
+  }
+  
+  if (!params.title || !params.content) return null;
+  
+  return {
+    type: artifactType,
+    title: params.title,
+    content: params.content,
+    language: params.language,
+  };
 }
