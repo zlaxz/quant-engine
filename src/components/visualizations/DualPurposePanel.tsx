@@ -11,6 +11,7 @@ import { RegimeDistribution } from './RegimeDistribution';
 import { DataCoverage } from './DataCoverage';
 import { DiscoveryMatrix } from './DiscoveryMatrix';
 import { DiscoveryFunnel } from './DiscoveryFunnel';
+import { ScenarioSimulator } from './ScenarioSimulator';
 import { Card } from '@/components/ui/card';
 import { Brain, TrendingUp, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -18,6 +19,7 @@ import {
   generateRegimeHeatmap,
   generateStrategyCards,
   generateDiscoveryMatrix,
+  generateScenarioSimulation,
 } from '@/lib/mockData';
 
 export const DualPurposePanel = () => {
@@ -142,6 +144,9 @@ function renderVisualization(type: string) {
       return <DiscoveryMatrix strategies={strategiesTransformed} />;
     case 'discovery_funnel':
       return <DiscoveryFunnel ideasGenerated={45} beingTested={12} showingPromise={5} validated={2} />;
+    case 'scenario_simulator':
+      const scenarioData = generateScenarioSimulation();
+      return <ScenarioSimulator data={scenarioData} />;
     default:
       return null;
   }

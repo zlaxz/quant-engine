@@ -21,7 +21,8 @@ export type VisualizationType =
   | 'backtest_queue'
   | 'symphony'
   | 'greeks_dashboard'
-  | 'allocation_sankey';
+  | 'allocation_sankey'
+  | 'scenario_simulator';
 
 export type FocusArea = 'center' | 'right' | 'modal' | 'hidden';
 

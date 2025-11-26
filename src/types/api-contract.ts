@@ -124,6 +124,21 @@ export interface GreeksCockpit {
   metrics: GreekMetric[];
 }
 
+// 8. Scenario Simulator
+export interface Scenario {
+  move_pct: number;
+  price: number;
+  projected_pnl: number;
+  desc: string;
+}
+
+export interface ScenarioSimulation {
+  type: 'scenario_simulation';
+  current_price: number;
+  scenarios: Scenario[];
+  explanation: string;
+}
+
 // Additional types for artifact display
 export type ArtifactType = 
   | 'annotated_code' 

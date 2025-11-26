@@ -11,6 +11,7 @@ import {
   TradeExplanation,
   TradeAnatomy,
   GreeksCockpit,
+  ScenarioSimulation,
 } from '@/types/api-contract';
 
 export function generateRegimeHeatmap(startDate: string, endDate: string): RegimeHeatmapData {
@@ -224,5 +225,22 @@ export function generateGreeksCockpit(): GreeksCockpit {
         message: 'Earning $45/day from time passing.',
       },
     ],
+  };
+}
+
+export function generateScenarioSimulation(): ScenarioSimulation {
+  const currentPrice = 382.50;
+  
+  return {
+    type: 'scenario_simulation',
+    current_price: currentPrice,
+    scenarios: [
+      { move_pct: -0.05, price: 363.37, projected_pnl: 1250.00, desc: "Crash (-5%)" },
+      { move_pct: -0.02, price: 374.85, projected_pnl: 450.00, desc: "Correction (-2%)" },
+      { move_pct: 0.00, price: currentPrice, projected_pnl: 0.00, desc: "Flat" },
+      { move_pct: +0.02, price: 390.15, projected_pnl: -320.00, desc: "Rally (+2%)" },
+      { move_pct: +0.05, price: 401.62, projected_pnl: -850.00, desc: "Strong Rally (+5%)" },
+    ],
+    explanation: "Because you are Short Delta (Put), you profit if the market crashes. But notice how your profit caps out at -5%? That's your spread limiting the gain."
   };
 }

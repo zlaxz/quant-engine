@@ -92,6 +92,7 @@ export function isValidVisualization(value: string): value is VisualizationType 
     'symphony',
     'greeks_dashboard',
     'allocation_sankey',
+    'scenario_simulator',
   ];
   
   return validTypes.includes(value as VisualizationType);
