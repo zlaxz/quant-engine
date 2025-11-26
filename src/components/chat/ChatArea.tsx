@@ -30,6 +30,7 @@ import {
   extractProgress,
   extractFocus,
   shouldHide,
+  parseArtifactDirective,
 } from '@/lib/displayDirectiveParser';
 
 interface Message {
@@ -563,6 +564,13 @@ export const ChatArea = () => {
           if (shouldHide(directives)) {
             displayContext.hideAllVisualizations();
           }
+        }
+
+        // Parse artifact directive (if present)
+        const artifact = parseArtifactDirective(response.content);
+        if (artifact) {
+          console.log('[ChatArea] Parsed artifact directive:', artifact);
+          displayContext.showArtifact(artifact);
         }
 
         // Strip directives from content for clean display

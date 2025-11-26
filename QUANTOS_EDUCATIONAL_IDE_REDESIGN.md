@@ -412,25 +412,27 @@ Consistent color language throughout:
    - Configuration display with inline explanations
    - Research report renderer
    - Analysis script viewer
-8. Define TypeScript interfaces for all 7 API contract data structures:
+8. Define TypeScript interfaces for all 8 API contract data structures:
    - `RegimeHeatmapData`, `StrategyCard`, `BacktestEquityCurve`
-   - `DiscoveryMatrix`, `TradeExplanation`, `TradeAnatomy`, `GreeksCockpit`
+   - `DiscoveryMatrix`, `TradeExplanation`, `TradeAnatomy`, `GreeksCockpit`, `ScenarioSimulation`
 9. Create mock data generators matching API contract schemas
 10. Create roadmap component for bottom section (initially empty)
 11. Update Chief Quant prompt with educational teaching instructions + artifact display capability
 12. Test all existing features work in new layout
+13. Wire directive parser to automatically trigger visualizations/artifacts when Chief Quant emits directives
 
 **Success Criteria**:
-- ✓ Two-column layout renders correctly
-- ✓ All existing visualizations display in right panel top (primary mode)
-- ✓ Artifact display works with smooth transitions (secondary mode)
-- ✓ Auto-return to visualization after timeout or user action
-- ✓ Chief Quant can trigger artifact display via directives
-- ✓ TypeScript interfaces defined for all API contract data structures
-- ✓ Mock data generators produce valid data matching API contract
-- ✓ Chat works in left panel
-- ✓ Status strip shows current stage/progress
-- ✓ No regressions in core functionality
+- ✅ Two-column layout renders correctly
+- ✅ All existing visualizations display in right panel top (primary mode)
+- ✅ Artifact display works with smooth transitions (secondary mode)
+- ✅ Auto-return to visualization after timeout or user action
+- ✅ Chief Quant can trigger artifact display via directives
+- ✅ TypeScript interfaces defined for all 8 API contract data structures
+- ✅ Mock data generators produce valid data matching API contract
+- ✅ Chat works in left panel
+- ✅ Status strip shows current stage/progress
+- ✅ Directives automatically parsed and trigger UI updates
+- ✅ No regressions in core functionality
 
 ---
 
