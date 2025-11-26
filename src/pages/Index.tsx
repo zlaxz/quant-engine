@@ -8,6 +8,7 @@ import { ChatArea } from '@/components/chat/ChatArea';
 import { RightPanel } from '@/components/panels/RightPanel';
 import { HelperChatDialog } from '@/components/chat/HelperChatDialog';
 import { VisualizationContainer } from '@/components/visualizations/VisualizationContainer';
+import { DemoModeButton } from '@/components/visualizations/DemoModeButton';
 import { Button } from '@/components/ui/button';
 import { HelpCircle, Settings, LayoutDashboard, Command } from 'lucide-react';
 import { SystemStatus } from '@/components/dashboard/SystemStatus';
@@ -36,6 +37,7 @@ const Index = () => {
 
           {/* System Status (Heartbeat) + Regime */}
           <div className="flex items-center gap-4">
+            <DemoModeButton />
             <RegimeIndicator />
             <SystemStatus />
 
