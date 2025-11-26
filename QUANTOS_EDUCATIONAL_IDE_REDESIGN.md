@@ -395,6 +395,8 @@ Consistent color language throughout:
 
 **Goal**: New layout with dual-purpose visualization/artifact display
 
+**Reference**: See `docs/API_CONTRACT.md` for complete JSON data structures that all visualizations will consume
+
 1. Create new two-column layout component
 2. Move chat to left panel (remove left sidebar entirely)
 3. Create right panel container with split (60/40)
@@ -410,9 +412,13 @@ Consistent color language throughout:
    - Configuration display with inline explanations
    - Research report renderer
    - Analysis script viewer
-8. Create roadmap component for bottom section (initially empty)
-9. Update Chief Quant prompt with educational teaching instructions + artifact display capability
-10. Test all existing features work in new layout
+8. Define TypeScript interfaces for all 7 API contract data structures:
+   - `RegimeHeatmapData`, `StrategyCard`, `BacktestEquityCurve`
+   - `DiscoveryMatrix`, `TradeExplanation`, `TradeAnatomy`, `GreeksCockpit`
+9. Create mock data generators matching API contract schemas
+10. Create roadmap component for bottom section (initially empty)
+11. Update Chief Quant prompt with educational teaching instructions + artifact display capability
+12. Test all existing features work in new layout
 
 **Success Criteria**:
 - ✓ Two-column layout renders correctly
@@ -420,6 +426,8 @@ Consistent color language throughout:
 - ✓ Artifact display works with smooth transitions (secondary mode)
 - ✓ Auto-return to visualization after timeout or user action
 - ✓ Chief Quant can trigger artifact display via directives
+- ✓ TypeScript interfaces defined for all API contract data structures
+- ✓ Mock data generators produce valid data matching API contract
 - ✓ Chat works in left panel
 - ✓ Status strip shows current stage/progress
 - ✓ No regressions in core functionality
