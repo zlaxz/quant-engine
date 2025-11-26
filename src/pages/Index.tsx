@@ -7,6 +7,7 @@ import { ChatSessionList } from '@/components/chat/ChatSessionList';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { RightPanel } from '@/components/panels/RightPanel';
 import { HelperChatDialog } from '@/components/chat/HelperChatDialog';
+import { VisualizationContainer } from '@/components/visualizations/VisualizationContainer';
 import { Button } from '@/components/ui/button';
 import { HelpCircle, Settings, LayoutDashboard, Command } from 'lucide-react';
 import { SystemStatus } from '@/components/dashboard/SystemStatus';
@@ -82,6 +83,9 @@ const Index = () => {
             rightPanel={<RightPanel />}
           />
         </div>
+
+        {/* Visualization Container Overlay */}
+        <VisualizationContainer />
 
         <HelperChatDialog open={helperOpen} onOpenChange={setHelperOpen} />
       </div>

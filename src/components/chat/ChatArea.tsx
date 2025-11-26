@@ -7,6 +7,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useChatContext } from '@/contexts/ChatContext';
+import { useResearchDisplay } from '@/contexts/ResearchDisplayContext';
 import { cn } from '@/lib/utils';
 import { executeCommand, parseCommand, getCommandSuggestions, commands, setWriteConfirmationCallback } from '@/lib/slashCommands';
 import { useWriteConfirmation } from '@/hooks/useWriteConfirmation';
@@ -21,6 +22,15 @@ import { RunResultCard } from './RunResultCard';
 import { isBacktestResult } from '@/types/chat';
 import { SwarmStatusBar } from '@/components/swarm';
 import { getJobProgress, type SwarmProgress } from '@/lib/swarmClient';
+import {
+  parseDisplayDirectives,
+  stripDisplayDirectives,
+  extractStage,
+  extractVisualizations,
+  extractProgress,
+  extractFocus,
+  shouldHide,
+} from '@/lib/displayDirectiveParser';
 
 interface Message {
   id: string;
@@ -31,6 +41,7 @@ interface Message {
 
 export const ChatArea = () => {
   const { selectedSessionId, selectedWorkspaceId, activeExperiment, setActiveExperiment } = useChatContext();
+  const displayContext = useResearchDisplay();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -518,16 +529,52 @@ export const ChatArea = () => {
         // Call LLM via Electron IPC
         const response = await chatPrimary(llmMessages);
 
-        // Add assistant response to UI
+        // Parse display directives from response
+        const directives = parseDisplayDirectives(response.content);
+        if (directives.length > 0) {
+          // Update stage if present
+          const stage = extractStage(directives);
+          if (stage) {
+            displayContext.updateStage(stage);
+          }
+
+          // Show visualizations if present
+          const visualizations = extractVisualizations(directives);
+          visualizations.forEach(viz => {
+            displayContext.showVisualization(viz);
+          });
+
+          // Update progress if present
+          const progress = extractProgress(directives);
+          if (progress) {
+            displayContext.updateProgress(progress.percent, progress.message);
+          }
+
+          // Update focus if present
+          const focus = extractFocus(directives);
+          if (focus) {
+            displayContext.setFocus(focus);
+          }
+
+          // Hide visualizations if requested
+          if (shouldHide(directives)) {
+            displayContext.hideAllVisualizations();
+          }
+        }
+
+        // Strip directives from content for clean display
+        const cleanContent = stripDisplayDirectives(response.content);
+
+        // Add assistant response to UI (with clean content)
         const assistantMessage: Message = {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
-          content: response.content,
+          content: cleanContent,
           created_at: new Date().toISOString(),
         };
         setMessages(prev => [...prev, assistantMessage]);
 
-        // Save both messages to database with retry logic
+        // Save both messages to database with retry logic (save original with directives)
         await saveMessagesToDb([
           { session_id: selectedSessionId, role: 'user', content: messageContent },
           { session_id: selectedSessionId, role: 'assistant', content: response.content, provider: response.provider, model: response.model }
