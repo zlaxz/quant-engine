@@ -642,11 +642,11 @@ export const ChatArea = () => {
               return (
                 <div
                   key={message.id}
-                  className="w-full"
+                  className="w-full max-w-full"
                 >
                   <div
                     className={cn(
-                      'w-full rounded-lg px-4 py-2 whitespace-pre-wrap',
+                      'w-full max-w-full rounded-lg px-4 py-2 whitespace-pre-wrap break-words overflow-hidden',
                       message.role === 'user'
                         ? 'bg-primary text-primary-foreground'
                         : message.role === 'assistant'
