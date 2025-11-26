@@ -1,0 +1,734 @@
+# QuantOS: Educational IDE Redesign Plan
+
+## Vision Statement
+
+**QuantOS is Lovable for Quantitative Research**
+
+Just as Lovable enables non-developers to build applications through natural language and visual feedback, QuantOS enables non-quants to conduct quantitative trading research through guided conversation and live visualization.
+
+**Target User**: Complete novice with ZERO finance/quant experience who wants to learn through doing.
+
+---
+
+## Design Philosophy
+
+### Core Principles
+
+1. **Visual Learning First**: See the data, see the analysis, see the results - all in real-time
+2. **Educational by Default**: Every action comes with explanation and context
+3. **Guided Discovery**: Chief Quant leads you through the research journey step-by-step
+4. **No Prerequisites**: Assume zero knowledge of markets, strategies, regimes, or statistics
+5. **Single-Screen Workflow**: Everything happens in one place, no navigation needed
+
+### The Lovable Parallel
+
+| Lovable | QuantOS |
+|---------|---------|
+| Chat with AI about code → See live preview | Chat with Chief Quant about research → See live analysis |
+| Build apps without coding knowledge | Discover trading strategies without quant knowledge |
+| Visual feedback shows what you built | Visual feedback shows what you discovered |
+| Errors and warnings guide improvement | Warnings and insights guide refinement |
+| Educational prompts explain concepts | Educational tooltips explain quant concepts |
+
+---
+
+## New Interface Layout
+
+### Overview: Two-Column + Status Strip
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ STATUS STRIP: Stage • Progress • Time • Quick Actions                   │
+└─────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────┬────────────────────────────────────────────┐
+│                            │                                            │
+│   LEFT PANEL (40%)         │   RIGHT PANEL (60%)                        │
+│   ═══════════════          │   ════════════════                         │
+│                            │                                            │
+│   CHAT WITH CHIEF QUANT    │   TOP (60%): DYNAMIC VISUALIZATION         │
+│                            │   ┌──────────────────────────────────────┐ │
+│   Conversation history     │   │ Live visual representation of        │ │
+│   Educational messages     │   │ current research operation           │ │
+│   Input at bottom          │   │                                      │ │
+│                            │   │ Changes automatically based on stage │ │
+│                            │   └──────────────────────────────────────┘ │
+│                            │                                            │
+│                            │   BOTTOM (40%): ROADMAP & CONTEXT          │
+│                            │   ┌──────────────────────────────────────┐ │
+│                            │   │ Research journey roadmap             │ │
+│                            │   │ Educational tooltips/glossary        │ │
+│                            │   │ Key metrics and findings             │ │
+│                            │   └──────────────────────────────────────┘ │
+│                            │                                            │
+└────────────────────────────┴────────────────────────────────────────────┘
+```
+
+### Status Strip (Always Visible Top Bar)
+
+**Purpose**: Persistent awareness of where you are and what's happening
+
+**Contents**:
+- Current stage indicator with icon (Regime Mapping, Strategy Discovery, Backtesting, etc.)
+- Progress bar with percentage and current operation description
+- Elapsed time for current operation
+- Quick actions: Settings, Help, Keyboard shortcuts
+
+**Design**: Sticky, semi-transparent backdrop blur, prominent but not distracting
+
+---
+
+## Left Panel: Chat with Chief Quant
+
+### Purpose
+Primary interaction point. All work happens through natural language conversation.
+
+### Features
+
+1. **Conversation History**
+   - Full conversation with Chief Quant
+   - User messages and Chief Quant responses
+   - System notifications (backtest started, data loaded, etc.)
+   - Inline results cards (run summaries, key findings)
+
+2. **Educational Messages**
+   - Chief Quant explains concepts before using them
+   - "💡 Learning Moment" callouts for key insights
+   - Analogies and simple explanations (no jargon)
+
+3. **Smart Input**
+   - Natural language text input at bottom
+   - Suggestion chips for next logical steps
+   - Example prompts when idle
+
+4. **No Clutter**
+   - No sidebar for workspaces/sessions (moved to header dropdown)
+   - No command palette overlay (use Cmd+K)
+   - Just conversation and input
+
+---
+
+## Right Panel: Visualization + Roadmap
+
+### Top Section (60%): Dynamic Visualization Display
+
+**Purpose**: Show what's happening right now in visual form
+
+**Behavior**: Automatically updates based on current research stage
+
+#### Stage-Specific Visualizations
+
+1. **Idle / Getting Started**
+   - Quick-start guide with visual examples
+   - "What would you like to discover today?"
+   - Recent findings showcase
+
+2. **Regime Mapping**
+   - Regime Timeline: Heat map showing date ranges classified by regime
+   - Regime Distribution: Pie/bar chart showing time spent in each regime
+   - Data Coverage: Grid showing which symbols/dates have data
+
+3. **Strategy Discovery**
+   - Discovery Matrix: Strategy × Regime grid showing testing status
+   - Discovery Funnel: Ideas → Testing → Promising → Validated flow
+   - Active experiments indicator
+
+4. **Backtesting**
+   - Equity Curve: Live-updating equity curve as backtest runs
+   - Performance Heat Map: Strategy performance across time periods
+   - Parameter Sensitivity: How performance changes with parameter tweaks
+
+5. **Risk Analysis**
+   - Drawdown Timeline: When and how deep losses occurred
+   - Trade Distribution: Win/loss patterns
+   - Regime Vulnerability: Which regimes are dangerous
+
+6. **Portfolio Building**
+   - Symphony Orchestra: Strategy allocation visualization
+   - Greeks Dashboard: Portfolio risk exposure (delta, gamma, vega, theta)
+   - Allocation Sankey: Capital flow between strategies
+
+**Key Feature**: Smooth transitions between visualizations, not jarring switches
+
+---
+
+### Bottom Section (40%): Roadmap & Context
+
+**Purpose**: Always know where you are in the journey and what concepts mean
+
+#### Three Tabs (or sections):
+
+#### 1. Research Roadmap
+
+Visual journey map showing:
+- ✓ Completed steps (with timestamps)
+- → Current step (highlighted, with progress)
+- ☐ Upcoming steps (grayed out)
+
+Example:
+```
+✓ Data Loaded (2:34 PM)
+  └─ 5 years of SPX options data ready
+
+→ Regime Classification (In Progress - 45%)
+  └─ Analyzing market conditions 2020-2024...
+
+☐ Strategy Discovery
+  └─ Find strategies that work in each regime
+
+☐ Backtesting
+  └─ Test strategies with real historical data
+
+☐ Portfolio Optimization
+  └─ Combine strategies into balanced portfolio
+```
+
+**Interactive**: Click any step to see details or jump to that phase
+
+#### 2. Learning Center
+
+Educational content that updates based on current context:
+
+**"What's This?"** cards:
+- Regime: "Market conditions that affect strategy performance. Like weather for trading."
+- Sharpe Ratio: "Risk-adjusted return. Higher = better reward per unit of risk."
+- Greeks: "Sensitivity measures. How much your position changes with market moves."
+
+**"Why Does This Matter?"** explanations:
+- Why classify regimes: "Different strategies work in different conditions"
+- Why backtest: "Test ideas with historical data before risking real money"
+
+**"What Should I Look For?"** guidance:
+- In regime timeline: "Look for periods of stability vs chaos"
+- In equity curves: "Smooth upward slope = good, wild swings = risky"
+
+**Glossary**: Quick-reference terms with simple definitions
+
+#### 3. Key Findings
+
+Persistent display of important discoveries:
+- Best performing strategy/regime pairs
+- Critical warnings (overfitting detected, look-ahead bias, etc.)
+- Insights from memory system
+- Recent milestones
+
+**Example**:
+```
+⭐ Key Insights
+
+• Skew strategies perform best in LOW_VOL → HIGH_VOL transitions
+  (discovered 2 days ago)
+
+• Avoid crash regime entirely - all strategies lose money
+  (warning: critical)
+
+• VIX9D term structure is strong predictor for skew profitability
+  (rule: validated with 50+ trades)
+```
+
+---
+
+## Chief Quant's New Teaching Role
+
+### Philosophy Shift
+
+**OLD**: Technical analyst executing commands
+**NEW**: Patient teacher guiding discovery
+
+### Communication Style
+
+1. **Explain Before Doing**
+   ```
+   Chief Quant: "I'm going to classify market regimes from 2020-2024. 
+   
+   💡 What's a regime? Think of it like weather - markets have different 
+   'climates' (low volatility, high volatility, crashes, rallies). 
+   Different strategies work better in different climates.
+   
+   Watch the timeline on the right as I classify each period. This will 
+   take about 2 minutes. Ready?"
+   ```
+
+2. **Interpret Results**
+   ```
+   Chief Quant: "I found that 2020-2021 spent 65% of time in LOW_VOL regime.
+   
+   💡 What this means: Markets were calm most of the time, so strategies 
+   that profit from stability should work well here.
+   
+   But notice the brief CRASH period in March 2020 - that's where we need 
+   protective strategies. Let's explore what works in each regime next."
+   ```
+
+3. **Suggest Next Steps**
+   ```
+   Chief Quant: "Now that we know the regimes, we can discover strategies 
+   that work in each one.
+   
+   What would you like to try?
+   • Discover convexity strategies for low volatility periods
+   • Find protective strategies for crash conditions
+   • Explore momentum strategies for melt-up regimes
+   
+   Or just tell me what you're curious about!"
+   ```
+
+4. **Warn About Pitfalls**
+   ```
+   Chief Quant: "⚠️ Hold on - I noticed this strategy only works with very 
+   specific parameters (entry at exactly 0.05 delta).
+   
+   💡 This is called 'overfitting' - like memorizing test answers instead 
+   of learning. It won't work with new data.
+   
+   Let's try a simpler approach that should be more robust..."
+   ```
+
+### Educational Moments
+
+Chief Quant proactively teaches concepts when they become relevant:
+
+- **First regime mention** → Explain what regimes are and why they matter
+- **First backtest** → Explain what backtesting is and how to read results
+- **High Sharpe ratio** → Explain what Sharpe means and why it's important
+- **Drawdown detected** → Explain drawdown and why it matters
+- **Parameter sweep** → Explain overfitting risk and how to avoid it
+
+### Analogies Library
+
+Chief Quant uses simple analogies for complex concepts:
+
+- **Regime**: Weather for markets (calm days vs storms)
+- **Sharpe Ratio**: Miles per gallon for investments (return per unit of risk)
+- **Greeks**: Dashboard instruments (speed, fuel, engine temp)
+- **Overfitting**: Memorizing answers vs learning concepts
+- **Convexity**: Insurance that pays off big when you need it
+- **Drawdown**: How deep underwater you go before coming back up
+
+---
+
+## Visual Learning Components
+
+### Progressive Disclosure
+
+Start simple, add complexity only when needed:
+
+1. **First Time**: Show basic regime timeline with just colors
+2. **Second View**: Add confidence scores and metrics
+3. **Advanced**: Show term structure, VIX levels, correlations
+
+### Interactive Tooltips
+
+Hover or click any element for explanation:
+- Hover regime color → "LOW_VOL: Calm markets, low risk"
+- Click strategy box → "Skew Convexity: Profits from volatility spikes"
+- Hover metric → "Sharpe 2.1: Strong risk-adjusted returns"
+
+### Annotated Visualizations
+
+Charts include explanatory callouts:
+```
+[Equity Curve Chart]
+ ↑
+ │     ┌─ "Steady growth during 2020-2021"
+ │    /
+ │   /
+ │  /    ↓ "Drawdown during March 2020 crash"
+ │ /    /
+ │/____/
+ └──────────────→ Time
+```
+
+### Color-Coded Status
+
+Consistent color language throughout:
+- 🟢 Green: Good, validated, working
+- 🟡 Yellow: Testing, uncertain, proceed with caution
+- 🔴 Red: Warning, failed, avoid
+- 🔵 Blue: Informational, neutral
+- ⚪ Gray: Not yet tested, unknown
+
+---
+
+## Implementation Phases
+
+### Phase 1: Redesign Foundation (2-3 days)
+
+**Goal**: New layout without breaking existing functionality
+
+1. Create new two-column layout component
+2. Move chat to left panel (remove left sidebar entirely)
+3. Create right panel container with split (60/40)
+4. Add status strip to top
+5. Wire up existing visualizations to new right panel top section
+6. Create roadmap component for bottom section (initially empty)
+7. Update Chief Quant prompt with educational teaching instructions
+8. Test all existing features work in new layout
+
+**Success Criteria**:
+- ✓ Two-column layout renders correctly
+- ✓ All existing visualizations display in right panel top
+- ✓ Chat works in left panel
+- ✓ Status strip shows current stage/progress
+- ✓ No regressions in core functionality
+
+---
+
+### Phase 2: Research Roadmap (1-2 days)
+
+**Goal**: Visual journey map that tracks progress
+
+1. Define research journey stages and sub-steps
+2. Create roadmap visualization component
+3. Wire roadmap to display context state
+4. Add step completion tracking
+5. Make roadmap interactive (click to see details)
+6. Add smooth animations for step transitions
+
+**Journey Structure**:
+```
+1. Data Preparation
+   - Load historical data
+   - Validate data quality
+   - Index for fast access
+
+2. Regime Mapping
+   - Classify market regimes
+   - Analyze regime distribution
+   - Identify regime transitions
+
+3. Strategy Discovery
+   - Generate strategy ideas
+   - Initial screening
+   - Regime-specific testing
+
+4. Backtesting & Validation
+   - Full historical backtests
+   - Walk-forward analysis
+   - Out-of-sample testing
+
+5. Risk Assessment
+   - Identify failure modes
+   - Analyze drawdowns
+   - Check for overfitting
+
+6. Portfolio Construction
+   - Strategy selection
+   - Allocation optimization
+   - Risk balancing
+```
+
+**Success Criteria**:
+- ✓ Roadmap displays current position in journey
+- ✓ Completed steps show timestamps
+- ✓ Current step shows progress percentage
+- ✓ Upcoming steps are visible but grayed out
+- ✓ Clicking steps shows details
+- ✓ Smooth transitions between steps
+
+---
+
+### Phase 3: Learning Center (2-3 days)
+
+**Goal**: Educational content that teaches concepts on-demand
+
+1. Create glossary data structure with terms and simple definitions
+2. Build "What's This?" card component
+3. Create context-aware content system (shows relevant terms for current stage)
+4. Add "Why Does This Matter?" explanations
+5. Build "What Should I Look For?" guidance
+6. Add interactive tooltips to all visualizations
+7. Create analogies library for Chief Quant
+
+**Glossary Structure**:
+```typescript
+interface GlossaryTerm {
+  term: string;
+  simpleDefinition: string;
+  analogy?: string;
+  example?: string;
+  relevantStages: ResearchStage[];
+  learnMoreUrl?: string;
+}
+
+// Example:
+{
+  term: "Sharpe Ratio",
+  simpleDefinition: "Risk-adjusted return. Higher = better reward per unit of risk.",
+  analogy: "Like miles per gallon - how much return you get per unit of risk taken.",
+  example: "Sharpe of 2.0 means you earned 2% extra return for every 1% of risk.",
+  relevantStages: ['backtesting', 'analysis', 'portfolio'],
+  learnMoreUrl: "https://..."
+}
+```
+
+**Content Types**:
+- 50+ glossary terms with simple definitions
+- 20+ analogies for complex concepts
+- Stage-specific "What to Look For" guides
+- Interactive tooltips for all chart elements
+- "Learning Moment" callouts in chat
+
+**Success Criteria**:
+- ✓ Learning Center shows relevant content for current stage
+- ✓ All terms have simple, jargon-free definitions
+- ✓ Analogies are clear and relatable
+- ✓ Tooltips work on all visualization elements
+- ✓ Content updates automatically as stage changes
+
+---
+
+### Phase 4: Educational Chief Quant (2-3 days)
+
+**Goal**: Transform Chief Quant from analyst to teacher
+
+1. Rewrite Chief Quant system prompt with teaching focus
+2. Add "explain before doing" behavior
+3. Create interpretation templates for all result types
+4. Add proactive concept teaching triggers
+5. Build analogy selection system
+6. Create warning/pitfall detection and explanation
+7. Add "suggest next steps" with educational framing
+
+**Prompt Structure**:
+```
+You are Chief Quant, a patient teacher guiding a complete novice through 
+quantitative research. Your student has ZERO finance or quant experience.
+
+Your Teaching Philosophy:
+1. Explain concepts BEFORE using them
+2. Use simple analogies, not jargon
+3. Interpret results, don't just report them
+4. Proactively teach when concepts become relevant
+5. Suggest next steps with educational context
+6. Warn about pitfalls and explain why they matter
+
+Analogy Library: [...]
+
+Teaching Triggers: [...]
+
+Result Interpretation Templates: [...]
+```
+
+**Teaching Triggers**:
+- First mention of "regime" → Explain regimes concept
+- First backtest result → Explain how to read metrics
+- High/low Sharpe → Explain what makes it good/bad
+- Drawdown > 20% → Explain drawdown and risk
+- Overfitting detected → Explain overfitting with analogy
+
+**Success Criteria**:
+- ✓ Chief Quant explains concepts before using them
+- ✓ Results include interpretation, not just numbers
+- ✓ Analogies are used consistently
+- ✓ Warnings include educational context
+- ✓ Next steps suggestions guide the learning journey
+- ✓ User feels guided, not confused
+
+---
+
+### Phase 5: Key Findings Persistence (1-2 days)
+
+**Goal**: Surface important discoveries so they're never lost
+
+1. Create findings data structure and storage
+2. Build findings display component
+3. Wire findings to memory system
+4. Add automatic finding extraction from analysis
+5. Create finding importance scoring
+6. Add manual "save this insight" action
+7. Make findings searchable
+
+**Finding Types**:
+- Strategy/regime performance discoveries
+- Critical warnings (overfitting, bias, risk)
+- Validated rules from memory
+- Milestone achievements
+- User-saved insights
+
+**Display Rules**:
+- Show max 5 most important findings
+- Sort by: Critical warnings → Recent discoveries → Validated rules
+- Auto-refresh as new findings emerge
+- Persist across sessions
+
+**Success Criteria**:
+- ✓ Important discoveries automatically captured
+- ✓ Findings persist across sessions
+- ✓ Critical warnings always visible
+- ✓ User can manually save insights
+- ✓ Findings are searchable
+- ✓ Clear visual hierarchy (warnings > insights > milestones)
+
+---
+
+### Phase 6: Visualization Improvements (2-3 days)
+
+**Goal**: Make all visualizations clearer and more educational
+
+1. Add annotated callouts to all charts
+2. Improve color-coding consistency
+3. Add interactive tooltips to all elements
+4. Smooth transitions between visualization states
+5. Add "Explain this chart" button to each visualization
+6. Create chart-specific "What to Look For" guides
+7. Progressive disclosure (simple → detailed views)
+
+**Per-Visualization Improvements**:
+
+**Regime Timeline**:
+- Annotate notable events (crashes, rallies)
+- Tooltip on hover: regime definition + metrics
+- Explain button: "What is this chart showing?"
+- Callout: "Notice the transition from LOW_VOL to HIGH_VOL..."
+
+**Equity Curve**:
+- Annotate drawdown periods
+- Show buy/hold comparison overlay
+- Tooltip: trade details on curve hover
+- Highlight: "This smooth upward slope is what we want"
+
+**Discovery Matrix**:
+- Color-code by status (testing/promising/validated)
+- Click cell: Show all runs for that strategy/regime
+- Empty cells: "Click to start discovering"
+- Progress indicator: "Testing 3 of 16 combinations..."
+
+**Success Criteria**:
+- ✓ All charts have explanatory annotations
+- ✓ Tooltips provide context on all interactive elements
+- ✓ "Explain this" buttons work for every visualization
+- ✓ Smooth transitions between viz states
+- ✓ Progressive disclosure (simple → detailed)
+- ✓ Consistent color language across all charts
+
+---
+
+### Phase 7: Onboarding & First Session (1-2 days)
+
+**Goal**: Perfect first-time user experience
+
+1. Create first-launch welcome flow
+2. Build interactive tutorial with sample data
+3. Add "Try an example" prompts
+4. Create sample research journey
+5. Add success celebrations
+6. Build help system with contextual tips
+
+**First Launch Flow**:
+```
+1. Welcome screen: "Welcome to QuantOS! Let's learn by doing."
+
+2. Setup: "Where is your market data?" → Configure paths
+
+3. Quick tour: "Here's how QuantOS works..." → Show layout
+
+4. Example journey: "Let's discover your first strategy together"
+   - Load sample data
+   - Classify regimes (with Chief Quant explaining)
+   - Find one simple strategy
+   - Run a quick backtest
+   - Celebrate the result!
+
+5. "Now it's your turn": Ready to explore your own ideas?
+```
+
+**Example Journey**:
+- Pre-loaded with 1 year of SPX data
+- Chief Quant guides through full discovery cycle in 5-10 minutes
+- Shows what good results look like
+- Builds confidence for real exploration
+
+**Success Criteria**:
+- ✓ First-time user completes example journey in <10 minutes
+- ✓ User understands basic concepts (regime, strategy, backtest)
+- ✓ User knows how to prompt Chief Quant
+- ✓ User feels confident to start real research
+- ✓ Help system is accessible throughout
+
+---
+
+## Success Metrics
+
+### User Experience Goals
+
+1. **Time to First Insight**: <15 minutes from launch to seeing first interesting result
+2. **Comprehension Check**: User can explain what a regime is after first session
+3. **Confidence Level**: User feels comfortable exploring independently after tutorial
+4. **Engagement**: User returns within 24 hours to continue research
+5. **Educational Value**: User learns 3-5 new concepts per session
+
+### Technical Goals
+
+1. **Performance**: Visualizations update within 500ms of data change
+2. **Responsiveness**: Layout adapts to window size changes smoothly
+3. **Reliability**: No crashes or data loss during long research sessions
+4. **Accessibility**: All interactive elements keyboard accessible
+5. **Consistency**: Visual language consistent across all screens
+
+---
+
+## Open Questions & Future Enhancements
+
+### Questions to Resolve
+
+1. **Workspace Management**: How to handle multiple research workspaces?
+   - Option A: Dropdown in header (like Lovable projects)
+   - Option B: Cmd+K palette
+   - Option C: Sidebar (breaks single-screen principle)
+
+2. **Session History**: How to review past conversations?
+   - Option A: Scrollback in chat (infinite scroll)
+   - Option B: Session list in Cmd+K palette
+   - Option C: Dedicated history panel (toggle on/off)
+
+3. **Mobile Support**: Is this desktop-only or should it work on tablets?
+   - Likely desktop-only initially (complex visualizations)
+   - But could have simplified mobile view for monitoring
+
+### Future Enhancements (Post-Launch)
+
+1. **Collaborative Research**: Multiple users exploring together
+2. **Research Templates**: "Discover momentum strategies in low volatility"
+3. **Automated Reports**: Daily briefings on portfolio health
+4. **Video Tutorials**: Embedded learning videos
+5. **Community Sharing**: Share discoveries with other users
+6. **Advanced Mode**: Toggle to show more technical details for power users
+
+---
+
+## Migration Strategy
+
+### From Current to New Interface
+
+**Phase 1: Parallel Implementation**
+- Build new interface alongside existing
+- Route flag: `?new_ui=true` to test new interface
+- All features work in both interfaces
+
+**Phase 2: Gradual Rollout**
+- New users see new interface by default
+- Existing users get opt-in prompt
+- Collect feedback from both groups
+
+**Phase 3: Full Migration**
+- All users on new interface
+- Remove old interface code
+- Polish based on feedback
+
+**Rollback Plan**: Keep old interface code for 1 month after full migration in case critical issues emerge
+
+---
+
+## Conclusion
+
+QuantOS becomes **the easiest way to learn quantitative research** by:
+
+1. **Visual Learning**: See every concept in action
+2. **Patient Teaching**: Chief Quant explains everything
+3. **Guided Discovery**: Clear roadmap shows the way
+4. **No Prerequisites**: Start with zero knowledge
+5. **Single Screen**: Everything in one place
+
+Just like Lovable made app development accessible to non-developers, QuantOS makes quant research accessible to everyone curious about trading strategies.
+
+The key insight: **Learning happens through doing, with a patient teacher and live visual feedback.**
