@@ -239,7 +239,7 @@ export const ChatSessionList = () => {
                   <TooltipTrigger asChild>
                     <div
                       className={cn(
-                        'rounded-md transition-colors mb-1 flex items-center gap-1 w-full',
+                        'rounded-md transition-colors mb-1 flex items-center gap-1',
                         'hover:bg-muted/50',
                         selectedSessionId === session.id && 'bg-muted',
                         isCollapsed ? 'p-2 justify-center' : 'p-1.5'
