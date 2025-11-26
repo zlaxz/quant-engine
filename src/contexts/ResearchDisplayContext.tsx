@@ -1,8 +1,10 @@
 import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import { ResearchStage, VisualizationType, FocusArea, VisualizationState } from '@/types/journey';
+import { Artifact } from '@/types/api-contract';
 
 interface ResearchDisplayContextType {
   state: VisualizationState;
+  currentArtifact?: Artifact;
   updateStage: (stage: ResearchStage) => void;
   showVisualization: (viz: VisualizationType, params?: Record<string, string>) => void;
   hideVisualization: (viz: VisualizationType) => void;
@@ -11,6 +13,8 @@ interface ResearchDisplayContextType {
   setFocus: (focus: FocusArea) => void;
   setCurrentOperation: (operation: string) => void;
   clearCurrentOperation: () => void;
+  showArtifact: (artifact: Artifact) => void;
+  clearArtifact: () => void;
   resetState: () => void;
 }
 
@@ -27,6 +31,7 @@ const initialState: VisualizationState = {
 
 export const ResearchDisplayProvider = ({ children }: { children: ReactNode }) => {
   const [state, setState] = useState<VisualizationState>(initialState);
+  const [currentArtifact, setCurrentArtifact] = useState<Artifact | undefined>(undefined);
 
   const updateStage = useCallback((stage: ResearchStage) => {
     setState(prev => ({
@@ -95,14 +100,24 @@ export const ResearchDisplayProvider = ({ children }: { children: ReactNode }) =
     }));
   }, []);
 
+  const showArtifact = useCallback((artifact: Artifact) => {
+    setCurrentArtifact(artifact);
+  }, []);
+
+  const clearArtifact = useCallback(() => {
+    setCurrentArtifact(undefined);
+  }, []);
+
   const resetState = useCallback(() => {
     setState(initialState);
+    setCurrentArtifact(undefined);
   }, []);
 
   return (
     <ResearchDisplayContext.Provider
       value={{
         state,
+        currentArtifact,
         updateStage,
         showVisualization,
         hideVisualization,
@@ -111,6 +126,8 @@ export const ResearchDisplayProvider = ({ children }: { children: ReactNode }) =
         setFocus,
         setCurrentOperation,
         clearCurrentOperation,
+        showArtifact,
+        clearArtifact,
         resetState,
       }}
     >

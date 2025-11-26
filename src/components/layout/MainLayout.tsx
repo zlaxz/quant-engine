@@ -1,32 +1,20 @@
 import { ReactNode } from 'react';
-import {
-  Sidebar,
-  SidebarContent,
-} from '@/components/ui/sidebar';
 
 interface MainLayoutProps {
   leftPanel: ReactNode;
-  centerPanel: ReactNode;
   rightPanel: ReactNode;
 }
 
-export const MainLayout = ({ leftPanel, centerPanel, rightPanel }: MainLayoutProps) => {
+export const MainLayout = ({ leftPanel, rightPanel }: MainLayoutProps) => {
   return (
     <div className="flex h-full w-full bg-background text-foreground">
-      {/* Collapsible Left Panel - Workspaces & Sessions */}
-      <Sidebar collapsible="icon" className="border-r border-border">
-        <SidebarContent className="bg-panel">
-          {leftPanel}
-        </SidebarContent>
-      </Sidebar>
-
-      {/* Center Panel - Chat Area (includes trigger button in its own header) */}
-      <main className="flex-1 flex flex-col min-w-0">
-        {centerPanel}
+      {/* Left Panel - Chat Area (60%) */}
+      <main className="flex-[3] flex flex-col min-w-0 border-r border-border">
+        {leftPanel}
       </main>
 
-      {/* Right Panel - Context/Quant/Memory */}
-      <aside className="w-80 border-l border-border bg-panel flex flex-col">
+      {/* Right Panel - Split (40%): Visualization (top 60%) + Roadmap (bottom 40%) */}
+      <aside className="flex-[2] flex flex-col bg-panel">
         {rightPanel}
       </aside>
     </div>
