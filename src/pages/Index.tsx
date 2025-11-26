@@ -21,8 +21,8 @@ const Index = () => {
   return (
     <SidebarProvider defaultOpen={true}>
       <div className="h-screen flex flex-col bg-background w-full">
-        {/* Header with System Status and Navigation */}
-        <header className="border-b border-border bg-card px-4 py-2 flex items-center justify-between flex-shrink-0">
+        {/* Header with System Status and Navigation - ALWAYS VISIBLE */}
+        <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 px-4 py-3 flex items-center justify-between flex-shrink-0 shadow-sm">
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-semibold text-foreground">Quant Chat Workbench</h1>
             {/* Cmd+K hint */}
@@ -36,20 +36,22 @@ const Index = () => {
           </div>
 
           {/* System Status (Heartbeat) + Regime */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <DemoModeButton />
-            <RegimeIndicator />
-            <SystemStatus />
+            <div className="hidden sm:flex items-center gap-3">
+              <RegimeIndicator />
+              <SystemStatus />
+            </div>
 
-            <div className="flex items-center gap-2 border-l pl-4">
+            <div className="flex items-center gap-2 border-l pl-3">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate('/dashboard')}
                 title="Conductor's Dashboard"
               >
-                <LayoutDashboard className="h-4 w-4 mr-1" />
-                Dashboard
+                <LayoutDashboard className="h-4 w-4 sm:mr-1" />
+                <span className="hidden sm:inline">Dashboard</span>
               </Button>
               <Button
                 variant="ghost"
@@ -57,8 +59,8 @@ const Index = () => {
                 onClick={() => navigate('/settings')}
                 title="Settings"
               >
-                <Settings className="h-4 w-4 mr-1" />
-                Settings
+                <Settings className="h-4 w-4 sm:mr-1" />
+                <span className="hidden sm:inline">Settings</span>
               </Button>
               <Button
                 variant="ghost"
