@@ -260,24 +260,24 @@ export const ChatSessionList = () => {
                         <>
                           <button
                             onClick={() => setSelectedSession(session.id, session.workspace_id)}
-                            className="flex-1 flex items-center gap-1.5 text-left min-w-0"
+                            className="flex-1 flex items-center gap-1.5 text-left min-w-0 overflow-hidden"
                           >
                             <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             <div className="flex-1 min-w-0 overflow-hidden">
-                              <div className="font-medium text-xs truncate">
+                              <div className="font-medium text-xs break-words">
                                 {session.title}
                               </div>
-                              <div className="text-[10px] text-muted-foreground truncate">
+                              <div className="text-[10px] text-muted-foreground break-words">
                                 {new Date(session.created_at).toLocaleDateString()}
                               </div>
                             </div>
                           </button>
 
-                          <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                          <div className="flex items-center gap-0.5 shrink-0">
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-6 w-6"
+                              className="h-6 w-6 shrink-0"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openRenameDialog(session);
@@ -288,7 +288,7 @@ export const ChatSessionList = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-6 w-6 hover:text-destructive"
+                              className="h-6 w-6 hover:text-destructive shrink-0"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSessionToDelete(session.id);
