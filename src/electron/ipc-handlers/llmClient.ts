@@ -514,13 +514,19 @@ The system handles EVERYTHING - you just provide task descriptions.
               }
             }
 
-            // Send results back to model with clearer status
+            // Send results back to model with proper formatting
+            // CRITICAL: Must format as functionResponse for Gemini
             _event.sender.send('llm-stream', {
               type: 'thinking',
-              content: `\n\n*Processing results...*\n\n`,
+              content: `\n\n*Analyzing results...*\n\n`,
               timestamp: Date.now()
             });
-            streamResult = await streamMessage(toolResults);
+            
+            const formattedResults = toolResults.map(tr => ({
+              functionResponse: tr.functionResponse
+            }));
+            
+            streamResult = await streamMessage(formattedResults);
             response = streamResult.response;
             accumulatedText += streamResult.fullText;
             iterations++;
@@ -664,13 +670,22 @@ The system handles EVERYTHING - you just provide task descriptions.
           }
         }
 
-        // Send tool results back to the model with clearer status  
+        // Send tool results back to the model
+        // CRITICAL: Gemini expects functionResponse format, not raw text
+        // The conversation flow must be: model outputs functionCalls → we execute → send back functionResponse
         _event.sender.send('llm-stream', {
           type: 'thinking',
-          content: `\n\n*Processing results...*\n\n`,
+          content: `\n\n*Analyzing results...*\n\n`,
           timestamp: Date.now()
         });
-        streamResult = await streamMessage(toolResults);
+        
+        // Format tool results properly for Gemini's continuation
+        // Must send as parts array with functionResponse objects
+        const formattedResults = toolResults.map(tr => ({
+          functionResponse: tr.functionResponse
+        }));
+        
+        streamResult = await streamMessage(formattedResults);
         response = streamResult.response;
         accumulatedText += streamResult.fullText;
         iterations++;

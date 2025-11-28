@@ -484,10 +484,21 @@ export const ChatArea = () => {
       }
     } catch (error: any) {
       console.error('Error sending message:', error);
+      const fullError = error.message || 'Failed to send message';
+      
+      // Show full error in scrollable, copyable toast
       toast({
         title: 'Error',
-        description: error.message || 'Failed to send message',
+        description: fullError,
         variant: 'destructive',
+        duration: 15000,
+        style: {
+          maxHeight: '400px',
+          overflow: 'auto',
+          whiteSpace: 'pre-wrap',
+          userSelect: 'text',
+          cursor: 'text',
+        },
       });
     } finally {
       setIsLoading(false);
