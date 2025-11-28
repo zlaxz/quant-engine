@@ -357,12 +357,16 @@ The system handles EVERYTHING - you just provide task descriptions.
       let response;
 
       // Helper to stream a message and return response
-      const streamMessage = async (content: string | Array<any>) => {
+      // FIXED: Accumulate text during streaming to prevent truncation
+      const streamMessage = async (content: string | Array<any>): Promise<{ response: any, fullText: string }> => {
         try {
           const streamResult = await chat.sendMessageStream(content);
+          let accumulatedText = '';
+          
           for await (const chunk of streamResult.stream) {
             const text = chunk.text();
             if (text) {
+              accumulatedText += text;
               _event.sender.send('llm-stream', {
                 type: 'chunk',
                 content: text,
@@ -370,16 +374,21 @@ The system handles EVERYTHING - you just provide task descriptions.
               });
             }
           }
-          return await streamResult.response;
+          
+          const response = await streamResult.response;
+          return { response, fullText: accumulatedText };
         } catch (error) {
           // Fallback to non-streaming if streaming fails
           console.warn('[LLM] Streaming failed, falling back to non-streaming:', error);
-          return await withRetry(() => chat.sendMessage(content));
+          const response = await withRetry(() => chat.sendMessage(content));
+          return { response, fullText: (response as any).text() || '' };
         }
       };
 
       // Initial response with streaming
-      response = await streamMessage(lastMessage.content);
+      let streamResult = await streamMessage(lastMessage.content);
+      response = streamResult.response;
+      let accumulatedText = streamResult.fullText;
 
       let iterations = 0;
       let allToolOutputs: string[] = [];
@@ -508,7 +517,9 @@ The system handles EVERYTHING - you just provide task descriptions.
               content: `\n\n*Processing results...*\n\n`,
               timestamp: Date.now()
             });
-            response = await streamMessage(toolResults);
+            streamResult = await streamMessage(toolResults);
+            response = streamResult.response;
+            accumulatedText += streamResult.fullText;
             iterations++;
             continue; // Continue the loop to process new response
           }
@@ -656,12 +667,14 @@ The system handles EVERYTHING - you just provide task descriptions.
           content: `\n\n*Processing results...*\n\n`,
           timestamp: Date.now()
         });
-        response = await streamMessage(toolResults);
+        streamResult = await streamMessage(toolResults);
+        response = streamResult.response;
+        accumulatedText += streamResult.fullText;
         iterations++;
       }
 
-      // Get final text response
-      let finalText = (response as any).text() || '';
+      // Get final text response - use accumulated text from streaming
+      let finalText = accumulatedText || '';
 
       // If we did tool calls but got no final text, ask model to synthesize
       if (!finalText.trim() && iterations > 0 && allToolOutputs.length > 0) {
@@ -674,8 +687,8 @@ The system handles EVERYTHING - you just provide task descriptions.
 
         // Ask model to synthesize a response from tool outputs
         const synthesisPrompt = `Based on the tool results above, provide a clear, helpful response to the user's original question.`;
-        const synthesisResponse = await streamMessage(synthesisPrompt);
-        finalText = (synthesisResponse as any).text() || 'I explored the codebase. Please try a more specific question.';
+        const synthesisResult = await streamMessage(synthesisPrompt);
+        finalText = synthesisResult.fullText || 'I explored the codebase. Please try a more specific question.';
       }
 
       // Build visible tool call log (only show if user wants verbose output)
