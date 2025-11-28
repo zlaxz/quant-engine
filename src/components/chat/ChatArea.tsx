@@ -291,13 +291,18 @@ export const ChatArea = () => {
     return unsubscribe;
   }, []);
 
-  // Clear tool call tree and operation cards when starting new request
+  // Clear tool call tree and operation cards ONLY when starting a NEW user message
+  // (not when response completes)
   useEffect(() => {
-    if (!isLoading) {
-      setToolCallTree([]);
-      setOperationCards([]);
+    if (isLoading && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      // Only clear if the last message is from the user (new request starting)
+      if (lastMessage.role === 'user') {
+        setToolCallTree([]);
+        setOperationCards([]);
+      }
     }
-  }, [isLoading]);
+  }, [isLoading, messages]);
 
   // ESC key handler for cancelling requests
   useEffect(() => {
@@ -927,6 +932,27 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                 </div>
               );
             })}
+
+            {/* Persistent Tool Execution Log - Shows what Chief Quant accessed */}
+            {operationCards.length > 0 && !isLoading && (
+              <div className="space-y-3 my-6">
+                <div className="flex items-center gap-2 sticky top-0 bg-background/95 backdrop-blur py-3 px-2 z-10 border-b-2 border-primary/20">
+                  <div className="h-2 w-2 rounded-full bg-primary" />
+                  <h3 className="text-sm font-bold text-foreground uppercase tracking-wide">
+                    Tool Execution Log ({operationCards.length} operations)
+                  </h3>
+                  <span className="text-xs text-muted-foreground ml-2">
+                    Chief Quant's work is visible below
+                  </span>
+                </div>
+                {operationCards.map(operation => (
+                  <OperationCard
+                    key={operation.id}
+                    operation={operation}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* Swarm Monitor - shows when a massive swarm job is active */}
             {activeSwarmJob && (
