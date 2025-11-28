@@ -1,9 +1,15 @@
 # Comprehensive Deep Dive Audit Report
 **Date:** November 28, 2025  
 **Scope:** Complete application audit - Infrastructure, Error Handling, Type Safety, Performance  
-**Status:** ✅ **15 ISSUES FOUND** - 5 FIXED, 10 REMAINING (0 Critical, 2 High, 4 Medium, 4 Low)
+**Status:** ✅ **16 ISSUES FOUND** - 6 FIXED, 10 REMAINING (0 Critical, 2 High, 4 Medium, 4 Low)
 
 ## ✅ FIXES APPLIED
+
+### 0. Chief Quant Not Using Tools (CRITICAL → FIXED)
+**Before:** Chief Quant refused to use tools, responding with "I cannot run Python scripts" and "I explored the codebase"  
+**After:** Changed Gemini to `ANY` mode (forces tool usage) + rewrote system instruction with aggressive tool usage mandate  
+**Root Cause:** System prompt discouraged tool usage ("RESPOND DIRECTLY first") and AUTO mode let Gemini avoid tools  
+**Files Changed:** `src/electron/ipc-handlers/llmClient.ts` (lines 264-349)
 
 ### 1. RegimeIndicator Missing Table Error (CRITICAL → FIXED)
 **Before:** App spammed console with PGRST205 errors every 60 seconds  
@@ -36,9 +42,10 @@
 
 ## Executive Summary
 
-This audit identified **15 issues** across the Quant Chat Workbench application. **5 critical/high priority issues have been FIXED immediately:**
+This audit identified **16 issues** across the Quant Chat Workbench application. **6 critical/high priority issues have been FIXED immediately:**
 
 ✅ **FIXED:**
+0. **Chief Quant not using tools (CRITICAL)** - Changed to ANY mode + rewrote system prompt to mandate tool usage
 1. RegimeIndicator database error (console spam eliminated)
 2. Gemini API 400 error (function response formatting fixed)
 3. Metrics null safety (crash prevention added)
@@ -50,7 +57,7 @@ This audit identified **15 issues** across the Quant Chat Workbench application.
 - 4 Medium Priority (polling efficiency, error boundaries)  
 - 4 Low Priority (logging, constants, validation)
 
-The app should now run without console errors and handle LLM interactions properly.
+The app should now run without console errors and Chief Quant will actively use its tools to execute Python, read files, and run backtests.
 
 ---
 

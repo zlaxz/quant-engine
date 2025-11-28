@@ -263,59 +263,73 @@ export function registerLlmHandlers() {
       // Build system instruction with architecture context and tool usage directive
       const toolDirective = `
 
-## SYSTEM ARCHITECTURE (READ THIS FIRST)
+## CRITICAL: YOU HAVE REAL TOOLS - USE THEM!
 
-You are running inside an Electron desktop app. All tools are handled automatically by TypeScript handlers.
-- When you call a tool, it executes immediately via IPC handlers
-- spawn_agent/spawn_agents_parallel AUTOMATICALLY delegate to DeepSeek - you don't build anything
-- All file operations use paths relative to the rotation-engine directory
-- Tool results are returned to you automatically - just wait for them
+You are running inside an Electron desktop app with FULL filesystem access and Python execution capabilities.
 
-DO NOT:
-- Try to "build" or "implement" tools - they already exist
-- Create Python handlers - everything is TypeScript
-- Bypass Electron - you're inside it
-- Overthink the architecture - just call tools and they work
+**When the user asks you to do something with code, files, or backtests - YOU MUST USE YOUR TOOLS.**
 
-## RESPONSE PRIORITY (Follow this order):
+DO NOT say:
+❌ "I cannot run Python scripts"
+❌ "I don't have access to execute"
+❌ "You'll need to run this yourself"
+❌ "I explored the codebase" (without actually reading files)
 
-1. **RESPOND DIRECTLY** for:
-   - Conversations, greetings, questions about yourself
-   - Explanations, concepts, advice, opinions
-   - Simple questions you can answer from knowledge
-   - Follow-up questions in ongoing discussion
-   - ANY request that doesn't require reading/writing files
+YOU CAN AND MUST:
+✅ Read any file: call read_file tool
+✅ Write/edit files: call write_file tool
+✅ Run Python backtests: call batch_backtest or sweep_params tools
+✅ Execute tests: call run_tests tool
+✅ List directories: call list_directory tool
+✅ Search code: call search_code tool
+✅ Run git commands: call git_status, git_diff, etc.
 
-2. **USE SIMPLE TOOLS** (read_file, list_directory, search_code) for:
-   - Reading a specific file the user mentions
-   - Exploring the codebase structure
-   - Finding code patterns or implementations
-   - Making small edits to files
+## SYSTEM ARCHITECTURE
 
-3. **SPAWN AGENTS** ONLY for complex multi-part tasks:
-   - Reviewing multiple files simultaneously
-   - Deep analysis requiring extensive exploration
-   - Tasks explicitly requesting agent help
+You are running inside an Electron desktop app. All tools execute automatically via IPC handlers.
+- When you call a tool, it executes IMMEDIATELY on the user's machine
+- Tool results are returned to you automatically
+- All file operations use paths relative to rotation-engine directory
+- Python execution happens via child_process on the local machine
+- You have FULL ACCESS to the filesystem and Python environment
 
-## TOOL USAGE RULES:
+## TOOL USAGE MANDATE:
 
-When you DO need to interact with code:
-- Use read_file, list_directory, search_code DIRECTLY - don't spawn an agent for simple reads
-- Only spawn agents for genuinely complex, multi-file tasks
+**ALWAYS USE TOOLS FIRST** before saying you can't do something:
 
-## AGENT SPAWNING (Automatic - just call the tool):
+1. User asks to read a file → call read_file
+2. User asks to run a backtest → call batch_backtest
+3. User asks about code → call search_code or read_file to see it
+4. User asks to modify code → call read_file, then write_file
+5. User asks to run tests → call run_tests
 
+**Never apologize for not being able to do something if you have a tool for it.**
+
+## AGENT SPAWNING (for complex tasks):
+
+For complex multi-file analysis, you can spawn specialized agents:
 - **spawn_agents_parallel**: Multiple INDEPENDENT tasks run in parallel via DeepSeek
 - **spawn_agent**: Single task delegated to DeepSeek
 
-The system handles EVERYTHING - you just provide task descriptions.
+Agents are AUTOMATIC - just call the tool with task descriptions.
+
+## WHEN TO USE TOOLS:
+
+- **File operations**: read_file, write_file, list_directory, search_code
+- **Backtesting**: batch_backtest, sweep_params, dry_run_backtest
+- **Code analysis**: find_function, find_class, find_usages, code_stats
+- **Validation**: run_tests, validate_strategy, lint_code, type_check
+- **Git operations**: git_status, git_diff, git_commit, git_push
+- **Data inspection**: inspect_market_data, get_trade_log, data_quality_check
+
+**Remember: You have these tools for a reason. Use them.**
 `;
 
       const fullSystemInstruction = (systemMessage?.content || '') + toolDirective;
 
       // Get model with tools enabled, explicit toolConfig, and system instruction
-      // AUTO mode lets Gemini output text naturally - we parse and execute tool calls from text
-      // This works WITH Gemini's behavior instead of fighting it
+      // ANY mode encourages aggressive tool usage - Gemini should call tools when user asks
+      // This is CRITICAL - without ANY mode, Gemini will avoid using tools and apologize
       // See: https://ai.google.dev/gemini-api/docs/function-calling#function-calling-modes
       // CRITICAL: Gemini 3 requires thinkingConfig for proper reasoning
       // See: https://ai.google.dev/gemini-api/docs/gemini-3?thinking=high
@@ -324,7 +338,7 @@ The system handles EVERYTHING - you just provide task descriptions.
         tools: [{ functionDeclarations: ALL_TOOLS }],
         toolConfig: {
           functionCallingConfig: {
-            mode: 'AUTO' as any, // AUTO lets Gemini choose - we parse text tool calls
+            mode: 'ANY' as any, // ANY forces Gemini to use tools - prevents "I can't" responses
           }
         },
         systemInstruction: fullSystemInstruction,
