@@ -17,7 +17,7 @@ const VALID_VISUALIZATIONS: VisualizationType[] = [
 
 const VALID_FOCUS_AREAS: FocusArea[] = ['center', 'right', 'modal', 'hidden'];
 
-const DIRECTIVE_TYPES = ['stage', 'display', 'display_artifact', 'hide', 'progress', 'focus'];
+const DIRECTIVE_TYPES = ['stage', 'display', 'display_artifact', 'hide', 'progress', 'focus', 'todo_add', 'todo_complete', 'todo_update'];
 
 const VALID_ARTIFACT_TYPES: ArtifactType[] = [
   'annotated_code', 'configuration', 'research_report', 'analysis_script'
@@ -87,6 +87,34 @@ export function parseDisplayDirectives(text: string): DisplayDirective[] {
         directives.push({
           type: 'focus',
           value: directiveValue as FocusArea,
+        });
+      }
+    } else if (directiveType === 'todo_add') {
+      // Format: [TODO_ADD:Category:Description]
+      const [category, ...descParts] = directiveValue.split(':');
+      const description = descParts.join(':').trim();
+      if (category && description) {
+        directives.push({
+          type: 'todo_add',
+          value: category,
+          params: { description }
+        });
+      }
+    } else if (directiveType === 'todo_complete') {
+      // Format: [TODO_COMPLETE:task-id]
+      directives.push({
+        type: 'todo_complete',
+        value: directiveValue
+      });
+    } else if (directiveType === 'todo_update') {
+      // Format: [TODO_UPDATE:task-id:New description]
+      const [taskId, ...descParts] = directiveValue.split(':');
+      const description = descParts.join(':').trim();
+      if (taskId && description) {
+        directives.push({
+          type: 'todo_update',
+          value: taskId,
+          params: { description }
         });
       }
     }
@@ -175,6 +203,35 @@ export function extractFocus(directives: DisplayDirective[]): FocusArea | null {
  */
 export function shouldHide(directives: DisplayDirective[]): boolean {
   return directives.some(d => d.type === 'hide');
+}
+
+/**
+ * Extract TODO_ADD directives
+ */
+export function extractTodoAdd(directives: DisplayDirective[]): Array<{ category: string; description: string }> {
+  return directives
+    .filter(d => d.type === 'todo_add')
+    .map(d => ({ category: d.value, description: d.params?.description || '' }))
+    .filter(t => t.description);
+}
+
+/**
+ * Extract TODO_COMPLETE directives
+ */
+export function extractTodoComplete(directives: DisplayDirective[]): string[] {
+  return directives
+    .filter(d => d.type === 'todo_complete')
+    .map(d => d.value);
+}
+
+/**
+ * Extract TODO_UPDATE directives
+ */
+export function extractTodoUpdate(directives: DisplayDirective[]): Array<{ taskId: string; description: string }> {
+  return directives
+    .filter(d => d.type === 'todo_update')
+    .map(d => ({ taskId: d.value, description: d.params?.description || '' }))
+    .filter(t => t.description);
 }
 
 /**

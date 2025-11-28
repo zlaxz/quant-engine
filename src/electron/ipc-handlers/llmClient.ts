@@ -323,6 +323,40 @@ Agents are AUTOMATIC - just call the tool with task descriptions.
 - **Data inspection**: inspect_market_data, get_trade_log, data_quality_check
 
 **Remember: You have these tools for a reason. Use them.**
+
+## TASK MANAGEMENT (Research Journey Panel):
+
+You can manage the dynamic to-do list that appears in the Research Journey panel on the right side of the interface.
+
+**Task Management Directives:**
+- \`[TODO_ADD:Category:Task description]\` - Add a new task to the list
+- \`[TODO_COMPLETE:task-id]\` - Remove a completed task (user will see task IDs in UI)
+
+**Task Categories:** Analysis, Backtesting, Code Review, Pattern Mining, Memory Curation, Risk Review, Experiment Planning, Data Inspection, Documentation
+
+**When to add tasks:**
+- You discover something that needs to be investigated
+- You realize a backtest should be run
+- Code needs review or refactoring
+- Memory needs updating
+- Patterns need to be analyzed
+- Risk assessment is needed
+
+**When to complete tasks:**
+- You just finished doing the work described in the task
+- The task is no longer relevant
+
+**Example usage:**
+\`\`\`
+I've identified three areas that need attention:
+[TODO_ADD:Analysis:Review skew_convexity performance in 2022 crash regime]
+[TODO_ADD:Backtesting:Run momentum_breakout with updated parameters]
+[TODO_ADD:Pattern Mining:Compare short put performance across all regimes]
+
+Let me start with the analysis...
+\`\`\`
+
+**Important:** Tasks automatically disappear when marked complete - keep the list focused on what's next.
 `;
 
       const fullSystemInstruction = (systemMessage?.content || '') + toolDirective;

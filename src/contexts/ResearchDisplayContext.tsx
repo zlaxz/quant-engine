@@ -2,9 +2,31 @@ import { createContext, useContext, useState, ReactNode, useCallback } from 'rea
 import { ResearchStage, VisualizationType, FocusArea, VisualizationState } from '@/types/journey';
 import { Artifact } from '@/types/api-contract';
 
+export type TaskCategory = 
+  | 'Analysis'
+  | 'Backtesting'
+  | 'Code Review'
+  | 'Pattern Mining'
+  | 'Memory Curation'
+  | 'Risk Review'
+  | 'Experiment Planning'
+  | 'Data Inspection'
+  | 'Documentation';
+
+export interface ResearchTask {
+  id: string;
+  description: string;
+  category: TaskCategory;
+  addedAt: number;
+}
+
 interface ResearchDisplayContextType {
   state: VisualizationState;
   currentArtifact?: Artifact;
+  tasks: ResearchTask[];
+  addTask: (description: string, category: TaskCategory) => void;
+  completeTask: (taskId: string) => void;
+  updateTask: (taskId: string, description: string) => void;
   updateStage: (stage: ResearchStage) => void;
   showVisualization: (viz: VisualizationType, params?: Record<string, string>) => void;
   hideVisualization: (viz: VisualizationType) => void;
@@ -32,6 +54,28 @@ const initialState: VisualizationState = {
 export const ResearchDisplayProvider = ({ children }: { children: ReactNode }) => {
   const [state, setState] = useState<VisualizationState>(initialState);
   const [currentArtifact, setCurrentArtifact] = useState<Artifact | undefined>(undefined);
+  const [tasks, setTasks] = useState<ResearchTask[]>([]);
+
+  // Task management functions
+  const addTask = useCallback((description: string, category: TaskCategory) => {
+    const newTask: ResearchTask = {
+      id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      description,
+      category,
+      addedAt: Date.now()
+    };
+    setTasks(prev => [...prev, newTask]);
+  }, []);
+
+  const completeTask = useCallback((taskId: string) => {
+    setTasks(prev => prev.filter(task => task.id !== taskId));
+  }, []);
+
+  const updateTask = useCallback((taskId: string, description: string) => {
+    setTasks(prev => prev.map(task => 
+      task.id === taskId ? { ...task, description } : task
+    ));
+  }, []);
 
   const updateStage = useCallback((stage: ResearchStage) => {
     setState(prev => ({
@@ -118,6 +162,10 @@ export const ResearchDisplayProvider = ({ children }: { children: ReactNode }) =
       value={{
         state,
         currentArtifact,
+        tasks,
+        addTask,
+        completeTask,
+        updateTask,
         updateStage,
         showVisualization,
         hideVisualization,

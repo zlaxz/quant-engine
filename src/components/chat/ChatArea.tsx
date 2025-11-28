@@ -31,6 +31,9 @@ import {
   extractFocus,
   shouldHide,
   parseArtifactDirective,
+  extractTodoAdd,
+  extractTodoComplete,
+  extractTodoUpdate,
 } from '@/lib/displayDirectiveParser';
 
 interface Message {
@@ -455,6 +458,22 @@ export const ChatArea = () => {
           if (shouldHide(directives)) {
             displayContext.hideAllVisualizations();
           }
+
+          // Process TODO directives
+          const todoAdds = extractTodoAdd(directives);
+          todoAdds.forEach(({ category, description }) => {
+            displayContext.addTask(description, category as any);
+          });
+
+          const todoCompletes = extractTodoComplete(directives);
+          todoCompletes.forEach(taskId => {
+            displayContext.completeTask(taskId);
+          });
+
+          const todoUpdates = extractTodoUpdate(directives);
+          todoUpdates.forEach(({ taskId, description }) => {
+            displayContext.updateTask(taskId, description);
+          });
         }
 
         // Parse artifact directive (if present)

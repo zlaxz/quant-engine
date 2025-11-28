@@ -32,7 +32,7 @@ export interface ProgressState {
 }
 
 export interface DisplayDirective {
-  type: 'stage' | 'display' | 'hide' | 'progress' | 'focus';
+  type: 'stage' | 'display' | 'hide' | 'progress' | 'focus' | 'todo_add' | 'todo_complete' | 'todo_update';
   value: string;
   params?: Record<string, string>;
 }
