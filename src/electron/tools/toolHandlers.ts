@@ -123,6 +123,85 @@ export async function deleteFile(filePath: string): Promise<ToolResult> {
   return FileOps.deleteFile(filePath);
 }
 
+// ==================== PYTHON EXECUTION ====================
+
+/**
+ * Execute a Python script and return its output
+ * CRITICAL: This is what allows Chief Quant to actually RUN code, not just read it
+ */
+export async function runPythonScript(
+  scriptPath: string,
+  args?: string[],
+  timeoutSeconds?: number
+): Promise<ToolResult> {
+  try {
+    const root = getEngineRoot();
+    const fullPath = safeResolvePath(scriptPath);
+
+    // Verify script exists
+    if (!fs.existsSync(fullPath)) {
+      return {
+        success: false,
+        content: '',
+        error: `Python script not found: ${scriptPath}`
+      };
+    }
+
+    safeLog(`[runPythonScript] Executing: python3 ${scriptPath} ${args?.join(' ') || ''}`);
+
+    // Build command
+    const command = ['python3', fullPath, ...(args || [])].map(arg => 
+      arg.includes(' ') ? `"${arg}"` : arg
+    ).join(' ');
+
+    const timeout = (timeoutSeconds || 300) * 1000;
+
+    // Execute with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const result = await execAsync(command, {
+        cwd: root,
+        signal: controller.signal as any,
+        maxBuffer: 50 * 1024 * 1024, // 50MB buffer for large outputs
+      });
+
+      clearTimeout(timeoutId);
+
+      const output = result.stdout + (result.stderr ? `\n[stderr]: ${result.stderr}` : '');
+      
+      return {
+        success: true,
+        content: output || 'Script completed with no output'
+      };
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+
+      if (error.name === 'AbortError' || error.killed) {
+        return {
+          success: false,
+          content: error.stdout || '',
+          error: `Script timed out after ${timeoutSeconds || 300} seconds`
+        };
+      }
+
+      // Script execution failed
+      return {
+        success: false,
+        content: error.stdout || '',
+        error: `Script failed: ${error.stderr || error.message}`
+      };
+    }
+  } catch (error: any) {
+    return {
+      success: false,
+      content: '',
+      error: `Failed to execute script: ${error.message}`
+    };
+  }
+}
+
 // ==================== COMMAND EXECUTION ====================
 
 /**
@@ -1346,6 +1425,9 @@ async function executeAgentTool(toolName: string, args: Record<string, any>): Pr
       case 'write_file':
         result = await writeFile(args.path, args.content);
         break;
+      case 'run_python_script':
+        result = await runPythonScript(args.script_path, args.args, args.timeout);
+        break;
       case 'run_command':
         result = await runCommand(args.command);
         break;
@@ -1855,6 +1937,10 @@ export async function executeTool(
       return appendFile(args.path, args.content);
     case 'delete_file':
       return deleteFile(args.path);
+
+    // Python execution
+    case 'run_python_script':
+      return runPythonScript(args.script_path, args.args, args.timeout);
 
     // Git operations
     case 'git_status':

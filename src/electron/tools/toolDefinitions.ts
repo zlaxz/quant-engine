@@ -109,6 +109,35 @@ export const FILE_TOOLS: FunctionDeclaration[] = [
   }
 ];
 
+// Python execution tools
+export const PYTHON_TOOLS: FunctionDeclaration[] = [
+  {
+    name: 'run_python_script',
+    description: 'Execute a Python script in the rotation-engine environment and return its output. Use this to run backtests, data analysis, or any Python code. The script must already exist in the codebase.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        script_path: {
+          type: SchemaType.STRING,
+          description: 'Path to Python script relative to rotation-engine root (e.g., "rotation-engine-bridge/cli_wrapper.py" or "analysis/regime_classifier.py")'
+        },
+        args: {
+          type: SchemaType.ARRAY,
+          description: 'Command line arguments to pass to the script (e.g., ["--symbol", "SPY", "--start", "2023-01-01"])',
+          items: {
+            type: SchemaType.STRING
+          }
+        },
+        timeout: {
+          type: SchemaType.NUMBER,
+          description: 'Maximum execution time in seconds (default: 300)'
+        }
+      },
+      required: ['script_path']
+    }
+  }
+];
+
 // Git operation tools
 export const GIT_TOOLS: FunctionDeclaration[] = [
   {
@@ -712,6 +741,7 @@ export const RESPONSE_TOOLS: FunctionDeclaration[] = [
 export const ALL_TOOLS: FunctionDeclaration[] = [
   ...RESPONSE_TOOLS,
   ...FILE_TOOLS,
+  ...PYTHON_TOOLS,
   ...GIT_TOOLS,
   ...VALIDATION_TOOLS,
   ...ANALYSIS_TOOLS,
@@ -724,6 +754,7 @@ export const ALL_TOOLS: FunctionDeclaration[] = [
 // Tool names by category for filtering
 export const TOOL_CATEGORIES = {
   file: FILE_TOOLS.map(t => t.name),
+  python: PYTHON_TOOLS.map(t => t.name),
   git: GIT_TOOLS.map(t => t.name),
   validation: VALIDATION_TOOLS.map(t => t.name),
   analysis: ANALYSIS_TOOLS.map(t => t.name),
