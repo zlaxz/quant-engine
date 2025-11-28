@@ -47,6 +47,11 @@ export const StatusStrip = () => {
   const stageLabel = stageLabels[state.currentStage] || state.currentStage;
   const isActive = state.currentStage !== 'idle' || state.currentOperation;
 
+  // Hide status strip when idle with no operation
+  if (state.currentStage === 'idle' && !state.currentOperation) {
+    return null;
+  }
+
   return (
     <div className="h-10 border-b border-border bg-muted/30 px-4 flex items-center gap-4">
       {/* Current Stage */}
