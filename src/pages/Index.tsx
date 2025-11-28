@@ -6,7 +6,6 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { DualPurposePanel } from '@/components/visualizations/DualPurposePanel';
 import { RoadmapTracker } from '@/components/research/RoadmapTracker';
-import { StatusStrip } from '@/components/research/StatusStrip';
 import { HelperChatDialog } from '@/components/chat/HelperChatDialog';
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard';
 import { DemoModeButton } from '@/components/visualizations/DemoModeButton';
@@ -90,7 +89,6 @@ const Index = () => {
           <ChatSidebar />
           
           <div className="flex-1 flex flex-col min-h-0 min-w-0">
-            <StatusStrip />
             <MainLayout
               leftPanel={<ChatArea />}
               rightPanel={
