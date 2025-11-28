@@ -501,6 +501,142 @@ export const ChatArea = () => {
     }
   };
 
+  // Demo mode simulation
+  const runDemoConversation = async () => {
+    setIsLoading(true);
+    setToolProgress([]);
+    setStreamingContent('');
+
+    // Add user message
+    const userMsg: Message = {
+      id: `demo-user-${Date.now()}`,
+      role: 'user',
+      content: 'Can you analyze the rotation-engine codebase and explain the convexity profiles?',
+      created_at: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, userMsg]);
+
+    await new Promise(r => setTimeout(r, 500));
+
+    // Simulate tool 1: list_directory
+    setToolProgress([{
+      type: 'executing',
+      tool: 'list_directory',
+      args: { path: 'src/profiles' },
+      timestamp: Date.now()
+    }]);
+
+    await new Promise(r => setTimeout(r, 1200));
+
+    setToolProgress(prev => [
+      ...prev,
+      {
+        type: 'completed',
+        tool: 'list_directory',
+        success: true,
+        preview: 'Found 5 files: __init__.py, detectors.py, features.py, profiles.py, visualizer.py',
+        timestamp: Date.now()
+      }
+    ]);
+
+    await new Promise(r => setTimeout(r, 400));
+
+    // Simulate tool 2: read_file
+    setToolProgress(prev => [
+      ...prev,
+      {
+        type: 'executing',
+        tool: 'read_file',
+        args: { path: 'src/profiles/profiles.py' },
+        timestamp: Date.now()
+      }
+    ]);
+
+    await new Promise(r => setTimeout(r, 1500));
+
+    setToolProgress(prev => [
+      ...prev,
+      {
+        type: 'completed',
+        tool: 'read_file',
+        success: true,
+        preview: 'ConvexityProfile class with 8 profile types: LONG_GAMMA, SHORT_GAMMA, LONG_VEGA...',
+        timestamp: Date.now()
+      }
+    ]);
+
+    await new Promise(r => setTimeout(r, 400));
+
+    // Simulate tool 3: search_code
+    setToolProgress(prev => [
+      ...prev,
+      {
+        type: 'executing',
+        tool: 'search_code',
+        args: { pattern: 'convexity', path: 'src' },
+        timestamp: Date.now()
+      }
+    ]);
+
+    await new Promise(r => setTimeout(r, 1000));
+
+    setToolProgress(prev => [
+      ...prev,
+      {
+        type: 'completed',
+        tool: 'search_code',
+        success: true,
+        preview: 'Found 23 matches across 7 files related to convexity calculations',
+        timestamp: Date.now()
+      }
+    ]);
+
+    await new Promise(r => setTimeout(r, 600));
+
+    // Start streaming response
+    const response = `Based on the codebase analysis, the rotation-engine uses 8 distinct convexity profiles:
+
+**Core Profiles:**
+1. **LONG_GAMMA** - Profits from realized volatility, loses from theta decay
+2. **SHORT_GAMMA** - Collects theta, risks gap moves
+3. **LONG_VEGA** - Profits from vol expansion, has positive convexity
+4. **SHORT_VEGA** - Collects premium, negative convexity exposure
+
+**Hybrid Profiles:**
+5. **STRADDLE** - Pure volatility play, delta-neutral
+6. **STRANGLE** - Wider breakevens, cheaper than straddles
+7. **IRON_CONDOR** - Range-bound bet, defined risk
+8. **BUTTERFLY** - Narrow profit zone, low cost
+
+Each profile is regime-aware and adjusts parameters based on VIX levels and market conditions. The system pairs profiles with regimes for optimal P&L.`;
+
+    for (let i = 0; i < response.length; i += 3) {
+      setStreamingContent(response.slice(0, i + 3));
+      await new Promise(r => setTimeout(r, 20));
+    }
+
+    setStreamingContent(response);
+    await new Promise(r => setTimeout(r, 500));
+
+    // Add final assistant message
+    const assistantMsg: Message = {
+      id: `demo-assistant-${Date.now()}`,
+      role: 'assistant',
+      content: response,
+      created_at: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, assistantMsg]);
+
+    setIsLoading(false);
+    setStreamingContent('');
+    setToolProgress([]);
+
+    toast({
+      title: '✨ Demo Complete',
+      description: 'This is how the conversation UI will look with Gemini 3 Pro',
+    });
+  };
+
   // Active Experiment handlers
   const handleViewResults = () => {
     if (activeExperiment?.lastRunId) {
@@ -799,6 +935,18 @@ export const ChatArea = () => {
         )}
 
         <div className="flex gap-2 min-w-0">
+          {/* Demo Mode Button - always available for testing */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 text-xs"
+            onClick={runDemoConversation}
+            disabled={isLoading}
+            title="Test the ADHD-friendly conversation UI improvements"
+          >
+            🎬 Demo
+          </Button>
+          
           <Popover open={showCommandMenu} onOpenChange={setShowCommandMenu}>
             <PopoverTrigger asChild>
               <Button
@@ -876,9 +1024,7 @@ export const ChatArea = () => {
         <div className="mt-2 text-xs text-muted-foreground font-mono">
           {isLoading
             ? '⏳ Processing... (Press ESC to cancel)'
-            : inputValue.startsWith('/')
-            ? '🎮 Slash command mode - Press Enter to execute'
-            : 'Type /help for available commands'}
+            : '🎬 Click Demo button to test the ADHD-friendly UI improvements'}
         </div>
       </div>
       
