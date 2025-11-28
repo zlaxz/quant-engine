@@ -161,6 +161,17 @@ interface ElectronAPI {
     timestamp: number;
   }) => void) => () => void;
 
+  // Tool execution events (for detailed tool call tree visibility)
+  onToolExecutionEvent: (callback: (event: {
+    type: 'tool-start' | 'tool-complete' | 'tool-error';
+    tool: string;
+    args: Record<string, any>;
+    result?: any;
+    error?: string;
+    timestamp: number;
+    duration?: number;
+  }) => void) => () => void;
+
   // Remove listeners (cleanup)
   removeToolProgressListener: () => void;
   removeLLMStreamListener: () => void;

@@ -51,29 +51,49 @@ export const getDemoAgents = (): AgentSpawn[] => [
 export const getDemoToolCallTree = (): ToolCall[] => [
   {
     id: 'tool1',
-    tool: 'list_directory',
-    args: { path: 'src/profiles' },
-    timestamp: Date.now() - 4000,
+    tool: 'batch_backtest',
+    args: { 
+      strategy: 'short_put_otm',
+      start_date: '2023-01-01',
+      end_date: '2023-12-31',
+      profiles: ['profile_1', 'profile_2', 'profile_3']
+    },
+    result: 'Analyzed 247 days across 3 profiles. Best Sharpe: 1.85 (profile_2)',
+    timestamp: Date.now() - 8000,
     success: true,
-    duration: 120,
+    duration: 3200,
     children: [
       {
         id: 'tool2',
         tool: 'read_file',
-        args: { path: 'src/profiles/profiles.py' },
-        timestamp: Date.now() - 3500,
+        args: { filePath: '/strategies/short_put_otm.py' },
+        result: 'Strategy code loaded: 156 lines, 4 parameters defined',
+        timestamp: Date.now() - 7500,
         success: true,
-        duration: 150,
-        children: [
-          {
-            id: 'tool3',
-            tool: 'search_code',
-            args: { pattern: 'convexity', path: 'src' },
-            timestamp: Date.now() - 2500,
-            success: true,
-            duration: 100,
-          }
-        ]
+        duration: 120,
+      },
+      {
+        id: 'tool3',
+        tool: 'inspect_market_data',
+        args: { 
+          symbol: 'SPX',
+          start: '2023-01-01',
+          end: '2023-01-31',
+          data_type: 'options_chain'
+        },
+        result: 'Found 23 trading days, 1,247 option contracts per day, no gaps detected',
+        timestamp: Date.now() - 6800,
+        success: true,
+        duration: 450,
+      },
+      {
+        id: 'tool4',
+        tool: 'get_trade_log',
+        args: { runId: 'run_abc123' },
+        result: 'Retrieved 47 trades: 32 winners (68%), avg P&L: +$127',
+        timestamp: Date.now() - 5200,
+        success: true,
+        duration: 210,
       }
     ]
   }

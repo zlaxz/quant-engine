@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 import { ALL_TOOLS } from '../tools/toolDefinitions';
@@ -147,6 +147,26 @@ let currentRequestCancelled = false;
 export function cancelCurrentRequest() {
   currentRequestCancelled = true;
   safeLog('[LLM] Request cancellation requested');
+}
+
+// Helper to emit tool execution events to renderer
+function emitToolEvent(event: {
+  type: 'tool-start' | 'tool-complete' | 'tool-error';
+  tool: string;
+  args: Record<string, any>;
+  result?: any;
+  error?: string;
+  timestamp: number;
+  duration?: number;
+}) {
+  try {
+    const windows = BrowserWindow.getAllWindows();
+    if (windows.length > 0) {
+      windows[0].webContents.send('tool-execution-event', event);
+    }
+  } catch (e) {
+    // Silently fail if window not available
+  }
 }
 
 // Check if request is cancelled (resets the flag after checking)
@@ -656,13 +676,23 @@ Let me start with the analysis...
             };
           }
 
-          // Emit BEFORE executing tool
+          const startTime = Date.now();
+
+          // Emit tool start event with full details
+          emitToolEvent({
+            type: 'tool-start',
+            tool: toolName,
+            args: toolArgs,
+            timestamp: startTime
+          });
+
+          // Emit BEFORE executing tool (legacy event)
           _event.sender.send('tool-progress', {
             type: 'executing',
             tool: toolName,
             args: toolArgs,
             iteration: iterations + 1,
-            timestamp: Date.now()
+            timestamp: startTime
           });
 
           // Add to visible log
@@ -672,15 +702,27 @@ Let me start with the analysis...
           try {
             const result = await executeTool(toolName, toolArgs);
             const output = result.success ? result.content : `Error: ${result.error}`;
+            const endTime = Date.now();
+            const duration = endTime - startTime;
 
-            // Emit AFTER executing tool
+            // Emit tool completion event with full details
+            emitToolEvent({
+              type: 'tool-complete',
+              tool: toolName,
+              args: toolArgs,
+              result: output,
+              timestamp: endTime,
+              duration
+            });
+
+            // Emit AFTER executing tool (legacy event)
             _event.sender.send('tool-progress', {
               type: 'completed',
               tool: toolName,
               success: result.success,
               preview: output.slice(0, 300),
               iteration: iterations + 1,
-              timestamp: Date.now()
+              timestamp: endTime
             });
 
             toolResults.push({
@@ -697,15 +739,27 @@ Let me start with the analysis...
             allToolOutputs.push(`[${toolName}]: ${output.slice(0, 500)}${output.length > 500 ? '...' : ''}`);
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
+            const endTime = Date.now();
+            const duration = endTime - startTime;
 
-            // Emit error completion event
+            // Emit tool error event with full details
+            emitToolEvent({
+              type: 'tool-error',
+              tool: toolName,
+              args: toolArgs,
+              error: errorMsg,
+              timestamp: endTime,
+              duration
+            });
+
+            // Emit error completion event (legacy)
             _event.sender.send('tool-progress', {
               type: 'completed',
               tool: toolName,
               success: false,
               preview: `Error: ${errorMsg}`,
               iteration: iterations + 1,
-              timestamp: Date.now()
+              timestamp: endTime
             });
 
             toolCallLog.push(`   → ✗ Error: ${errorMsg}`);

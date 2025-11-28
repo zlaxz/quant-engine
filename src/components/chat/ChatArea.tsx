@@ -221,6 +221,55 @@ export const ChatArea = () => {
     };
   }, []);
 
+  // Listen for detailed tool execution events for ToolCallTree
+  useEffect(() => {
+    if (!window.electron?.onToolExecutionEvent) return;
+
+    const unsubscribe = window.electron.onToolExecutionEvent((event: {
+      type: 'tool-start' | 'tool-complete' | 'tool-error';
+      tool: string;
+      args: Record<string, any>;
+      result?: any;
+      error?: string;
+      timestamp: number;
+      duration?: number;
+    }) => {
+      if (event.type === 'tool-start') {
+        // Add new tool call to tree
+        const newCall: ToolCall = {
+          id: `${event.tool}-${event.timestamp}`,
+          tool: event.tool,
+          args: event.args,
+          timestamp: event.timestamp,
+        };
+        setToolCallTree(prev => [...prev, newCall]);
+      } else if (event.type === 'tool-complete' || event.type === 'tool-error') {
+        // Update existing tool call with result
+        setToolCallTree(prev => prev.map(call => {
+          // Match by tool name AND timestamp to ensure we update the right call
+          if (call.tool === event.tool && Math.abs(call.timestamp - event.timestamp) < 100) {
+            return {
+              ...call,
+              result: event.result || event.error,
+              duration: event.duration,
+              success: event.type === 'tool-complete'
+            };
+          }
+          return call;
+        }));
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // Clear tool call tree when starting new request
+  useEffect(() => {
+    if (!isLoading) {
+      setToolCallTree([]);
+    }
+  }, [isLoading]);
+
   // ESC key handler for cancelling requests
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

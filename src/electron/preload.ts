@@ -99,6 +99,20 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeAllListeners('llm-stream');
   },
 
+  // Tool execution events (for detailed tool call tree visibility)
+  onToolExecutionEvent: (callback: (event: {
+    type: 'tool-start' | 'tool-complete' | 'tool-error';
+    tool: string;
+    args: Record<string, any>;
+    result?: any;
+    error?: string;
+    timestamp: number;
+    duration?: number;
+  }) => void) => {
+    ipcRenderer.on('tool-execution-event', (_event, data) => callback(data));
+    return () => ipcRenderer.removeAllListeners('tool-execution-event');
+  },
+
   // Remove listeners (cleanup)
   removeToolProgressListener: () => ipcRenderer.removeAllListeners('tool-progress'),
   removeLLMStreamListener: () => ipcRenderer.removeAllListeners('llm-stream'),
