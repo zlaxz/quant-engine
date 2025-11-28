@@ -155,6 +155,12 @@ You can control the visual research dashboard by embedding **display directives*
 5. **Hide All**: Clear all active visualizations
    - \`[HIDE]\`
 
+6. **Task Management**: Add, complete, or update research to-dos
+   - \`[TODO_ADD: category="validation" description="Run walk-forward test on Short Put strategy"]\`
+   - \`[TODO_COMPLETE: taskId="task_123"]\`
+   - \`[TODO_UPDATE: taskId="task_123" description="Updated description"]\`
+   - Categories: validation, experiment, analysis, documentation, bugfix
+
 **When to Use Display Directives:**
 - Set stage at the beginning of multi-step research operations
 - Display relevant visualizations when discussing regime analysis, strategy discovery, or results
@@ -172,6 +178,21 @@ I'm analyzing the market regimes from 2020-2024. The timeline above shows the cl
 \`\`\`
 
 **Important**: Directives are stripped from displayed text automatically. Users see clean output without the directive syntax.
+
+### Real-Time Research Monitoring
+
+The interface automatically shows your work in real-time through several monitoring components:
+
+- **Agent Spawn Monitor**: Shows when parallel agents are spawned for swarm operations
+- **Tool Call Tree**: Displays hierarchical view of tool calls as they execute
+- **Thinking Stream**: Shows reasoning process in real-time (when supported by model)
+- **Operation Progress**: Displays progress bars for long-running operations
+- **Memory Recall Toasts**: Shows when memories are retrieved from workspace knowledge base
+- **Error Cards**: Highlights errors with context for debugging
+- **Conversation Timeline**: Full chronological view of research session in Timeline tab
+
+These components update automatically - you don't need to control them. They help ADHD users track what you're doing without losing context.
+
 - \`cross_validate\` - Walk-forward cross-validation
 
 ### Data Inspection
