@@ -42,11 +42,13 @@ import {
   ErrorCard,
   MemoryRecallToast,
   OperationProgress,
+  OperationCard,
   type AgentSpawn,
   type ToolCall,
   type ErrorDetails,
   type Memory,
   type OperationPhase,
+  type OperationCardData,
 } from '@/components/research';
 
 interface Message {
@@ -92,12 +94,14 @@ export const ChatArea = () => {
   // New visual enhancement states
   const [activeAgents, setActiveAgents] = useState<AgentSpawn[]>([]);
   const [toolCallTree, setToolCallTree] = useState<ToolCall[]>([]);
+  const [operationCards, setOperationCards] = useState<OperationCardData[]>([]);
   const [thinkingContent, setThinkingContent] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [currentError, setCurrentError] = useState<ErrorDetails | null>(null);
   const [memoryRecalls, setMemoryRecalls] = useState<Memory[]>([]);
   const [operationPhases, setOperationPhases] = useState<OperationPhase[]>([]);
   const [operationStartTime, setOperationStartTime] = useState<number>(Date.now());
+  
   
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -221,7 +225,7 @@ export const ChatArea = () => {
     };
   }, []);
 
-  // Listen for detailed tool execution events for ToolCallTree
+  // Listen for detailed tool execution events for ToolCallTree and OperationCards
   useEffect(() => {
     if (!window.electron?.onToolExecutionEvent) return;
 
@@ -243,6 +247,16 @@ export const ChatArea = () => {
           timestamp: event.timestamp,
         };
         setToolCallTree(prev => [...prev, newCall]);
+
+        // Add placeholder operation card
+        const newCard: OperationCardData = {
+          id: `${event.tool}-${event.timestamp}`,
+          tool: event.tool,
+          args: event.args,
+          timestamp: event.timestamp,
+          success: false, // Pending
+        };
+        setOperationCards(prev => [...prev, newCard]);
       } else if (event.type === 'tool-complete' || event.type === 'tool-error') {
         // Update existing tool call with result
         setToolCallTree(prev => prev.map(call => {
@@ -257,16 +271,31 @@ export const ChatArea = () => {
           }
           return call;
         }));
+
+        // Update operation card with result
+        setOperationCards(prev => prev.map(card => {
+          if (card.tool === event.tool && Math.abs(card.timestamp - event.timestamp) < 100) {
+            return {
+              ...card,
+              result: event.result,
+              error: event.error,
+              duration: event.duration,
+              success: event.type === 'tool-complete'
+            };
+          }
+          return card;
+        }));
       }
     });
 
     return unsubscribe;
   }, []);
 
-  // Clear tool call tree when starting new request
+  // Clear tool call tree and operation cards when starting new request
   useEffect(() => {
     if (!isLoading) {
       setToolCallTree([]);
+      setOperationCards([]);
     }
   }, [isLoading]);
 
@@ -950,6 +979,24 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
 
                   {/* New Visual Enhancements */}
                   
+                  {/* Operation Cards - Persistent visual audit trail */}
+                  {operationCards.length > 0 && (
+                    <div className="space-y-3 mb-4">
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                        <span>Tool Executions</span>
+                        <span className="text-xs bg-primary/20 px-2 py-0.5 rounded-full">
+                          {operationCards.length}
+                        </span>
+                      </div>
+                      {operationCards.map(operation => (
+                        <OperationCard
+                          key={operation.id}
+                          operation={operation}
+                        />
+                      ))}
+                    </div>
+                  )}
+
                   {/* Memory Recall Toast */}
                   {memoryRecalls.length > 0 && (
                     <MemoryRecallToast
