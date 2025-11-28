@@ -317,6 +317,8 @@ The system handles EVERYTHING - you just provide task descriptions.
       // AUTO mode lets Gemini output text naturally - we parse and execute tool calls from text
       // This works WITH Gemini's behavior instead of fighting it
       // See: https://ai.google.dev/gemini-api/docs/function-calling#function-calling-modes
+      // CRITICAL: Gemini 3 requires thinkingConfig for proper reasoning
+      // See: https://ai.google.dev/gemini-api/docs/gemini-3?thinking=high
       const model = geminiClient.getGenerativeModel({
         model: PRIMARY_MODEL,
         tools: [{ functionDeclarations: ALL_TOOLS }],
@@ -328,7 +330,8 @@ The system handles EVERYTHING - you just provide task descriptions.
         systemInstruction: fullSystemInstruction,
         generationConfig: {
           temperature: 1.0, // Gemini 3 Pro setting
-        },
+          thinkingBudget: 'high' // GEMINI 3 ONLY: Enable thinking mode for complex reasoning
+        } as any,
       });
 
       // Convert messages to Gemini format (excluding system messages)
