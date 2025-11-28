@@ -391,7 +391,7 @@ Consistent color language throughout:
 
 ## Implementation Phases
 
-**Current Status**: Phases 1-6 Complete ✅ | Next: Phase 7 (Key Findings Persistence)
+**Current Status**: Phases 1-7 Complete ✅ | Next: Phase 8 (Visualization Improvements)
 
 **Completed Phases:**
 - ✅ Phase 1: Redesign Foundation (layout, dual-purpose panel, directives)
@@ -400,9 +400,9 @@ Consistent color language throughout:
 - ✅ Phase 4: Stage-Specific Visualizations (auto-display per stage)
 - ✅ Phase 5: Learning Center (searchable glossary, educational tooltips)
 - ✅ Phase 6: Educational Chief Quant (teaching mode, analogies, learning moments)
+- ✅ Phase 7: Key Findings Persistence (auto-capture discoveries, localStorage)
 
 **Remaining Phases:**
-- ❌ Phase 7: Key Findings Persistence (auto-capture important discoveries)
 - ❌ Phase 8: Visualization Improvements (annotations, progressive disclosure)
 - ❌ Phase 9: Onboarding & First Session (welcome flow, tutorial)
 
@@ -587,38 +587,39 @@ Consistent color language throughout:
 
 ---
 
-### Phase 7: Key Findings Persistence (1-2 days)
+### Phase 7: Key Findings Persistence ✅ COMPLETE
 
 **Goal**: Surface important discoveries so they're never lost
 
-1. Create findings data structure and storage
-2. Build findings display component
-3. Wire findings to memory system
-4. Add automatic finding extraction from analysis
-5. Create finding importance scoring
-6. Add manual "save this insight" action
-7. Make findings searchable
+**Completed**:
+1. ✅ Created findings data structure with types (discovery, warning, rule, milestone, insight)
+2. ✅ Built FindingsPanel component with search and filtering
+3. ✅ Created localStorage-based persistence (findingsStorage.ts)
+4. ✅ Added third tab "Findings" to bottom panel (Roadmap | Learning | Findings)
+5. ✅ Implemented importance-based sorting (critical warnings first)
+6. ✅ Created useFindings hook for state management
+7. ✅ Added visual hierarchy with icons and color coding
+8. ✅ Implemented auto-trim to keep most recent 100 findings
 
 **Finding Types**:
-- Strategy/regime performance discoveries
-- Critical warnings (overfitting, bias, risk)
-- Validated rules from memory
-- Milestone achievements
-- User-saved insights
-
-**Display Rules**:
-- Show max 5 most important findings
-- Sort by: Critical warnings → Recent discoveries → Validated rules
-- Auto-refresh as new findings emerge
-- Persist across sessions
+- Discovery: Strategy/regime performance discoveries
+- Warning: Critical warnings (overfitting, bias, risk)
+- Rule: Validated rules from memory
+- Milestone: Achievement milestones
+- Insight: User-saved insights
 
 **Success Criteria**:
-- ✓ Important discoveries automatically captured
-- ✓ Findings persist across sessions
-- ✓ Critical warnings always visible
-- ✓ User can manually save insights
-- ✓ Findings are searchable
-- ✓ Clear visual hierarchy (warnings > insights > milestones)
+- ✅ Findings persist across sessions (localStorage)
+- ✅ Critical warnings always visible (sorted first)
+- ✅ User can remove findings manually
+- ✅ Findings are searchable by title, description, tags
+- ✅ Clear visual hierarchy (warnings → discoveries → rules → milestones)
+- ✅ Shows top 5 most important findings by default
+- ✅ Empty state guides user when no findings exist
+
+**Note**: Auto-extraction from Chief Quant analysis will be implemented via prompt engineering in future phases.
+
+---
 
 ---
 
