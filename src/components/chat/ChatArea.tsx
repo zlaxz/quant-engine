@@ -185,12 +185,6 @@ export const ChatArea = () => {
         setIsStreaming(false);
         setStreamingContent('');
         setToolProgress([]);
-      } else if (data.type === 'clear-hallucinated') {
-        // Gemini hallucinated tool calls - clear fake response and show notification
-        // This happens when Gemini returns text instead of functionCall parts
-        console.log('[ChatArea] Clearing hallucinated response, executing real tools...');
-        setStreamingContent(data.content || '*Executing real tool calls...*\n\n');
-        setIsStreaming(true);
       }
     });
 
@@ -649,73 +643,86 @@ export const ChatArea = () => {
               />
             )}
 
-            {/* Live Agent Activity - Streaming, Tools, Thinking */}
+            {/* Live Agent Activity - ADHD-Friendly Clear Status */}
             {isLoading && !activeSwarmJob && (
-              <div className="w-full">
-                <div className="bg-muted rounded-lg px-4 py-3 w-full">
-                  {/* Header */}
-                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border">
-                    <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                    <span className="text-xs font-medium text-muted-foreground">Agent Working</span>
-                    {toolProgress.filter(p => p.type === 'completed').length > 0 && (
-                      <span className="text-xs text-muted-foreground ml-auto">
-                        {toolProgress.filter(p => p.type === 'completed').length} tools executed
+              <div className="w-full space-y-3">
+                {/* Main Status Card */}
+                <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-lg px-4 py-3 w-full">
+                  {/* Primary Status Header */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-center gap-2 flex-1">
+                      <div className="h-3 w-3 rounded-full bg-primary animate-pulse shadow-lg shadow-primary/50" />
+                      <span className="text-sm font-semibold">
+                        {toolProgress.some(p => p.type === 'executing' || p.type === 'tools-starting') 
+                          ? '🔧 Running Tools...' 
+                          : streamingContent
+                          ? '💭 Thinking...'
+                          : '⚡ Processing...'}
                       </span>
+                    </div>
+                    {toolProgress.filter(p => p.type === 'completed').length > 0 && (
+                      <div className="text-xs bg-primary/20 px-2 py-1 rounded-full font-medium">
+                        {toolProgress.filter(p => p.type === 'completed').length} / {toolProgress.filter(p => p.type === 'completed' || p.type === 'executing').length} complete
+                      </div>
                     )}
                   </div>
 
-                  {/* Streaming content - main response text */}
+                  {/* Streaming Response */}
                   {streamingContent && (
-                    <div className="text-sm mb-3 whitespace-pre-wrap">
-                      {streamingContent}
-                      <span className="inline-block w-2 h-4 bg-foreground/50 animate-pulse ml-1" />
+                    <div className="bg-background/50 rounded p-3 mb-3">
+                      <div className="text-sm whitespace-pre-wrap">
+                        {streamingContent}
+                        <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1 rounded-sm" />
+                      </div>
                     </div>
                   )}
 
-                  {/* Tool progress - collapsible activity log */}
+                  {/* Tool Progress - Simple, Visual, Always Visible */}
                   {toolProgress.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-border">
-                      <details open className="text-xs">
-                        <summary className="cursor-pointer text-muted-foreground font-medium mb-1">
-                          Tool Activity ({toolProgress.length} events)
-                        </summary>
-                        <div className="space-y-1 mt-1 max-h-40 overflow-y-auto font-mono text-muted-foreground">
-                          {toolProgress.map((progress, idx) => (
-                            <div key={idx} className="flex items-start gap-2">
-                              {progress.type === 'thinking' && (
-                                <span>• {progress.message || 'Processing...'}</span>
-                              )}
-                              {progress.type === 'tools-starting' && (
-                                <span>• Starting {progress.count} tool(s)</span>
-                              )}
-                              {progress.type === 'executing' && (
-                                <span>
-                                  <span className="animate-pulse">→</span> {progress.tool}
-                                  <span className="opacity-60 ml-1">
-                                    ({Object.entries(progress.args || {}).map(([k,v]) => `${k}="${String(v).slice(0,20)}${String(v).length > 20 ? '...' : ''}"`).join(', ')})
-                                  </span>
-                                </span>
-                              )}
-                              {progress.type === 'completed' && (
-                                <span className={progress.success ? 'text-foreground' : 'text-destructive'}>
-                                  {progress.success ? '✓' : '✗'} {progress.tool}
-                                  <span className="opacity-60 ml-1 text-[10px]">
-                                    {progress.preview?.slice(0, 60)}...
-                                  </span>
-                                </span>
-                              )}
-                            </div>
-                          ))}
+                    <div className="space-y-2">
+                      {/* Active Tool Execution */}
+                      {toolProgress.filter(p => p.type === 'executing').slice(-3).map((progress, idx) => (
+                        <div key={`exec-${idx}`} className="bg-yellow-500/10 border border-yellow-500/20 rounded px-3 py-2 flex items-center gap-2">
+                          <Loader2 className="h-3 w-3 animate-spin text-yellow-500" />
+                          <span className="text-sm font-medium">{progress.tool}</span>
+                          <span className="text-xs text-muted-foreground ml-auto">running...</span>
                         </div>
-                      </details>
+                      ))}
+                      
+                      {/* Recently Completed Tools */}
+                      {toolProgress.filter(p => p.type === 'completed').slice(-3).map((progress, idx) => (
+                        <div key={`done-${idx}`} className={cn(
+                          "rounded px-3 py-2 flex items-center gap-2 transition-all",
+                          progress.success 
+                            ? "bg-green-500/10 border border-green-500/20" 
+                            : "bg-red-500/10 border border-red-500/20"
+                        )}>
+                          <span className={progress.success ? "text-green-500" : "text-red-500"}>
+                            {progress.success ? '✓' : '✗'}
+                          </span>
+                          <span className="text-sm font-medium">{progress.tool}</span>
+                          {progress.preview && (
+                            <span className="text-xs text-muted-foreground ml-auto truncate max-w-[200px]">
+                              {progress.preview.slice(0, 40)}...
+                            </span>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Tool Summary Line */}
+                      {toolProgress.filter(p => p.type === 'completed').length > 3 && (
+                        <div className="text-xs text-center text-muted-foreground pt-2 border-t border-border">
+                          + {toolProgress.filter(p => p.type === 'completed').length - 3} more tools completed
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Fallback spinner when no content yet */}
+                  {/* Initial Loading State */}
                   {!streamingContent && toolProgress.length === 0 && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Processing...</span>
+                      <span>Starting up...</span>
                     </div>
                   )}
                 </div>

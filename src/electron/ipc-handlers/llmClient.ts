@@ -441,20 +441,13 @@ The system handles EVERYTHING - you just provide task descriptions.
           if (hallucinatedCalls.length > 0) {
             safeLog(`[FALLBACK] Detected ${hallucinatedCalls.length} hallucinated tool calls in text - EXECUTING THEM`);
 
-            // CRITICAL: Clear the hallucinated response from the UI before showing real results
-            // Gemini streamed fake tool calls AND fake results - we need to discard them
-            _event.sender.send('llm-stream', {
-              type: 'clear-hallucinated',
-              content: `*Detected hallucinated response - executing ${hallucinatedCalls.length} real tool calls and waiting for actual results...*\n\n`,
-              timestamp: Date.now()
-            });
-
-            // Execute hallucinated calls
+            // Instead of clearing and confusing users, just start executing tools silently
+            // The UI will show tool progress naturally without the jarring "clear" event
             _event.sender.send('tool-progress', {
               type: 'tools-starting',
               count: hallucinatedCalls.length,
               iteration: iterations + 1,
-              message: 'Executing real tool calls (replacing hallucinated response)',
+              message: `Executing ${hallucinatedCalls.length} tool call${hallucinatedCalls.length > 1 ? 's' : ''}`,
               timestamp: Date.now()
             });
 
@@ -509,17 +502,15 @@ The system handles EVERYTHING - you just provide task descriptions.
               }
             }
 
-            // Send results back to model
-            if (toolResults.length > 0) {
-              _event.sender.send('llm-stream', {
-                type: 'thinking',
-                content: `\n\n*Analyzing tool results (iteration ${iterations + 1}, fallback execution)...*\n\n`,
-                timestamp: Date.now()
-              });
-              response = await streamMessage(toolResults);
-              iterations++;
-              continue; // Continue the loop to process new response
-            }
+            // Send results back to model with clearer status
+            _event.sender.send('llm-stream', {
+              type: 'thinking',
+              content: `\n\n*Processing results...*\n\n`,
+              timestamp: Date.now()
+            });
+            response = await streamMessage(toolResults);
+            iterations++;
+            continue; // Continue the loop to process new response
           }
 
           // No more tool calls (real or hallucinated), we have the final response
@@ -659,10 +650,10 @@ The system handles EVERYTHING - you just provide task descriptions.
           }
         }
 
-        // Send tool results back to the model with streaming
+        // Send tool results back to the model with clearer status  
         _event.sender.send('llm-stream', {
           type: 'thinking',
-          content: `\n\n*Analyzing tool results (iteration ${iterations + 1})...*\n\n`,
+          content: `\n\n*Processing results...*\n\n`,
           timestamp: Date.now()
         });
         response = await streamMessage(toolResults);
@@ -677,14 +668,14 @@ The system handles EVERYTHING - you just provide task descriptions.
         safeLog('[LLM] No final text after tool calls, requesting synthesis...');
         _event.sender.send('llm-stream', {
           type: 'thinking',
-          content: '\n\n*Synthesizing response from tool results...*\n\n',
+          content: '\n\n*Summarizing...*\n\n',
           timestamp: Date.now()
         });
 
         // Ask model to synthesize a response from tool outputs
-        const synthesisPrompt = `Based on the tool results above, please provide a helpful response to the user's original question. Be concise and direct.`;
+        const synthesisPrompt = `Based on the tool results above, provide a clear, helpful response to the user's original question.`;
         const synthesisResponse = await streamMessage(synthesisPrompt);
-        finalText = (synthesisResponse as any).text() || 'I explored the codebase but could not generate a summary. Please try a more specific question.';
+        finalText = (synthesisResponse as any).text() || 'I explored the codebase. Please try a more specific question.';
       }
 
       // Build visible tool call log (only show if user wants verbose output)
