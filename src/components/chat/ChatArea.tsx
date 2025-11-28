@@ -107,7 +107,7 @@ export const ChatArea = () => {
   const { showConfirmation, ConfirmationDialog } = useWriteConfirmation();
 
   // Memory reinforcement hook - monitors for stale critical memories
-  const { staleMemories } = useMemoryReinforcement();
+  useMemoryReinforcement();
 
   // Set global confirmation callback for slash commands
   useEffect(() => {

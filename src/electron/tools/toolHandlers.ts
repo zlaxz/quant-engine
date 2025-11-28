@@ -1429,6 +1429,7 @@ export async function spawnAgent(
 }
 
 // OLD TYPESCRIPT IMPLEMENTATION - KEPT FOR REFERENCE
+// @ts-ignore - unused reference implementation
 async function spawnAgentTypescript(
   task: string,
   agentType: string,
