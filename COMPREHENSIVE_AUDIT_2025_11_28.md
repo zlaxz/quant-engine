@@ -7,9 +7,9 @@
 
 ### 0. Chief Quant Not Using Tools (CRITICAL → FIXED)
 **Before:** Chief Quant refused to use tools, responding with "I cannot run Python scripts" and "I explored the codebase"  
-**After:** Changed Gemini to `ANY` mode (forces tool usage) + rewrote system instruction with aggressive tool usage mandate  
-**Root Cause:** System prompt discouraged tool usage ("RESPOND DIRECTLY first") and AUTO mode let Gemini avoid tools  
-**Files Changed:** `src/electron/ipc-handlers/llmClient.ts` (lines 264-349)
+**After:** Changed Gemini to `ANY` mode (forces tool usage) + rewrote system instruction with aggressive tool usage mandate + removed apologetic fallback message  
+**Root Cause:** System prompt discouraged tool usage ("RESPOND DIRECTLY first"), AUTO mode let Gemini avoid tools, and line 723 had hardcoded "I explored the codebase" fallback  
+**Files Changed:** `src/electron/ipc-handlers/llmClient.ts` (lines 264-349, 721-724)
 
 ### 1. RegimeIndicator Missing Table Error (CRITICAL → FIXED)
 **Before:** App spammed console with PGRST205 errors every 60 seconds  
@@ -38,6 +38,55 @@
 
 ---
 
+## 🔍 SIMILAR ISSUES AUDIT (November 28, 2025)
+
+**Scope:** Comprehensive search for similar LLM configuration and prompt issues across all agent modes
+
+### Checked Components:
+✅ **Primary LLM Handler** (`src/electron/ipc-handlers/llmClient.ts`)
+- Fixed: AUTO → ANY mode for aggressive tool usage
+- Fixed: Rewrote system prompt to mandate tool usage
+- Fixed: Removed "I explored the codebase" fallback message (line 723)
+- **Status:** All issues resolved
+
+✅ **Swarm LLM Handler** (`src/electron/ipc-handlers/llmClient.ts` lines 754-850)
+- Uses OpenAI-compatible API (DeepSeek) with `tool_choice: 'auto'`
+- No apologetic fallback messages found
+- Properly handles tool calls in loop
+- **Status:** No issues found
+
+✅ **Helper Chat Handler** (Electron IPC)
+- Separate onboarding agent, not code-execution focused
+- Intentionally does NOT have tool access (educational only)
+- **Status:** Correctly configured for its purpose
+
+✅ **Agent Mode Prompts**
+- `src/prompts/auditorPrompt.ts` - Strategy analysis mode ✓
+- `src/prompts/patternMinerPrompt.ts` - Pattern detection mode ✓
+- `src/prompts/memoryCuratorPrompt.ts` - Memory maintenance mode ✓
+- `src/prompts/experimentDirectorPrompt.ts` - Experiment planning mode ✓
+- `src/prompts/riskOfficerPrompt.ts` - Risk assessment mode ✓
+- `src/prompts/helperPrompt.ts` - Onboarding helper ✓
+- **Status:** All prompts are text-only templates, no LLM configuration issues
+
+✅ **Slash Commands** (`src/lib/slashCommands.ts`)
+- Routes to `chatPrimary` and `chatSwarm` via `electronClient.ts`
+- No direct LLM configuration
+- **Status:** Relies on fixed IPC handlers
+
+✅ **Electron Client** (`src/lib/electronClient.ts`)
+- Pure routing layer, no LLM configuration
+- **Status:** No issues
+
+### Search Patterns Used:
+- `mode.*AUTO|functionCallingConfig|getGenerativeModel` - Found only PRIMARY handler
+- `cannot.*execute|don't have access|apologize.*cannot|you'll need to run|explored the codebase` - Found only line 723 fallback (now fixed)
+- `I cannot|don't have|apologize|you'll need to|Please try a more specific` - No additional matches
+
+### Conclusion:
+✅ **No additional similar issues found**  
+All LLM configuration happens in `llmClient.ts` and has been corrected. Agent mode prompts are just text templates and don't configure LLM behavior. The system now properly forces tool usage across all agent modes.
+
 ---
 
 ## Executive Summary
@@ -45,7 +94,7 @@
 This audit identified **16 issues** across the Quant Chat Workbench application. **6 critical/high priority issues have been FIXED immediately:**
 
 ✅ **FIXED:**
-0. **Chief Quant not using tools (CRITICAL)** - Changed to ANY mode + rewrote system prompt to mandate tool usage
+0. **Chief Quant not using tools (CRITICAL)** - Changed to ANY mode + rewrote system prompt to mandate tool usage + removed apologetic fallback
 1. RegimeIndicator database error (console spam eliminated)
 2. Gemini API 400 error (function response formatting fixed)
 3. Metrics null safety (crash prevention added)

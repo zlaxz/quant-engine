@@ -720,7 +720,8 @@ Agents are AUTOMATIC - just call the tool with task descriptions.
         // Ask model to synthesize a response from tool outputs
         const synthesisPrompt = `Based on the tool results above, provide a clear, helpful response to the user's original question.`;
         const synthesisResult = await streamMessage(synthesisPrompt);
-        finalText = synthesisResult.fullText || 'I explored the codebase. Please try a more specific question.';
+        // If synthesis fails, show tool outputs instead of apologetic fallback
+        finalText = synthesisResult.fullText || `I executed tools but couldn't synthesize a response. Here are the results:\n\n${allToolOutputs.slice(-3).join('\n\n')}`;
       }
 
       // Build visible tool call log (only show if user wants verbose output)
