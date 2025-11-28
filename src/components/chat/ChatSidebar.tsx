@@ -3,9 +3,9 @@
  * Collapses to a thin sliver (56px) showing only icons
  */
 
-import { Sidebar, SidebarContent, SidebarHeader, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarHeader, useSidebar } from '@/components/ui/sidebar';
 import { ChatSessionList } from './ChatSessionList';
-import { MessageSquare, PanelLeft } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function ChatSidebar() {
@@ -31,9 +31,6 @@ export function ChatSidebar() {
             <span className="text-sm font-semibold">Chat Sessions</span>
           </div>
         )}
-        <SidebarTrigger className={cn(isCollapsed && "mx-auto")}>
-          <PanelLeft className="h-4 w-4" />
-        </SidebarTrigger>
       </SidebarHeader>
       
       <SidebarContent>

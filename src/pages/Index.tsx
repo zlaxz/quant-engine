@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SidebarProvider } from '@/components/ui/sidebar';
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { ChatSidebar } from '@/components/chat/ChatSidebar';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ChatArea } from '@/components/chat/ChatArea';
@@ -34,6 +34,7 @@ const Index = () => {
         {/* Header with System Status and Navigation - ALWAYS VISIBLE */}
         <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 px-4 py-3 flex items-center justify-between flex-shrink-0 shadow-sm">
           <div className="flex items-center gap-4">
+            <SidebarTrigger />
             <h1 className="text-lg font-semibold text-foreground">QuantOS Research IDE</h1>
             {/* Cmd+K hint */}
             <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 text-xs font-mono text-muted-foreground bg-muted rounded-md border cursor-pointer hover:bg-accent"
