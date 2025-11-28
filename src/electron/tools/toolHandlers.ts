@@ -1532,8 +1532,12 @@ export async function spawnAgent(
   safeLog('🐍'.repeat(30));
 
   try {
-    // Path to Python agent script (relative to project root, not dist-electron)
-    const projectRoot = path.join(__dirname, '..', '..');
+    // Path to Python agent script
+    // In production (electron-builder), use app.getPath('userData')/../
+    // In development, use process.cwd()
+    const { app } = require('electron');
+    const isDev = process.env.NODE_ENV === 'development';
+    const projectRoot = isDev ? process.cwd() : path.join(app.getPath('userData'), '..', '..', '..');
     const scriptPath = path.join(projectRoot, 'scripts', 'deepseek_agent.py');
 
     safeLog(`   Project root: ${projectRoot}`);
