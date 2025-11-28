@@ -605,17 +605,19 @@ export const DATA_TOOLS: FunctionDeclaration[] = [
   }
 ];
 
-// Agent spawning tools - RESTRICTED USE
+// Agent spawning tools - AUTOMATIC DELEGATION TO DEEPSEEK
+// These tools are handled by TypeScript handlers that automatically call DeepSeek
+// Gemini just needs to call the tool - everything else happens automatically
 export const AGENT_TOOLS: FunctionDeclaration[] = [
   {
     name: 'spawn_agent',
-    description: 'RARELY NEEDED. Spawn a sub-agent ONLY for genuinely complex multi-step analysis tasks. DO NOT USE for: simple questions, reading files, conversations, explanations, or any task you can do directly. For reading files, use read_file directly. For searching code, use search_code directly. Only spawn agents for deep multi-file reviews or complex analysis that would take 10+ tool calls.',
+    description: 'AUTOMATIC DELEGATION: Calling this tool automatically spawns a DeepSeek agent that has its own tools (read_file, write_file, list_directory, search_code, run_command). You do NOT need to build anything - just call this tool with a task description and the system handles everything. Use sparingly - only for complex multi-file analysis. For simple reads, use read_file directly.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
         task: {
           type: SchemaType.STRING,
-          description: 'Clear description of what the agent should accomplish'
+          description: 'Clear description of what the agent should accomplish. The DeepSeek agent will autonomously use its tools to complete this.'
         },
         context: {
           type: SchemaType.STRING,
@@ -631,13 +633,13 @@ export const AGENT_TOOLS: FunctionDeclaration[] = [
   },
   {
     name: 'spawn_agents_parallel',
-    description: 'RARELY NEEDED. Spawn multiple agents ONLY when user explicitly requests parallel review of 3+ files or components. DO NOT USE for: simple questions, single file reads, conversations, explanations. For most tasks, use read_file/search_code directly. Only use when genuinely reviewing multiple independent items in depth.',
+    description: 'AUTOMATIC PARALLEL DELEGATION: Calling this tool automatically spawns multiple DeepSeek agents that run in parallel. Each agent has its own tools and works independently. You do NOT build agents - just describe the tasks. Use only when reviewing 3+ independent files/components.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
         agents: {
           type: SchemaType.ARRAY,
-          description: 'Array of agent configurations to run in parallel',
+          description: 'Array of agent configurations - each will spawn a DeepSeek agent automatically',
           items: {
             type: SchemaType.OBJECT,
             properties: {
@@ -647,7 +649,7 @@ export const AGENT_TOOLS: FunctionDeclaration[] = [
               },
               task: {
                 type: SchemaType.STRING,
-                description: 'Clear description of what this agent should accomplish'
+                description: 'What this DeepSeek agent should accomplish'
               },
               agent_type: {
                 type: SchemaType.STRING,

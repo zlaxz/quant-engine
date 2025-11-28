@@ -260,8 +260,22 @@ export function registerLlmHandlers() {
       const systemMessage = messages.find(m => m.role === 'system');
       const nonSystemMessages = messages.filter(m => m.role !== 'system');
 
-      // Build system instruction with EXPLICIT tool usage directive
+      // Build system instruction with architecture context and tool usage directive
       const toolDirective = `
+
+## SYSTEM ARCHITECTURE (READ THIS FIRST)
+
+You are running inside an Electron desktop app. All tools are handled automatically by TypeScript handlers.
+- When you call a tool, it executes immediately via IPC handlers
+- spawn_agent/spawn_agents_parallel AUTOMATICALLY delegate to DeepSeek - you don't build anything
+- All file operations use paths relative to the rotation-engine directory
+- Tool results are returned to you automatically - just wait for them
+
+DO NOT:
+- Try to "build" or "implement" tools - they already exist
+- Create Python handlers - everything is TypeScript
+- Bypass Electron - you're inside it
+- Overthink the architecture - just call tools and they work
 
 ## RESPONSE PRIORITY (Follow this order):
 
@@ -289,45 +303,48 @@ When you DO need to interact with code:
 - Use read_file, list_directory, search_code DIRECTLY - don't spawn an agent for simple reads
 - Only spawn agents for genuinely complex, multi-file tasks
 
-## AGENT SPAWNING (Use sparingly):
+## AGENT SPAWNING (Automatic - just call the tool):
 
-- **spawn_agents_parallel**: Multiple INDEPENDENT tasks (e.g., "review these 3 files")
-- **spawn_agent**: Sequential tasks where one depends on another
+- **spawn_agents_parallel**: Multiple INDEPENDENT tasks run in parallel via DeepSeek
+- **spawn_agent**: Single task delegated to DeepSeek
 
-DO NOT spawn agents for:
-- Simple file reads (use read_file directly)
-- Single file operations
-- Questions you can answer directly
-- Conversations
+The system handles EVERYTHING - you just provide task descriptions.
 `;
 
       const fullSystemInstruction = (systemMessage?.content || '') + toolDirective;
 
       // Get model with tools enabled, explicit toolConfig, and system instruction
-      // AUTO mode lets model choose: respond directly OR use tools as appropriate
+      // AUTO mode lets Gemini output text naturally - we parse and execute tool calls from text
+      // This works WITH Gemini's behavior instead of fighting it
       // See: https://ai.google.dev/gemini-api/docs/function-calling#function-calling-modes
       const model = geminiClient.getGenerativeModel({
         model: PRIMARY_MODEL,
         tools: [{ functionDeclarations: ALL_TOOLS }],
         toolConfig: {
           functionCallingConfig: {
-            mode: 'ANY' as any, // ANY required - AUTO doesn't call tools at all
+            mode: 'AUTO' as any, // AUTO lets Gemini choose - we parse text tool calls
           }
         },
         systemInstruction: fullSystemInstruction,
         generationConfig: {
-          temperature: 0.3,
+          temperature: 1.0, // Gemini 3 Pro setting
         },
       });
 
       // Convert messages to Gemini format (excluding system messages)
-      const history = nonSystemMessages.slice(0, -1).map(msg => ({
+      // Gemini requires first message to be 'user' role
+      let historyMessages = nonSystemMessages.slice(0, -1).map(msg => ({
         role: msg.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: msg.content }]
       }));
 
+      // Ensure first message is 'user' - Gemini API requirement
+      while (historyMessages.length > 0 && historyMessages[0].role !== 'user') {
+        historyMessages.shift();
+      }
+
       const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
-      const chat = model.startChat({ history });
+      const chat = model.startChat({ history: historyMessages });
 
       // Emit initial thinking event
       _event.sender.send('tool-progress', {
@@ -415,11 +432,10 @@ DO NOT spawn agents for:
         );
 
         if (!functionCalls || functionCalls.length === 0) {
-          // Check for hallucinated tool calls in text response
+          // RE-ENABLED: Parse text-based tool calls that Gemini outputs naturally
+          // Gemini prefers outputting tool calls as text - work with it, not against it
           const textParts = allParts.filter((p: any) => p.text);
           const fullText = textParts.map((p: any) => p.text).join('');
-
-          // Parse hallucinated tool calls from text
           const hallucinatedCalls = parseHallucinatedToolCalls(fullText);
 
           if (hallucinatedCalls.length > 0) {
@@ -559,10 +575,16 @@ DO NOT spawn agents for:
             const directResponse = toolArgs.response || '';
             safeLog('[LLM] Model chose respond_directly - returning text response');
 
-            // Stream the response
+            // Stream the response (use 'chunk' type to match ChatArea handler)
             _event.sender.send('llm-stream', {
-              type: 'content',
+              type: 'chunk',
               content: directResponse,
+              timestamp: Date.now()
+            });
+
+            // Signal streaming complete
+            _event.sender.send('llm-stream', {
+              type: 'done',
               timestamp: Date.now()
             });
 

@@ -1375,18 +1375,75 @@ export async function spawnAgent(
 ): Promise<ToolResult> {
   const startTime = Date.now();
 
-  // LOUD LOGGING
-  safeLog('\n' + '='.repeat(60));
-  safeLog('🚀 SPAWN_AGENT WITH TOOL CALLING');
+  // USE PYTHON SCRIPT - BYPASSES BROKEN ELECTRON/TYPESCRIPT PIPELINE
+  safeLog('\n' + '🐍'.repeat(30));
+  safeLog('🚀 SPAWN_AGENT VIA PYTHON (Direct DeepSeek)');
   safeLog(`   Agent Type: ${agentType}`);
   safeLog(`   Task Preview: ${task.slice(0, 100)}...`);
   safeLog(`   Timestamp: ${new Date().toISOString()}`);
+  safeLog('🐍'.repeat(30));
+
+  try {
+    // Path to Python agent script (relative to project root, not dist-electron)
+    const projectRoot = path.join(__dirname, '..', '..');
+    const scriptPath = path.join(projectRoot, 'scripts', 'deepseek_agent.py');
+
+    safeLog(`   Project root: ${projectRoot}`);
+    safeLog(`   Script path: ${scriptPath}`);
+
+    // Build command arguments
+    const args = [scriptPath, task, agentType];
+    if (context) {
+      args.push(context);
+    }
+
+    safeLog(`🐍 Executing: python3 ${scriptPath}`);
+
+    // Execute Python script directly
+    const { execSync } = require('child_process');
+    const result = execSync(`python3 "${scriptPath}" "${task.replace(/"/g, '\\"')}" "${agentType}"${context ? ` "${context.replace(/"/g, '\\"')}"` : ''}`, {
+      encoding: 'utf-8',
+      timeout: 120000, // 2 minute timeout
+      env: { ...process.env },
+      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+    });
+
+    const elapsed = Date.now() - startTime;
+    safeLog(`🐍 Python agent completed in ${elapsed}ms`);
+
+    return {
+      success: true,
+      content: `[${agentType.toUpperCase()} AGENT - DIRECT DEEPSEEK]\n[Time: ${elapsed}ms]\n\n${result}`
+    };
+  } catch (error: any) {
+    const elapsed = Date.now() - startTime;
+    safeLog(`❌ Python agent failed after ${elapsed}ms:`, error.message);
+
+    // If Python script fails, return the error
+    return {
+      success: false,
+      content: '',
+      error: `Python agent failed: ${error.message}`
+    };
+  }
+}
+
+// OLD TYPESCRIPT IMPLEMENTATION - KEPT FOR REFERENCE
+async function spawnAgentTypescript(
+  task: string,
+  agentType: string,
+  context?: string
+): Promise<ToolResult> {
+  const startTime = Date.now();
+
+  safeLog('\n' + '='.repeat(60));
+  safeLog('🚀 SPAWN_AGENT (TypeScript - DEPRECATED)');
+  safeLog(`   Agent Type: ${agentType}`);
   safeLog('='.repeat(60));
 
   try {
     const deepseekClient = getDeepSeekClient();
     if (!deepseekClient) {
-      safeLog('❌ DEEPSEEK CLIENT NOT AVAILABLE - NO API KEY');
       return {
         success: false,
         content: '',
@@ -1437,6 +1494,12 @@ Follow the coding style you observe in the codebase. Include error handling.`
       iterations++;
       safeLog(`\n   [Iteration ${iterations}/${MAX_ITERATIONS}]`);
 
+      // CRITICAL: Log right before API call to prove we're hitting DeepSeek
+      safeLog('🔵 ABOUT TO CALL DEEPSEEK API');
+      safeLog(`   URL: https://api.deepseek.com/chat/completions`);
+      safeLog(`   Model: deepseek-chat`);
+      safeLog(`   Messages count: ${messages.length}`);
+
       // Call DeepSeek with tools
       const completion = await deepseekClient.chat.completions.create({
         model: 'deepseek-chat', // Using deepseek-chat which supports function calling
@@ -1446,6 +1509,12 @@ Follow the coding style you observe in the codebase. Include error handling.`
         temperature: 0.3,
         max_tokens: 4000
       });
+
+      // Log proof of API response
+      safeLog('🟢 DEEPSEEK API RESPONDED');
+      safeLog(`   Response ID: ${completion.id || 'NONE'}`);
+      safeLog(`   Model used: ${completion.model || 'UNKNOWN'}`);
+      safeLog(`   Tokens: ${JSON.stringify(completion.usage || {})}`);
 
       totalTokens += completion.usage?.total_tokens || 0;
       const message = completion.choices[0].message;

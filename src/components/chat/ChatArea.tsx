@@ -70,6 +70,8 @@ export const ChatArea = () => {
     objective: string;
     progress: SwarmProgress;
   } | null>(null);
+  // PERF: Cache memory context for session - don't re-fetch every message
+  const [cachedMemoryContext, setCachedMemoryContext] = useState<string | null>(null);
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -231,14 +233,16 @@ export const ChatArea = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isLoading, toast]);
 
-  // Load messages when session changes
+  // Load messages when session changes - also clear memory cache
   useEffect(() => {
     if (selectedSessionId) {
       loadMessages();
       // Reset visualizations when switching sessions (cleanup)
       displayContext.resetState();
+      setCachedMemoryContext(null); // Clear memory cache for new session
     } else {
       setMessages([]);
+      setCachedMemoryContext(null);
     }
   }, [selectedSessionId, loadMessages, displayContext]);
 
@@ -372,162 +376,55 @@ export const ChatArea = () => {
         };
         setMessages(prev => [...prev, userMessage]);
 
-        // ============ AUTOMATIC MEMORY RECALL ============
-        // Build context query from recent messages + new message
-        const recentContext = messages
-          .slice(-2)
-          .map(m => m.content)
-          .join(' ');
-        const memoryQuery = `${recentContext} ${messageContent}`.slice(0, 500);
-
-        // Collect all memories from multiple sources
-        let triggeredMemories: any[] = [];
-        let semanticMemories: any[] = [];
-        const allMemoryIds: string[] = [];
+        // ============ MEMORY CONTEXT (CACHED PER SESSION) ============
+        // PERF: Only fetch memories ONCE per session, then reuse
         const basePrompt = buildChiefQuantPrompt();
+        let memoryContext = cachedMemoryContext || '';
 
-        // LOVABLE FIX: Only attempt memory recall if running in Electron
-        if (selectedWorkspaceId && window.electron?.checkMemoryTriggers) {
+        // Only fetch memories if we don't have them cached
+        if (!cachedMemoryContext && selectedWorkspaceId && window.electron?.memoryRecall) {
           try {
-            // 1. TRIGGER-BASED RECALL (Highest Priority - Critical Lessons)
-            const triggerResult = await window.electron.checkMemoryTriggers(
-              messageContent,
-              selectedWorkspaceId
-            );
-            if (triggerResult && Array.isArray(triggerResult) && triggerResult.length > 0) {
-              triggeredMemories = triggerResult;
-              console.log(`[ChatArea] Triggered ${triggeredMemories.length} critical memories`);
-            }
-
-            // 2. SEMANTIC RECALL (Reduced limit to make room for triggered)
-            const semanticLimit = Math.max(5, 10 - triggeredMemories.length);
+            const memoryQuery = messageContent.slice(0, 500);
             const recallResult = await window.electron.memoryRecall(memoryQuery, selectedWorkspaceId, {
-              limit: semanticLimit,
+              limit: 10,
               minImportance: 0.4,
               useCache: true,
-              rerank: true,
+              rerank: false, // Skip reranking for speed
             });
 
-            if (recallResult?.memories && Array.isArray(recallResult.memories)) {
-              semanticMemories = recallResult.memories;
+            if (recallResult?.memories && Array.isArray(recallResult.memories) && recallResult.memories.length > 0) {
+              memoryContext = await window.electron.memoryFormatForPrompt(recallResult.memories);
+              setCachedMemoryContext(memoryContext); // Cache for session
+
+              toast({
+                title: '🧠 Memory Loaded',
+                description: `${recallResult.memories.length} memories cached for this session`,
+              });
             }
-
-            // 3. STALE MEMORY INJECTION (Force-injected from hook)
-            // staleMemories are already available from useMemoryReinforcement hook
-
           } catch (memoryError) {
-            console.error('[ChatArea] Memory recall failed, continuing without memories:', memoryError);
-            toast({
-              title: 'Memory Recall Warning',
-              description: 'Could not retrieve context memories, continuing without them',
-              variant: 'default',
-            });
+            console.error('[ChatArea] Memory recall failed:', memoryError);
           }
         }
 
-        // Combine memories: triggered (highest priority) -> stale -> semantic
-        const allMemories = [
-          ...triggeredMemories,
-          ...staleMemories,
-          ...semanticMemories
+        // ============ BUILD LLM MESSAGES (FAST PATH) ============
+        const enrichedSystemPrompt = memoryContext
+          ? `${basePrompt}\n\n${memoryContext}`
+          : basePrompt;
+
+        // Simple truncation to prevent context overflow
+        const MAX_HISTORY_CHARS = 400000;
+        let historyMessages = messages.map(m => ({ role: m.role, content: m.content }));
+        let totalChars = historyMessages.reduce((sum, m) => sum + m.content.length, 0);
+        while (totalChars > MAX_HISTORY_CHARS && historyMessages.length > 0) {
+          const removed = historyMessages.shift();
+          if (removed) totalChars -= removed.content.length;
+        }
+
+        const llmMessages = [
+          { role: 'system', content: enrichedSystemPrompt },
+          ...historyMessages,
+          { role: 'user', content: messageContent }
         ];
-
-        // Track memory IDs for marking as recalled
-        allMemories.forEach(m => {
-          if (m?.id) allMemoryIds.push(m.id);
-        });
-
-        // Format recalled memories for injection
-        let memoryContext = '';
-        if (allMemories.length > 0) {
-          try {
-            memoryContext = await window.electron.memoryFormatForPrompt(allMemories);
-
-            // Mark memories as recalled (updates last_recalled_at)
-            if (allMemoryIds.length > 0) {
-              await window.electron.markMemoriesRecalled(allMemoryIds);
-              console.log(`[ChatArea] Marked ${allMemoryIds.length} memories as recalled`);
-            }
-          } catch (formatError) {
-            console.error('[ChatArea] Memory formatting failed:', formatError);
-            memoryContext = '';
-          }
-        }
-
-        // ============ BUILD LLM MESSAGES WITH CONTEXT MANAGEMENT ============
-        // Uses tiered context protection:
-        // - Tier 0: Protected canon (LESSONS_LEARNED) - never dropped
-        // - Tier 1: Working memory - current task state
-        // - Tier 2: Retrieved memories - just-in-time recall
-        // - Tier 3: Conversation history - summarized if needed
-
-        let llmMessages: Array<{ role: string; content: string }>;
-
-        // Use intelligent context management if available (Electron mode)
-        if (window.electron?.contextBuildLLMMessages) {
-          try {
-            const contextResult = await window.electron.contextBuildLLMMessages({
-              baseSystemPrompt: basePrompt,
-              workspaceId: selectedWorkspaceId,
-              workingMemory: '', // TODO: Add working memory/scratchpad
-              retrievedMemories: memoryContext,
-              conversationHistory: messages.map(m => ({ role: m.role, content: m.content })),
-              newUserMessage: messageContent,
-            });
-
-            if (contextResult.success && contextResult.messages) {
-              llmMessages = contextResult.messages;
-
-              // Log context status for monitoring
-              if (contextResult.status) {
-                const pct = (contextResult.status.usagePercent * 100).toFixed(1);
-                console.log(`[ChatArea] Context: ${pct}% used (${contextResult.status.totalTokens}/${contextResult.status.maxTokens} tokens)`);
-                if (contextResult.status.needsSummarization) {
-                  console.log('[ChatArea] Context was summarized to fit budget');
-                }
-                if (contextResult.canonIncluded) {
-                  console.log('[ChatArea] Protected canon (LESSONS_LEARNED) included');
-                }
-              }
-            } else {
-              // Fallback to simple approach if context management fails
-              console.warn('[ChatArea] Context management failed, using fallback:', contextResult.error);
-              llmMessages = [
-                { role: 'system', content: basePrompt + (memoryContext ? `\n\n${memoryContext}` : '') },
-                ...messages.slice(-20).map(m => ({ role: m.role, content: m.content })),
-                { role: 'user', content: messageContent }
-              ];
-            }
-          } catch (contextError) {
-            console.error('[ChatArea] Context management error:', contextError);
-            // Fallback
-            llmMessages = [
-              { role: 'system', content: basePrompt + (memoryContext ? `\n\n${memoryContext}` : '') },
-              ...messages.slice(-20).map(m => ({ role: m.role, content: m.content })),
-              { role: 'user', content: messageContent }
-            ];
-          }
-        } else {
-          // Browser mode fallback (no Electron)
-          const enrichedSystemPrompt = memoryContext
-            ? `${basePrompt}\n\n${memoryContext}`
-            : basePrompt;
-
-          // Simple truncation for browser mode
-          const MAX_HISTORY_CHARS = 400000;
-          let historyMessages = messages.map(m => ({ role: m.role, content: m.content }));
-          let totalChars = historyMessages.reduce((sum, m) => sum + m.content.length, 0);
-          while (totalChars > MAX_HISTORY_CHARS && historyMessages.length > 0) {
-            const removed = historyMessages.shift();
-            if (removed) totalChars -= removed.content.length;
-          }
-
-          llmMessages = [
-            { role: 'system', content: enrichedSystemPrompt },
-            ...historyMessages,
-            { role: 'user', content: messageContent }
-          ];
-        }
 
         // Call LLM via Electron IPC
         const response = await chatPrimary(llmMessages);
