@@ -18,7 +18,7 @@ export function ChatSidebar() {
       className="border-r border-border bg-card"
       style={{
         '--sidebar-width': '280px',
-        '--sidebar-width-icon': '18px',
+        '--sidebar-width-icon': '0px',
       } as React.CSSProperties}
     >
       <SidebarHeader className={cn(
