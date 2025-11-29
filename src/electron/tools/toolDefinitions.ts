@@ -698,6 +698,72 @@ export const AGENT_TOOLS: FunctionDeclaration[] = [
   }
 ];
 
+// Quantitative Engine tools - High-level rotation-engine API
+export const QUANT_TOOLS: FunctionDeclaration[] = [
+  {
+    name: 'get_regime_heatmap',
+    description: 'Get market regime classification for a date range. Returns a timeline showing the dominant regime (BULL_QUIET, BEAR_VOL, SIDEWAYS, VOL_EXPANSION) for each trading day, along with VIX levels, trend scores, and volume flow indicators. Use this to understand market conditions before recommending strategies.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        start_date: {
+          type: SchemaType.STRING,
+          description: 'Start date in YYYY-MM-DD format'
+        },
+        end_date: {
+          type: SchemaType.STRING,
+          description: 'End date in YYYY-MM-DD format'
+        }
+      },
+      required: ['start_date', 'end_date']
+    }
+  },
+  {
+    name: 'get_strategy_card',
+    description: 'Get performance card for a specific convexity profile strategy. Returns Sharpe ratio, win rate, max drawdown, annual return, trade duration, and a mini equity curve. Profiles 1-6 correspond to: Long Dated Gamma, Short Dated Gamma, Charm Harvester, Vanna Play, Skew Trader, Vol-of-Vol.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        strategy_id: {
+          type: SchemaType.STRING,
+          description: 'Strategy identifier (profile_1 through profile_6)'
+        }
+      },
+      required: ['strategy_id']
+    }
+  },
+  {
+    name: 'get_portfolio_greeks',
+    description: 'Get current portfolio Greeks exposure. Returns net delta, gamma, theta, and vega across all active positions, plus any exposure warnings. Use this before recommending new trades to understand existing risk.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {}
+    }
+  },
+  {
+    name: 'run_scenario',
+    description: 'Run what-if scenario simulation. Given a price change and volatility change, calculate projected P&L, surviving/failing strategies, and margin call risk. Use this to stress-test the portfolio.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        price_change_pct: {
+          type: SchemaType.NUMBER,
+          description: 'Price change as decimal (e.g., -0.05 for 5% drop)'
+        },
+        vol_change_pct: {
+          type: SchemaType.NUMBER,
+          description: 'Volatility change as decimal (e.g., 0.20 for 20% vol spike)'
+        },
+        days_forward: {
+          type: SchemaType.NUMBER,
+          description: 'Days forward for theta decay calculation (default: 1)'
+        }
+      },
+      required: ['price_change_pct', 'vol_change_pct']
+    }
+  }
+];
+
 // Maintenance tools
 export const MAINTENANCE_TOOLS: FunctionDeclaration[] = [
   {
@@ -740,6 +806,7 @@ export const RESPONSE_TOOLS: FunctionDeclaration[] = [
 // All tools combined - respond_directly FIRST so it's preferred
 export const ALL_TOOLS: FunctionDeclaration[] = [
   ...RESPONSE_TOOLS,
+  ...QUANT_TOOLS,  // High-level quant tools for regime/strategy analysis
   ...FILE_TOOLS,
   ...PYTHON_TOOLS,
   ...GIT_TOOLS,
@@ -753,6 +820,7 @@ export const ALL_TOOLS: FunctionDeclaration[] = [
 
 // Tool names by category for filtering
 export const TOOL_CATEGORIES = {
+  quant: QUANT_TOOLS.map(t => t.name),
   file: FILE_TOOLS.map(t => t.name),
   python: PYTHON_TOOLS.map(t => t.name),
   git: GIT_TOOLS.map(t => t.name),

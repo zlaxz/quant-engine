@@ -78,7 +78,279 @@ export async function searchCode(query: string, dirPath?: string): Promise<{ res
   return data;
 }
 
-// Python Execution
+// ==================== QUANT ENGINE API ====================
+// Python server URL - matches toolHandlers.ts
+const QUANT_ENGINE_URL = 'http://localhost:5000';
+
+// Type definitions for Quant Engine API
+export interface RegimeData {
+  date: string;
+  regime: string;
+  regime_id: number;
+  confidence: number;
+  metrics: {
+    rv5?: number;
+    rv20?: number;
+    close?: number;
+    trend?: 'up' | 'down';
+  };
+  description: string;
+}
+
+export interface RegimeHeatmapResponse {
+  success: boolean;
+  data?: RegimeData[];
+  count?: number;
+  date_range?: { start: string; end: string };
+  error?: string;
+}
+
+export interface StrategyPerformance {
+  sharpe: number;
+  max_drawdown: number;
+  win_rate: number;
+  avg_return: number;
+  recommended_allocation: number;
+}
+
+export interface Strategy {
+  id: string;
+  name: string;
+  description: string;
+  risk_level: 'low' | 'medium' | 'high';
+  optimal_regimes: string[];
+  instruments: string[];
+  performance?: StrategyPerformance;
+  current_allocation?: number;
+  signal?: 'BUY' | 'HOLD' | 'REDUCE' | 'AVOID';
+}
+
+export interface StrategyListResponse {
+  success: boolean;
+  strategies?: Array<{ id: string; name: string; risk_level: string; description: string }>;
+  count?: number;
+  error?: string;
+}
+
+export interface StrategyCardResponse {
+  success: boolean;
+  strategy?: Strategy;
+  error?: string;
+}
+
+export interface SimulationImpact {
+  portfolio_pnl_pct: number;
+  by_strategy: Record<string, { allocation: number; pnl_pct: number; sensitivity?: number }>;
+  greeks_impact?: Record<string, number>;
+  recommendations: string[];
+  stress_level: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+export interface SimulationResponse {
+  success: boolean;
+  scenario?: string;
+  params?: Record<string, unknown>;
+  impact?: SimulationImpact;
+  error?: string;
+}
+
+export interface BacktestResponse {
+  success: boolean;
+  metrics?: Record<string, number>;
+  equity_curve?: Array<{ date: string; value: number; drawdown?: number }>;
+  trades?: unknown[];
+  engine_source?: string;
+  error?: string;
+}
+
+// Fetch regime heatmap data
+export async function fetchRegimeHeatmap(
+  startDate?: string,
+  endDate?: string
+): Promise<RegimeHeatmapResponse> {
+  try {
+    // Build query string
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+
+    const queryString = params.toString();
+    const url = `${QUANT_ENGINE_URL}/regimes${queryString ? `?${queryString}` : ''}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(30000), // 30 second timeout
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `Server error (${response.status}): ${errorText}` };
+    }
+
+    return await response.json();
+  } catch (error: unknown) {
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      return { success: false, error: 'Request timed out' };
+    }
+    if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ECONNREFUSED') {
+      return { success: false, error: `Quant Engine not running at ${QUANT_ENGINE_URL}` };
+    }
+    return { success: false, error: `Request failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// List all available strategies
+export async function fetchStrategies(): Promise<StrategyListResponse> {
+  try {
+    const response = await fetch(`${QUANT_ENGINE_URL}/strategies`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `Server error (${response.status}): ${errorText}` };
+    }
+
+    return await response.json();
+  } catch (error: unknown) {
+    if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ECONNREFUSED') {
+      return { success: false, error: `Quant Engine not running at ${QUANT_ENGINE_URL}` };
+    }
+    return { success: false, error: `Request failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// Get strategy details by ID
+export async function fetchStrategyDetails(strategyId: string): Promise<StrategyCardResponse> {
+  try {
+    const response = await fetch(`${QUANT_ENGINE_URL}/strategies/${strategyId}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (response.status === 404) {
+      return { success: false, error: `Strategy not found: ${strategyId}` };
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `Server error (${response.status}): ${errorText}` };
+    }
+
+    return await response.json();
+  } catch (error: unknown) {
+    if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ECONNREFUSED') {
+      return { success: false, error: `Quant Engine not running at ${QUANT_ENGINE_URL}` };
+    }
+    return { success: false, error: `Request failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// Run scenario simulation
+export async function runSimulation(scenario: {
+  scenario: 'vix_shock' | 'price_drop' | 'vol_crush';
+  params?: Record<string, number>;
+  portfolio?: Record<string, number>;
+}): Promise<SimulationResponse> {
+  try {
+    const response = await fetch(`${QUANT_ENGINE_URL}/simulate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(scenario),
+      signal: AbortSignal.timeout(60000), // 60 second timeout for complex simulations
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `Server error (${response.status}): ${errorText}` };
+    }
+
+    return await response.json();
+  } catch (error: unknown) {
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      return { success: false, error: 'Simulation timed out' };
+    }
+    if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ECONNREFUSED') {
+      return { success: false, error: `Quant Engine not running at ${QUANT_ENGINE_URL}` };
+    }
+    return { success: false, error: `Simulation failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// Run backtest via Quant Engine API (new HTTP-based implementation)
+export async function runQuantBacktest(params: {
+  strategyKey: string;
+  startDate: string;
+  endDate: string;
+  capital?: number;
+  config?: Record<string, unknown>;
+}): Promise<BacktestResponse> {
+  try {
+    const response = await fetch(`${QUANT_ENGINE_URL}/backtest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        strategy_key: params.strategyKey,
+        params: {
+          startDate: params.startDate,
+          endDate: params.endDate,
+          capital: params.capital || 100000,
+        },
+        config: params.config,
+      }),
+      signal: AbortSignal.timeout(300000), // 5 minute timeout
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `Backtest server error (${response.status}): ${errorText}` };
+    }
+
+    return await response.json();
+  } catch (error: unknown) {
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      return { success: false, error: 'Backtest timed out after 5 minutes' };
+    }
+    if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ECONNREFUSED') {
+      return { success: false, error: `Quant Engine not running at ${QUANT_ENGINE_URL}. Start with: cd python && python server.py` };
+    }
+    return { success: false, error: `Backtest failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// Health check for Quant Engine
+export async function checkQuantEngineHealth(): Promise<{
+  healthy: boolean;
+  version?: string;
+  endpoints?: string[];
+  error?: string;
+}> {
+  try {
+    const response = await fetch(`${QUANT_ENGINE_URL}/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) {
+      return { healthy: false, error: `Server returned ${response.status}` };
+    }
+
+    const data = await response.json();
+    return {
+      healthy: data.status === 'healthy',
+      version: data.version,
+      endpoints: data.endpoints,
+    };
+  } catch {
+    return { healthy: false, error: `Quant Engine not reachable at ${QUANT_ENGINE_URL}` };
+  }
+}
+
+// Legacy Python Execution (kept for backward compatibility)
 export async function runBacktest(params: {
   strategyKey: string;
   startDate: string;
@@ -96,12 +368,12 @@ export async function runBacktest(params: {
   if (isElectron) {
     return window.electron.runBacktest(params);
   }
-  
+
   // Fallback to edge function (which may use bridge server or stub)
   const { data, error } = await supabase.functions.invoke('backtest-run', {
     body: params,
   });
-  
+
   if (error) throw error;
   return data;
 }

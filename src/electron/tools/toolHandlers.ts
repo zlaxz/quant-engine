@@ -59,9 +59,20 @@ export interface ToolResult {
   metadata?: any; // Additional structured data for specialized rendering
 }
 
-// Get rotation-engine root from environment or settings
+// Get app root directory (internal Python engine is at app_root/python/)
+function getAppRoot(): string {
+  // In development, use process.cwd()
+  // In production, use app.getPath('userData')/../..
+  if (process.env.NODE_ENV === 'development') {
+    return process.cwd();
+  }
+  const { app } = require('electron');
+  return path.join(app.getPath('userData'), '..', '..', '..');
+}
+
+// Get engine root - now points to internal python/ directory
 function getEngineRoot(): string {
-  return process.env.ROTATION_ENGINE_ROOT || path.join(process.env.HOME || '', 'rotation-engine');
+  return path.join(getAppRoot(), 'python');
 }
 
 // Resolve path relative to engine root with security checks
@@ -551,10 +562,11 @@ export async function dryRunBacktest(
       }
     };
 
-    // Try to check if strategy profile exists
-    const profilePath = path.join(root, 'rotation-engine-bridge', 'profiles', `${strategyKey}.json`);
-    const profileCheck = fs.existsSync(profilePath) 
-      ? 'PASS - Profile found' 
+    // Try to check if strategy profile exists (in internal engine)
+    const appRoot = getAppRoot();
+    const profilePath = path.join(appRoot, 'python', 'engine', 'profiles', `${strategyKey}.json`);
+    const profileCheck = fs.existsSync(profilePath)
+      ? 'PASS - Profile found'
       : `WARNING - Profile not found at ${profilePath}`;
     (validationResults.checks as any).strategyProfile = profileCheck;
 
@@ -706,7 +718,10 @@ export async function codeStats(statsPath?: string): Promise<ToolResult> {
 
 // ==================== BACKTEST OPERATIONS ====================
 
-// Helper function to execute a single backtest using Python execution system
+// Python server URL - internal engine running on localhost
+const PYTHON_SERVER_URL = 'http://localhost:5000';
+
+// Helper function to execute a single backtest via HTTP call to Python server
 async function executeSingleBacktest(
   strategyKey: string,
   startDate: string,
@@ -714,68 +729,73 @@ async function executeSingleBacktest(
   capital: number,
   profileConfig?: Record<string, any>
 ): Promise<{ success: boolean; metrics?: any; equityCurve?: any[]; error?: string }> {
-  const root = getEngineRoot();
-
-  // Build Python command using cli_wrapper.py
-  const cmd = [
-    'python3',
-    'rotation-engine-bridge/cli_wrapper.py',
-    '--profile', strategyKey,
-    '--start', startDate,
-    '--end', endDate,
-    '--capital', capital.toString(),
-  ];
-
-  if (profileConfig) {
-    cmd.push('--config', JSON.stringify(profileConfig));
-  }
-
-  // Execute Python process
-  const pythonProcess = spawn(cmd[0], cmd.slice(1), {
-    cwd: root,
-    timeout: 300000, // 5 minute timeout
-  });
-
-  let stdout = '';
-  let stderr = '';
-
-  pythonProcess.stdout.on('data', (data) => {
-    stdout += data.toString();
-  });
-
-  pythonProcess.stderr.on('data', (data) => {
-    stderr += data.toString();
-  });
-
-  // Wait for process to complete
-  const exitCode = await new Promise<number>((resolve, reject) => {
-    pythonProcess.on('close', resolve);
-    pythonProcess.on('error', reject);
-  });
-
-  if (exitCode !== 0) {
-    return {
-      success: false,
-      error: stderr || 'Backtest process failed',
-    };
-  }
-
-  // Parse results from stdout
-  let results;
   try {
-    results = JSON.parse(stdout);
-  } catch (parseError) {
+    // Build request body
+    const requestBody = {
+      strategy_key: strategyKey,
+      start_date: startDate,
+      end_date: endDate,
+      capital: capital,
+      config: profileConfig || {}
+    };
+
+    safeLog(`[Backtest] Calling Python server: ${PYTHON_SERVER_URL}/api/backtest`);
+    safeLog(`[Backtest] Request: ${JSON.stringify(requestBody).slice(0, 200)}...`);
+
+    // Call the Python HTTP server
+    const response = await fetch(`${PYTHON_SERVER_URL}/api/backtest`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(300000), // 5 minute timeout
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        success: false,
+        error: `Backtest server error (${response.status}): ${errorText}`,
+      };
+    }
+
+    const results = await response.json();
+
+    if (results.error) {
+      return {
+        success: false,
+        error: results.error,
+      };
+    }
+
+    return {
+      success: true,
+      metrics: results.metrics,
+      equityCurve: results.equity_curve,
+    };
+  } catch (error: any) {
+    // Handle timeout
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      return {
+        success: false,
+        error: 'Backtest timed out after 5 minutes. Try a shorter date range.',
+      };
+    }
+
+    // Handle connection errors (server not running)
+    if (error.code === 'ECONNREFUSED') {
+      return {
+        success: false,
+        error: `Python server not running at ${PYTHON_SERVER_URL}. Start the server with: python3 python/server.py`,
+      };
+    }
+
     return {
       success: false,
-      error: `Failed to parse backtest results: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}`,
+      error: `Backtest failed: ${error.message}`,
     };
   }
-
-  return {
-    success: true,
-    metrics: results.metrics,
-    equityCurve: results.equity_curve,
-  };
 }
 
 export async function batchBacktest(
@@ -1101,6 +1121,292 @@ export async function crossValidate(
     };
   } catch (error: any) {
     return { success: false, content: '', error: `Cross-validation error: ${error.message}` };
+  }
+}
+
+// ==================== QUANT ENGINE API OPERATIONS ====================
+
+/**
+ * Get regime heatmap data from the Quant Engine API
+ */
+export async function getRegimeHeatmap(
+  startDate?: string,
+  endDate?: string
+): Promise<ToolResult> {
+  try {
+    // Build query string
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+
+    const queryString = params.toString();
+    const url = `${PYTHON_SERVER_URL}/regimes${queryString ? `?${queryString}` : ''}`;
+
+    safeLog(`[Regimes] Fetching from: ${url}`);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, content: '', error: `Server error (${response.status}): ${errorText}` };
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      return { success: false, content: '', error: result.error || 'Unknown error' };
+    }
+
+    return {
+      success: true,
+      content: `Regime Heatmap (${result.count} days):\n${JSON.stringify(result.data, null, 2)}`,
+      metadata: result
+    };
+  } catch (error: any) {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      return { success: false, content: '', error: 'Request timed out' };
+    }
+    if (error.code === 'ECONNREFUSED') {
+      return { success: false, content: '', error: `Quant Engine not running at ${PYTHON_SERVER_URL}. Start with: cd python && python server.py` };
+    }
+    return { success: false, content: '', error: `Request failed: ${error.message}` };
+  }
+}
+
+/**
+ * List all available strategies from the Quant Engine API
+ */
+export async function listStrategies(): Promise<ToolResult> {
+  try {
+    safeLog(`[Strategies] Listing all strategies`);
+
+    const response = await fetch(`${PYTHON_SERVER_URL}/strategies`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, content: '', error: `Server error (${response.status}): ${errorText}` };
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      return { success: false, content: '', error: result.error || 'Unknown error' };
+    }
+
+    // Format strategies for display
+    const formatted = result.strategies.map((s: any) =>
+      `• ${s.id}: ${s.name} [${s.risk_level}]\n  ${s.description}`
+    ).join('\n\n');
+
+    return {
+      success: true,
+      content: `Available Strategies (${result.count}):\n\n${formatted}`,
+      metadata: result
+    };
+  } catch (error: any) {
+    if (error.code === 'ECONNREFUSED') {
+      return { success: false, content: '', error: `Quant Engine not running at ${PYTHON_SERVER_URL}` };
+    }
+    return { success: false, content: '', error: `Request failed: ${error.message}` };
+  }
+}
+
+/**
+ * Get detailed strategy card from the Quant Engine API
+ */
+export async function getStrategyDetails(strategyId: string): Promise<ToolResult> {
+  try {
+    safeLog(`[Strategy] Getting details for: ${strategyId}`);
+
+    const response = await fetch(`${PYTHON_SERVER_URL}/strategies/${strategyId}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (response.status === 404) {
+      return { success: false, content: '', error: `Strategy not found: ${strategyId}` };
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, content: '', error: `Server error (${response.status}): ${errorText}` };
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      return { success: false, content: '', error: result.error || 'Unknown error' };
+    }
+
+    const s = result.strategy;
+    const perf = s.performance || {};
+
+    const formatted = `
+Strategy: ${s.name} (${s.id})
+${'='.repeat(50)}
+
+Description: ${s.description}
+
+Risk Level: ${s.risk_level.toUpperCase()}
+Signal: ${s.signal || 'N/A'}
+Current Allocation: ${((s.current_allocation || 0) * 100).toFixed(1)}%
+
+Optimal Regimes: ${s.optimal_regimes.join(', ')}
+Instruments: ${s.instruments.join(', ')}
+
+Performance Metrics:
+  • Sharpe Ratio: ${perf.sharpe?.toFixed(2) || 'N/A'}
+  • Max Drawdown: ${perf.max_drawdown?.toFixed(1) || 'N/A'}%
+  • Win Rate: ${((perf.win_rate || 0) * 100).toFixed(1)}%
+  • Avg Return: ${perf.avg_return?.toFixed(2) || 'N/A'}%
+    `.trim();
+
+    return {
+      success: true,
+      content: formatted,
+      metadata: result
+    };
+  } catch (error: any) {
+    if (error.code === 'ECONNREFUSED') {
+      return { success: false, content: '', error: `Quant Engine not running at ${PYTHON_SERVER_URL}` };
+    }
+    return { success: false, content: '', error: `Request failed: ${error.message}` };
+  }
+}
+
+/**
+ * Run scenario simulation via Quant Engine API
+ */
+export async function runScenarioSimulation(
+  scenario: 'vix_shock' | 'price_drop' | 'vol_crush',
+  params?: Record<string, number>,
+  portfolio?: Record<string, number>
+): Promise<ToolResult> {
+  try {
+    safeLog(`[Simulate] Running scenario: ${scenario}`);
+
+    const requestBody = {
+      scenario,
+      params: params || {},
+      portfolio: portfolio || {}
+    };
+
+    const response = await fetch(`${PYTHON_SERVER_URL}/simulate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(60000),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, content: '', error: `Server error (${response.status}): ${errorText}` };
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      return { success: false, content: '', error: result.error || 'Unknown error' };
+    }
+
+    const impact = result.impact;
+
+    // Format by-strategy breakdown
+    const strategyBreakdown = Object.entries(impact.by_strategy)
+      .map(([id, data]: [string, any]) =>
+        `  • ${id}: ${data.pnl_pct > 0 ? '+' : ''}${data.pnl_pct.toFixed(2)}% (allocation: ${(data.allocation * 100).toFixed(1)}%)`
+      ).join('\n');
+
+    const formatted = `
+Scenario Simulation: ${scenario.toUpperCase()}
+${'='.repeat(50)}
+
+Parameters: ${JSON.stringify(result.params)}
+Stress Level: ${impact.stress_level}
+
+Portfolio Impact: ${impact.portfolio_pnl_pct > 0 ? '+' : ''}${impact.portfolio_pnl_pct.toFixed(2)}%
+
+By Strategy:
+${strategyBreakdown}
+
+${impact.greeks_impact ? `Greeks Impact:
+  • Delta: ${impact.greeks_impact.delta?.toFixed(3) || 'N/A'}
+  • Gamma: ${impact.greeks_impact.gamma?.toFixed(3) || 'N/A'}
+  • Vega: ${impact.greeks_impact.vega?.toFixed(3) || 'N/A'}
+  • Theta: ${impact.greeks_impact.theta?.toFixed(3) || 'N/A'}` : ''}
+
+Recommendations:
+${impact.recommendations.map((r: string) => `  • ${r}`).join('\n')}
+    `.trim();
+
+    return {
+      success: true,
+      content: formatted,
+      metadata: result
+    };
+  } catch (error: any) {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      return { success: false, content: '', error: 'Simulation timed out' };
+    }
+    if (error.code === 'ECONNREFUSED') {
+      return { success: false, content: '', error: `Quant Engine not running at ${PYTHON_SERVER_URL}` };
+    }
+    return { success: false, content: '', error: `Simulation failed: ${error.message}` };
+  }
+}
+
+/**
+ * Check Quant Engine health status
+ */
+export async function checkQuantEngineHealth(): Promise<ToolResult> {
+  try {
+    const response = await fetch(`${PYTHON_SERVER_URL}/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        content: '',
+        error: `Quant Engine returned status ${response.status}`
+      };
+    }
+
+    const data = await response.json();
+
+    const formatted = `
+Quant Engine Health Check
+${'='.repeat(50)}
+
+Status: ${data.status === 'healthy' ? '✓ HEALTHY' : '✗ UNHEALTHY'}
+Version: ${data.version || 'unknown'}
+Timestamp: ${data.timestamp || 'N/A'}
+
+Available Endpoints:
+${(data.endpoints || []).map((e: string) => `  • ${e}`).join('\n')}
+    `.trim();
+
+    return {
+      success: true,
+      content: formatted,
+      metadata: data
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      content: '',
+      error: `Quant Engine not reachable at ${PYTHON_SERVER_URL}. Start with: cd python && python server.py`
+    };
   }
 }
 
@@ -1985,6 +2291,18 @@ export async function executeTool(
       return sweepParams(args.strategy_key, args.param_name, args.start, args.end, args.step, args.start_date, args.end_date, args.capital);
     case 'cross_validate':
       return crossValidate(args.strategy_key, args.params, args.start_date, args.end_date, args.num_folds, args.capital);
+
+    // Quant Engine API
+    case 'get_regime_heatmap':
+      return getRegimeHeatmap(args.start_date, args.end_date);
+    case 'list_strategies':
+      return listStrategies();
+    case 'get_strategy_details':
+      return getStrategyDetails(args.strategy_id);
+    case 'run_simulation':
+      return runScenarioSimulation(args.scenario, args.params, args.portfolio);
+    case 'quant_engine_health':
+      return checkQuantEngineHealth();
 
     // Data inspection
     case 'inspect_market_data':

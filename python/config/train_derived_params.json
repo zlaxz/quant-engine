@@ -1,0 +1,86 @@
+{
+  "Profile_1_LDG": {
+    "max_loss_pct": -0.5,
+    "tp1_pct": null,
+    "tp2_pct": 0.08,
+    "max_hold_days": 14,
+    "source": "train_distribution",
+    "stats": {
+      "train_trades": 16,
+      "median_peak_pct": 0.046,
+      "p75_peak_pct": 0.083,
+      "median_peak_day": 4,
+      "worst_10pct": -0.487
+    }
+  },
+  "Profile_2_SDG": {
+    "max_loss_pct": -0.5,
+    "tp1_pct": null,
+    "tp2_pct": 0.44,
+    "max_hold_days": 14,
+    "source": "train_distribution",
+    "stats": {
+      "train_trades": 21,
+      "median_peak_pct": 0.143,
+      "p75_peak_pct": 0.441,
+      "median_peak_day": 2,
+      "worst_10pct": -0.744
+    }
+  },
+  "Profile_3_CHARM": {
+    "max_loss_pct": -0.49,
+    "tp1_pct": null,
+    "tp2_pct": 0.37,
+    "max_hold_days": 14,
+    "source": "train_distribution",
+    "stats": {
+      "train_trades": 28,
+      "median_peak_pct": 0.236,
+      "p75_peak_pct": 0.367,
+      "median_peak_day": 11,
+      "worst_10pct": -0.446
+    }
+  },
+  "Profile_4_VANNA": {
+    "max_loss_pct": -0.5,
+    "tp1_pct": null,
+    "tp2_pct": 0.56,
+    "max_hold_days": 16,
+    "source": "train_distribution",
+    "stats": {
+      "train_trades": 17,
+      "median_peak_pct": 0.45,
+      "p75_peak_pct": 0.564,
+      "median_peak_day": 13,
+      "worst_10pct": -0.595
+    }
+  },
+  "Profile_5_SKEW": {
+    "max_loss_pct": -0.5,
+    "tp1_pct": null,
+    "tp2_pct": 0.53,
+    "max_hold_days": 14,
+    "source": "train_distribution",
+    "stats": {
+      "train_trades": 8,
+      "median_peak_pct": 0.149,
+      "p75_peak_pct": 0.531,
+      "median_peak_day": 0,
+      "worst_10pct": -0.891
+    }
+  },
+  "Profile_6_VOV": {
+    "max_loss_pct": -0.49,
+    "tp1_pct": null,
+    "tp2_pct": 0.29,
+    "max_hold_days": 14,
+    "source": "train_distribution",
+    "stats": {
+      "train_trades": 51,
+      "median_peak_pct": 0.089,
+      "p75_peak_pct": 0.292,
+      "median_peak_day": 3,
+      "worst_10pct": -0.442
+    }
+  }
+}

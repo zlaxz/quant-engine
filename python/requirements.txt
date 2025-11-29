@@ -27,3 +27,7 @@ websockets>=12.0
 
 # Async HTTP for Supabase calls
 aiohttp>=3.9.0
+
+flask
+schwab-py
+python-dotenv

@@ -71,17 +71,20 @@ function createWindow() {
   });
 }
 
+// Get the app root directory (works in both dev and production)
+function getAppRoot(): string {
+  // In development, use process.cwd()
+  // In production, use app.getPath('userData')/../..
+  if (process.env.NODE_ENV === 'development') {
+    return process.cwd();
+  }
+  return path.join(app.getPath('userData'), '..', '..', '..');
+}
+
 // Validate Python environment
 async function validatePythonEnvironment(): Promise<{ valid: boolean; error?: string }> {
-  const engineRoot = process.env.ROTATION_ENGINE_ROOT;
-  
-  if (!engineRoot) {
-    return {
-      valid: false,
-      error: 'ROTATION_ENGINE_ROOT not configured. Go to Settings → Project Directory.'
-    };
-  }
-  
+  const appRoot = getAppRoot();
+
   // Check Python3 exists
   try {
     const pythonVersion = execSync('python3 --version', { encoding: 'utf8' });
@@ -92,39 +95,30 @@ async function validatePythonEnvironment(): Promise<{ valid: boolean; error?: st
       error: 'Python3 not found. Install Python 3.7+ from python.org\n\nSee QUICKSTART.md for installation help.'
     };
   }
-  
-  // Check rotation-engine directory
-  if (!fs.existsSync(engineRoot)) {
+
+  // Check python/server.py exists (internal Python engine)
+  const serverPath = path.join(appRoot, 'python', 'server.py');
+  if (!fs.existsSync(serverPath)) {
     return {
       valid: false,
-      error: `Rotation engine directory not found: ${engineRoot}\n\nUpdate ROTATION_ENGINE_ROOT in .env`
+      error: `Python engine not found: ${serverPath}\n\nThe python/ directory should be part of this application.`
     };
   }
-  
-  // Check cli_wrapper.py exists
-  const cliWrapperPath = path.join(engineRoot, 'rotation-engine-bridge', 'cli_wrapper.py');
-  if (!fs.existsSync(cliWrapperPath)) {
-    return {
-      valid: false,
-      error: 'rotation-engine-bridge/cli_wrapper.py not found.\n\nSee QUICKSTART.md for setup instructions.'
-    };
-  }
-  
+
+  console.log(`[Validation] Python engine found: ${serverPath}`);
+
   // Check if executable (Unix-like systems)
   if (process.platform !== 'win32') {
     try {
-      fs.accessSync(cliWrapperPath, fs.constants.X_OK);
+      fs.accessSync(serverPath, fs.constants.R_OK);
     } catch {
-      console.warn('[Validation] cli_wrapper.py not executable, trying to fix...');
-      try {
-        execSync(`chmod +x ${cliWrapperPath}`);
-        console.log('[Validation] Made cli_wrapper.py executable');
-      } catch (e) {
-        console.warn('[Validation] Could not make cli_wrapper.py executable:', e);
-      }
+      return {
+        valid: false,
+        error: `Cannot read Python engine: ${serverPath}\n\nCheck file permissions.`
+      };
     }
   }
-  
+
   return { valid: true };
 }
 

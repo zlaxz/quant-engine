@@ -1,6 +1,6 @@
 {
-  "name": "quant-chat-workbench",
-  "productName": "Quant Chat Workbench",
+  "name": "quant-engine",
+  "productName": "Quant Engine",
   "private": true,
   "version": "1.0.0",
   "type": "module",

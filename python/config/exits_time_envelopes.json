@@ -1,0 +1,8 @@
+{
+  "SDG":   { "min_hold": 2, "max_hold": 7 },
+  "SKEW":  { "min_hold": 1, "max_hold": 9 },
+  "LDG":   { "min_hold": 2, "max_hold": 10 },
+  "VOV":   { "min_hold": 1, "max_hold": 12 },
+  "VANNA": { "min_hold": 5, "max_hold": 13 },
+  "CHARM": { "min_hold": 6, "max_hold": 14 }
+}
