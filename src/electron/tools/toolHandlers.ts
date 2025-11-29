@@ -1810,36 +1810,25 @@ export async function spawnAgentsParallel(
 ): Promise<ToolResult> {
   const startTime = Date.now();
 
-  safeLog('\n' + '='.repeat(60));
-  safeLog('🚀🚀 SPAWN_AGENTS_PARALLEL - MULTI-AGENT WITH TOOLS');
+  safeLog('\n' + '🐍🐍'.repeat(30));
+  safeLog('🚀🚀 SPAWN_AGENTS_PARALLEL - PYTHON (Direct DeepSeek)');
   safeLog(`   Spawning ${agents.length} agents in parallel`);
   agents.forEach((a, i) => safeLog(`   Agent ${i + 1}: ${a.id} (${a.agent_type})`));
   safeLog(`   Timestamp: ${new Date().toISOString()}`);
-  safeLog('='.repeat(60));
+  safeLog('🐍🐍'.repeat(30));
 
   try {
-    const deepseekClient = getDeepSeekClient();
-    if (!deepseekClient) {
-      return {
-        success: false,
-        content: '',
-        error: 'DEEPSEEK_API_KEY not configured. Go to Settings to add your API key.'
-      };
-    }
-
-    // Launch all agents in parallel using Promise.all
+    // Launch all agents in parallel - reuse Python implementation
     const agentPromises = agents.map(async (agentConfig) => {
-      safeLog(`\n   [${agentConfig.id}] Starting agent: ${agentConfig.agent_type}`);
+      safeLog(`\n   [${agentConfig.id}] Starting Python agent: ${agentConfig.agent_type}`);
       const agentStartTime = Date.now();
 
       try {
-        // Run the full agentic loop for this agent
-        const result = await runAgentWithTools(
-          deepseekClient,
+        // Use the same Python script approach as spawn_agent
+        const result = await spawnAgent(
           agentConfig.task,
           agentConfig.agent_type,
-          agentConfig.context,
-          agentConfig.id
+          agentConfig.context
         );
 
         const elapsed = Date.now() - agentStartTime;
@@ -1847,8 +1836,9 @@ export async function spawnAgentsParallel(
 
         return {
           id: agentConfig.id,
-          success: true,
+          success: result.success,
           content: result.content,
+          error: result.error,
           elapsed
         };
       } catch (error: any) {

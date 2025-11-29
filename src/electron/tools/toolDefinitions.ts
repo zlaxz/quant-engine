@@ -662,7 +662,7 @@ export const AGENT_TOOLS: FunctionDeclaration[] = [
   },
   {
     name: 'spawn_agents_parallel',
-    description: 'Spawn multiple DeepSeek agents in parallel using TypeScript. Each agent runs independently with full tool access (read_file, write_file, list_directory, search_code, run_command). All agents complete before results return. Requires DEEPSEEK_API_KEY. Use when analyzing 3+ independent components. Returns array of results with execution time per agent.',
+    description: 'Spawn multiple DeepSeek agents in parallel via Python script (same as spawn_agent but multiple at once). Each agent runs independently with full tool access. All agents complete before results return. Requires DEEPSEEK_API_KEY. 10-minute timeout per agent. Use when analyzing 3+ independent components. Returns array of results with execution time.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
