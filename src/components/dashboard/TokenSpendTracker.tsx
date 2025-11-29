@@ -59,35 +59,35 @@ const MODEL_CONFIG: Record<
   string,
   { icon: React.ReactNode; color: string; inputCost: number; outputCost: number }
 > = {
-  'claude-sonnet': {
-    icon: <Sparkles className="h-3 w-3" />,
-    color: 'text-purple-500',
-    inputCost: 3.0, // per million
-    outputCost: 15.0,
-  },
-  'claude-haiku': {
-    icon: <Zap className="h-3 w-3" />,
-    color: 'text-blue-500',
-    inputCost: 0.25,
-    outputCost: 1.25,
-  },
-  'claude-opus': {
+  'gemini-3-pro-preview': {
     icon: <Brain className="h-3 w-3" />,
-    color: 'text-orange-500',
-    inputCost: 15.0,
-    outputCost: 75.0,
+    color: 'text-purple-500',
+    inputCost: 1.25, // per million tokens (Gemini 2.0 Pro pricing)
+    outputCost: 5.0,
   },
-  'deepseek': {
-    icon: <Zap className="h-3 w-3" />,
-    color: 'text-green-500',
-    inputCost: 0.14,
-    outputCost: 0.28,
+  'gpt-4o': {
+    icon: <Sparkles className="h-3 w-3" />,
+    color: 'text-blue-500',
+    inputCost: 2.5,
+    outputCost: 10.0,
   },
-  'gemini-flash': {
+  'gpt-4o-mini': {
     icon: <Zap className="h-3 w-3" />,
     color: 'text-cyan-500',
-    inputCost: 0.075,
-    outputCost: 0.30,
+    inputCost: 0.15,
+    outputCost: 0.60,
+  },
+  'deepseek-reasoner': {
+    icon: <Brain className="h-3 w-3" />,
+    color: 'text-green-500',
+    inputCost: 0.55,
+    outputCost: 2.19,
+  },
+  'text-embedding-3-small': {
+    icon: <Zap className="h-3 w-3" />,
+    color: 'text-gray-500',
+    inputCost: 0.02,
+    outputCost: 0.0,
   },
 };
 
