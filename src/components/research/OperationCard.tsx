@@ -4,7 +4,7 @@
  * Makes Chief Quant's work visible: what files accessed, what data analyzed, what results returned
  */
 
-import { FileCode, FolderOpen, Database, Calendar, Clock, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { FileCode, FolderOpen, Database, Calendar, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -144,115 +144,87 @@ export function OperationCard({ operation, className }: OperationCardProps) {
 
   return (
     <Card className={cn(
-      'p-5 mb-3 border-l-4 shadow-md hover:shadow-lg transition-all duration-200 animate-fade-in',
+      'flex-shrink-0 w-80 border-l-4 shadow-sm hover:shadow-md transition-shadow',
       operation.success 
-        ? 'border-l-green-500 bg-gradient-to-br from-green-50/50 to-background dark:from-green-950/20 dark:to-background' 
-        : 'border-l-red-500 bg-gradient-to-br from-red-50/50 to-background dark:from-red-950/20 dark:to-background',
+        ? 'border-l-green-500' 
+        : 'border-l-red-500',
       className
     )}>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4 pb-3 border-b border-border/50">
-        <div className="flex items-center gap-2.5">
-          <div className={cn(
-            'p-2 rounded-lg',
-            operation.success ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
-          )}>
-            {getToolIcon(operation.tool)}
-          </div>
-          <div className="space-y-1">
-            <code className="text-sm font-mono font-bold block">{operation.tool}</code>
-            <div className="flex items-center gap-2">
-              {operation.success ? (
-                <Badge variant="outline" className="bg-green-50 dark:bg-green-900/20 border-green-500 text-green-700 dark:text-green-300">
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                  Success
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="bg-red-50 dark:bg-red-900/20 border-red-500 text-red-700 dark:text-red-300">
-                  <XCircle className="h-3 w-3 mr-1" />
-                  Failed
-                </Badge>
-              )}
+      <div className="p-3 space-y-3">
+        {/* Compact Header */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className={cn(
+              'p-1.5 rounded',
+              operation.success ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
+            )}>
+              {getToolIcon(operation.tool)}
             </div>
+            <code className="text-xs font-mono font-bold truncate">{operation.tool}</code>
           </div>
+          <Badge variant={operation.success ? "default" : "destructive"} className="text-xs px-1.5 py-0 h-5 flex-shrink-0">
+            {operation.success ? "✓" : "✗"}
+          </Badge>
         </div>
-        <div className="flex flex-col items-end gap-1.5 text-xs text-muted-foreground">
+
+        {/* Time & Duration */}
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {new Date(operation.timestamp).toLocaleTimeString()}
+          </span>
           {operation.duration && (
-            <Badge variant="secondary" className="font-mono">
-              <Clock className="h-3 w-3 mr-1" />
+            <Badge variant="secondary" className="font-mono text-xs h-5">
               {operation.duration}ms
             </Badge>
           )}
-          <time className="font-mono">
-            {new Date(operation.timestamp).toLocaleTimeString()}
-          </time>
         </div>
-      </div>
 
-      {/* Key Information */}
-      {keyInfo.length > 0 && (
-        <div className="grid grid-cols-1 gap-2 mb-4">
-          {keyInfo.map((info, idx) => (
-            <div key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border border-border/50 hover:border-border transition-colors">
-              <div className="p-2 rounded-md bg-background">
-                <info.icon className="h-4 w-4 text-muted-foreground shrink-0" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide block mb-1">{info.label}</span>
-                <code className="text-sm text-foreground font-mono bg-background px-2 py-1 rounded block break-all">
+        {/* Compact Key Info */}
+        {keyInfo.length > 0 && (
+          <div className="space-y-1.5">
+            {keyInfo.slice(0, 2).map((info, idx) => (
+              <div key={idx} className="bg-muted/50 rounded px-2 py-1.5">
+                <div className="text-xs text-muted-foreground">{info.label}</div>
+                <code className="text-xs font-mono truncate block" title={info.value}>
                   {info.value}
                 </code>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+            {keyInfo.length > 2 && (
+              <div className="text-xs text-muted-foreground text-center">
+                +{keyInfo.length - 2} more
+              </div>
+            )}
+          </div>
+        )}
 
-      {/* Result */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wide">
-          {operation.success ? (
-            <>
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Result
-            </>
-          ) : (
-            <>
-              <AlertCircle className="h-3.5 w-3.5" />
-              Error
-            </>
-          )}
-        </div>
+        {/* Compact Result/Error */}
         <div className={cn(
-          'text-sm font-mono p-4 rounded-lg border shadow-sm',
+          'text-xs p-2 rounded border max-h-24 overflow-y-auto',
           operation.success
-            ? 'bg-background border-border text-foreground'
-            : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-900 dark:text-red-200'
+            ? 'bg-muted/30 border-border'
+            : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800'
         )}>
-          {resultPreview.includes('\n') || resultPreview.includes('{') ? (
-            <pre className="whitespace-pre-wrap text-xs">{resultPreview}</pre>
-          ) : (
-            <span className="text-xs">{resultPreview}</span>
-          )}
+          <pre className="whitespace-pre-wrap break-words font-mono text-xs">
+            {resultPreview}
+          </pre>
         </div>
-      </div>
 
-      {/* All Arguments (collapsed by default) */}
-      {Object.keys(operation.args).length > keyInfo.length && (
-        <details className="mt-4 pt-4 border-t border-border/50">
-          <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors font-medium flex items-center gap-2">
-            <Badge variant="outline" className="font-mono">
-              {Object.keys(operation.args).length} parameters
-            </Badge>
-            <span>View all arguments</span>
-          </summary>
-          <div className="mt-3 p-3 bg-muted rounded-lg text-xs font-mono border border-border">
-            <pre className="whitespace-pre-wrap">
+        {/* Expandable Details */}
+        {Object.keys(operation.args).length > 2 && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted-foreground hover:text-foreground flex items-center gap-1">
+              <Badge variant="outline" className="text-xs">
+                {Object.keys(operation.args).length} params
+              </Badge>
+            </summary>
+            <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-x-auto max-h-32">
               {JSON.stringify(operation.args, null, 2)}
             </pre>
-          </div>
-        </details>
-      )}
+          </details>
+        )}
+      </div>
     </Card>
   );
 }

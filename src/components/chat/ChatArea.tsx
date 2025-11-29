@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Send, Loader2, Command, Slash } from 'lucide-react';
+import { Send, Loader2, Command, Slash, Code } from 'lucide-react';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -975,27 +975,24 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
               );
             })}
 
-            {/* Persistent Tool Execution Log - Shows what Chief Quant accessed */}
+            {/* Persistent Tool Execution Log - Horizontal Swimlane */}
             {operationCards.length > 0 && !isLoading && (
-              <div className="space-y-3 my-6">
-                <div className="flex items-center gap-2 bg-muted/50 backdrop-blur py-3 px-4 rounded-lg border-2 border-primary/20 shadow-sm">
-                  <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                  <h3 className="text-sm font-bold text-foreground uppercase tracking-wide">
-                    Tool Execution Log
-                  </h3>
-                  <Badge variant="outline" className="ml-2 font-mono">
-                    {operationCards.length} operations
+              <div className="my-6 bg-card/50 rounded-lg border p-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <Code className="h-4 w-4 text-primary" />
+                  <h3 className="font-semibold text-sm">Tool Execution Log</h3>
+                  <Badge variant="secondary" className="ml-auto text-xs h-5">
+                    {operationCards.length}
                   </Badge>
-                  <span className="text-xs text-muted-foreground ml-auto">
-                    Chief Quant's work trail
-                  </span>
                 </div>
-                {operationCards.map(operation => (
-                  <OperationCard
-                    key={operation.id}
-                    operation={operation}
-                  />
-                ))}
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+                  {operationCards.map(operation => (
+                    <OperationCard
+                      key={operation.id}
+                      operation={operation}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 

@@ -33,6 +33,8 @@ function safeLog(...args: any[]): void {
 }
 
 // List of tool names we can parse from hallucinated text
+// NOTE: Currently unused - kept for future reference if needed
+/*
 const PARSEABLE_TOOLS = [
   'spawn_agent',
   'read_file',
@@ -44,12 +46,16 @@ const PARSEABLE_TOOLS = [
   'run_tests',
   'run_command'
 ];
+*/
 
 /**
  * Parse hallucinated tool calls from text response
  * Gemini sometimes generates text that looks like tool calls instead of actual functionCall parts
  * This parser extracts those and converts them to executable tool calls
+ * 
+ * NOTE: Currently unused - kept for future reference if needed
  */
+/*
 function parseHallucinatedToolCalls(text: string): Array<{ name: string; args: Record<string, any> }> {
   const calls: Array<{ name: string; args: Record<string, any> }> = [];
 
@@ -110,11 +116,15 @@ function parseHallucinatedToolCalls(text: string): Array<{ name: string; args: R
     return true;
   });
 }
+*/
 
 /**
  * Parse argument string like: type="analyst", task="do something"
  * or: agentType="analyst", task="do something"
+ * 
+ * NOTE: Currently unused - kept for future reference if needed
  */
+/*
 function parseArgsString(argsStr: string): Record<string, any> {
   const args: Record<string, any> = {};
 
@@ -135,6 +145,7 @@ function parseArgsString(argsStr: string): Record<string, any> {
 
   return args;
 }
+*/
 
 // Retry configuration
 const MAX_RETRIES = 3;
