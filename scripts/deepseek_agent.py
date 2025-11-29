@@ -47,7 +47,7 @@ def call_deepseek(messages: list, max_tokens: int = 4000) -> dict:
 
         return json.loads(result.stdout)
     except subprocess.TimeoutExpired:
-        return {'error': 'Request timed out after 120s'}
+        return {'error': 'Request timed out after 600 seconds (DeepSeek API did not respond)'}
     except json.JSONDecodeError as e:
         return {'error': f'Invalid JSON response: {e}'}
     except Exception as e:

@@ -1559,13 +1559,23 @@ export async function spawnAgent(
 
     const result = spawnSync('python3', pythonArgs, {
       encoding: 'utf-8',
-      timeout: 120000, // 2 minute timeout
+      timeout: 600000, // 10 minute timeout - DeepSeek can be slow
       env: { ...process.env },
       maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       stdio: ['pipe', 'pipe', 'pipe'] // Capture stdout and stderr
     });
 
     const elapsed = Date.now() - startTime;
+
+    // Check for timeout (SIGTERM signal or killed flag)
+    if (result.signal === 'SIGTERM' || result.killed) {
+      safeLog(`❌ Python agent timed out after ${elapsed}ms`);
+      return {
+        success: false,
+        content: '',
+        error: `Agent timed out after ${Math.floor(elapsed / 1000)}s (max 600s). Task may be too complex. Try breaking into smaller steps.`
+      };
+    }
 
     // Check for spawn errors
     if (result.error) {
