@@ -19,6 +19,8 @@ export interface OperationCardData {
   timestamp: number;
   duration?: number;
   success: boolean;
+  whyThis?: string;      // Explanation of why this tool was needed
+  whatFound?: string;    // Summary of what was discovered
 }
 
 interface OperationCardProps {
@@ -151,6 +153,18 @@ export function OperationCard({ operation, className }: OperationCardProps) {
       className
     )}>
       <div className="p-3 space-y-3">
+        {/* What I Found - Top Summary */}
+        {operation.whatFound && operation.success && (
+          <div className="bg-green-50 dark:bg-green-950/30 border-l-2 border-green-500 p-2 rounded">
+            <div className="text-xs font-semibold text-green-700 dark:text-green-300 mb-1">
+              💡 What I Found:
+            </div>
+            <p className="text-xs text-green-900 dark:text-green-100">
+              {operation.whatFound}
+            </p>
+          </div>
+        )}
+
         {/* Compact Header */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -166,6 +180,18 @@ export function OperationCard({ operation, className }: OperationCardProps) {
             {operation.success ? "✓" : "✗"}
           </Badge>
         </div>
+
+        {/* Why This? - Reasoning */}
+        {operation.whyThis && (
+          <div className="bg-blue-50 dark:bg-blue-950/30 border-l-2 border-blue-500 p-2 rounded">
+            <div className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1">
+              🤔 Why This?
+            </div>
+            <p className="text-xs text-blue-900 dark:text-blue-100">
+              {operation.whyThis}
+            </p>
+          </div>
+        )}
 
         {/* Time & Duration */}
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
