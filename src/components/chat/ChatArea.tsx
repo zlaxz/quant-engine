@@ -1,5 +1,6 @@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Send, Loader2, Command, Slash } from 'lucide-react';
@@ -19,6 +20,7 @@ import { ActiveExperimentBar } from './ActiveExperimentBar';
 import { getSuggestions, type AppState } from '@/lib/contextualSuggestions';
 import { CommandSuggestions } from './CommandSuggestions';
 import { RunResultCard } from './RunResultCard';
+import { MessageCard } from './MessageCard';
 import { isBacktestResult } from '@/types/chat';
 import { SwarmStatusBar } from '@/components/swarm';
 import { getJobProgress, type SwarmProgress } from '@/lib/swarmClient';
@@ -904,45 +906,28 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
 
               // Regular message rendering
               return (
-                <div
+                <MessageCard
                   key={message.id}
-                  className="min-w-0"
-                >
-                  <div
-                    className={cn(
-                      'rounded-lg px-4 py-2 whitespace-pre-wrap chat-message',
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : message.role === 'assistant'
-                        ? 'bg-muted'
-                        : 'bg-accent/50 text-accent-foreground border border-accent'
-                    )}
-                  >
-                    {message.role === 'system' && (
-                      <div className="flex items-center gap-2 mb-1 text-xs font-mono opacity-70">
-                        <Command className="h-3 w-3" />
-                        {message.content.startsWith('Command:') ? 'Slash Command' : 'System'}
-                      </div>
-                    )}
-                    <div className="text-sm chat-message">{message.content}</div>
-                    <div className="text-xs opacity-50 mt-1">
-                      {new Date(message.created_at).toLocaleTimeString()}
-                    </div>
-                  </div>
-                </div>
+                  role={message.role as 'user' | 'assistant' | 'system'}
+                  content={message.content}
+                  timestamp={message.created_at}
+                />
               );
             })}
 
             {/* Persistent Tool Execution Log - Shows what Chief Quant accessed */}
             {operationCards.length > 0 && !isLoading && (
               <div className="space-y-3 my-6">
-                <div className="flex items-center gap-2 sticky top-0 bg-background/95 backdrop-blur py-3 px-2 z-10 border-b-2 border-primary/20">
-                  <div className="h-2 w-2 rounded-full bg-primary" />
+                <div className="flex items-center gap-2 bg-muted/50 backdrop-blur py-3 px-4 rounded-lg border-2 border-primary/20 shadow-sm">
+                  <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
                   <h3 className="text-sm font-bold text-foreground uppercase tracking-wide">
-                    Tool Execution Log ({operationCards.length} operations)
+                    Tool Execution Log
                   </h3>
-                  <span className="text-xs text-muted-foreground ml-2">
-                    Chief Quant's work is visible below
+                  <Badge variant="outline" className="ml-2 font-mono">
+                    {operationCards.length} operations
+                  </Badge>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    Chief Quant's work trail
                   </span>
                 </div>
                 {operationCards.map(operation => (

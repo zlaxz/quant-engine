@@ -144,71 +144,90 @@ export function OperationCard({ operation, className }: OperationCardProps) {
 
   return (
     <Card className={cn(
-      'p-4 mb-3 border-l-4 animate-fade-in',
+      'p-5 mb-3 border-l-4 shadow-md hover:shadow-lg transition-all duration-200 animate-fade-in',
       operation.success 
-        ? 'border-l-green-500 bg-green-50 dark:bg-green-950/20' 
-        : 'border-l-red-500 bg-red-50 dark:bg-red-950/20',
+        ? 'border-l-green-500 bg-gradient-to-br from-green-50/50 to-background dark:from-green-950/20 dark:to-background' 
+        : 'border-l-red-500 bg-gradient-to-br from-red-50/50 to-background dark:from-red-950/20 dark:to-background',
       className
     )}>
       {/* Header */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          {getToolIcon(operation.tool)}
-          <code className="text-sm font-mono font-semibold">{operation.tool}</code>
-          {operation.success ? (
-            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-          ) : (
-            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-          )}
+      <div className="flex items-start justify-between mb-4 pb-3 border-b border-border/50">
+        <div className="flex items-center gap-2.5">
+          <div className={cn(
+            'p-2 rounded-lg',
+            operation.success ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
+          )}>
+            {getToolIcon(operation.tool)}
+          </div>
+          <div className="space-y-1">
+            <code className="text-sm font-mono font-bold block">{operation.tool}</code>
+            <div className="flex items-center gap-2">
+              {operation.success ? (
+                <Badge variant="outline" className="bg-green-50 dark:bg-green-900/20 border-green-500 text-green-700 dark:text-green-300">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Success
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-red-50 dark:bg-red-900/20 border-red-500 text-red-700 dark:text-red-300">
+                  <XCircle className="h-3 w-3 mr-1" />
+                  Failed
+                </Badge>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex flex-col items-end gap-1.5 text-xs text-muted-foreground">
           {operation.duration && (
-            <Badge variant="outline" className="font-mono">
+            <Badge variant="secondary" className="font-mono">
               <Clock className="h-3 w-3 mr-1" />
               {operation.duration}ms
             </Badge>
           )}
-          <span className="font-mono">
+          <time className="font-mono">
             {new Date(operation.timestamp).toLocaleTimeString()}
-          </span>
+          </time>
         </div>
       </div>
 
       {/* Key Information */}
       {keyInfo.length > 0 && (
-        <div className="space-y-2 mb-3 pb-3 border-b border-border/50">
+        <div className="grid grid-cols-1 gap-2 mb-4">
           {keyInfo.map((info, idx) => (
-            <div key={idx} className="flex items-start gap-2 text-sm">
-              <info.icon className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground font-medium min-w-[60px]">{info.label}:</span>
-              <code className="text-foreground font-mono text-xs bg-background/50 px-2 py-0.5 rounded">
-                {info.value}
-              </code>
+            <div key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border border-border/50 hover:border-border transition-colors">
+              <div className="p-2 rounded-md bg-background">
+                <info.icon className="h-4 w-4 text-muted-foreground shrink-0" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide block mb-1">{info.label}</span>
+                <code className="text-sm text-foreground font-mono bg-background px-2 py-1 rounded block break-all">
+                  {info.value}
+                </code>
+              </div>
             </div>
           ))}
         </div>
       )}
 
       {/* Result */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wide">
           {operation.success ? (
             <>
-              <CheckCircle2 className="h-3 w-3" />
+              <CheckCircle2 className="h-3.5 w-3.5" />
               Result
             </>
           ) : (
             <>
-              <AlertCircle className="h-3 w-3" />
+              <AlertCircle className="h-3.5 w-3.5" />
               Error
             </>
           )}
         </div>
         <div className={cn(
-          'text-sm font-mono p-3 rounded-md',
+          'text-sm font-mono p-4 rounded-lg border shadow-sm',
           operation.success
-            ? 'bg-background/50 text-foreground'
-            : 'bg-red-100 dark:bg-red-950/30 text-red-900 dark:text-red-200'
+            ? 'bg-background border-border text-foreground'
+            : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-900 dark:text-red-200'
         )}>
           {resultPreview.includes('\n') || resultPreview.includes('{') ? (
             <pre className="whitespace-pre-wrap text-xs">{resultPreview}</pre>
@@ -220,11 +239,14 @@ export function OperationCard({ operation, className }: OperationCardProps) {
 
       {/* All Arguments (collapsed by default) */}
       {Object.keys(operation.args).length > keyInfo.length && (
-        <details className="mt-3 pt-3 border-t border-border/50">
-          <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-            All parameters ({Object.keys(operation.args).length})
+        <details className="mt-4 pt-4 border-t border-border/50">
+          <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors font-medium flex items-center gap-2">
+            <Badge variant="outline" className="font-mono">
+              {Object.keys(operation.args).length} parameters
+            </Badge>
+            <span>View all arguments</span>
           </summary>
-          <div className="mt-2 p-2 bg-background/50 rounded text-xs font-mono">
+          <div className="mt-3 p-3 bg-muted rounded-lg text-xs font-mono border border-border">
             <pre className="whitespace-pre-wrap">
               {JSON.stringify(operation.args, null, 2)}
             </pre>
