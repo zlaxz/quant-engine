@@ -640,7 +640,7 @@ export const DATA_TOOLS: FunctionDeclaration[] = [
 export const AGENT_TOOLS: FunctionDeclaration[] = [
   {
     name: 'spawn_agent',
-    description: 'AUTOMATIC DELEGATION: Calling this tool automatically spawns a DeepSeek agent that has its own tools (read_file, write_file, list_directory, search_code, run_command). You do NOT need to build anything - just call this tool with a task description and the system handles everything. Use sparingly - only for complex multi-file analysis. For simple reads, use read_file directly.',
+    description: 'Spawn a DeepSeek agent via Python script (scripts/deepseek_agent.py). Agent has tools: read_file, write_file, list_directory, search_code, run_command. Requires DEEPSEEK_API_KEY environment variable. Timeout: 2 minutes. Use for complex multi-file analysis. For simple reads, use read_file directly. Returns analysis results from DeepSeek.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -662,7 +662,7 @@ export const AGENT_TOOLS: FunctionDeclaration[] = [
   },
   {
     name: 'spawn_agents_parallel',
-    description: 'AUTOMATIC PARALLEL DELEGATION: Calling this tool automatically spawns multiple DeepSeek agents that run in parallel. Each agent has its own tools and works independently. You do NOT build agents - just describe the tasks. Use only when reviewing 3+ independent files/components.',
+    description: 'Spawn multiple DeepSeek agents in parallel via Python script. Each agent runs independently with full tool access (read_file, write_file, etc). All agents must complete before results return. Requires DEEPSEEK_API_KEY. 2-minute timeout per agent. Use when analyzing 3+ independent components. Returns array of results.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {

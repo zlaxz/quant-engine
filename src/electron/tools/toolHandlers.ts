@@ -1551,21 +1551,53 @@ export async function spawnAgent(
 
     safeLog(`🐍 Executing: python3 ${scriptPath}`);
 
-    // Execute Python script directly
-    const { execSync } = require('child_process');
-    const result = execSync(`python3 "${scriptPath}" "${task.replace(/"/g, '\\"')}" "${agentType}"${context ? ` "${context.replace(/"/g, '\\"')}"` : ''}`, {
+    // Execute Python script - use spawnSync to prevent command injection
+    // SECURITY: spawnSync passes args directly, no shell interpretation
+    const { spawnSync } = require('child_process');
+    const pythonArgs = [scriptPath, task, agentType];
+    if (context) pythonArgs.push(context);
+
+    const result = spawnSync('python3', pythonArgs, {
       encoding: 'utf-8',
       timeout: 120000, // 2 minute timeout
       env: { ...process.env },
       maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+      stdio: ['pipe', 'pipe', 'pipe'] // Capture stdout and stderr
     });
 
     const elapsed = Date.now() - startTime;
+
+    // Check for spawn errors
+    if (result.error) {
+      safeLog(`❌ Python spawn error: ${result.error.message}`);
+      return {
+        success: false,
+        content: '',
+        error: `Failed to spawn Python: ${result.error.message}`
+      };
+    }
+
+    // Check for non-zero exit
+    if (result.status !== 0) {
+      safeLog(`❌ Python exited with code ${result.status}`);
+      safeLog(`   stderr: ${result.stderr || 'none'}`);
+      safeLog(`   stdout: ${result.stdout || 'none'}`);
+      return {
+        success: false,
+        content: '',
+        error: `Python agent failed (exit ${result.status}):\n${result.stderr || result.stdout || 'No output'}`
+      };
+    }
+
     safeLog(`🐍 Python agent completed in ${elapsed}ms`);
+    // Log stderr for debugging (Python script logs to stderr)
+    if (result.stderr) {
+      safeLog(`   [stderr] ${result.stderr.slice(0, 500)}`);
+    }
 
     return {
       success: true,
-      content: `[${agentType.toUpperCase()} AGENT - DIRECT DEEPSEEK]\n[Time: ${elapsed}ms]\n\n${result}`
+      content: `[${agentType.toUpperCase()} AGENT - DIRECT DEEPSEEK]\n[Time: ${elapsed}ms]\n\n${result.stdout}`
     };
   } catch (error: any) {
     const elapsed = Date.now() - startTime;

@@ -592,16 +592,23 @@ Let me start with the analysis...
             }
 
             // Send results back to model with proper formatting
-            // CRITICAL: Must format as functionResponse for Gemini
+            // CRITICAL: Must format as functionResponse for Gemini + preserve thought signatures
             _event.sender.send('llm-stream', {
               type: 'thinking',
               content: `\n\n*Analyzing results...*\n\n`,
               timestamp: Date.now()
             });
-            
-            const formattedResults = toolResults.map(tr => ({
-              functionResponse: tr.functionResponse
-            }));
+
+            // CRITICAL: Preserve thought signatures for Gemini 3 thinking mode
+            const thoughtSignature = candidate.thoughtSignature || null;
+
+            const formattedResults = toolResults.map(tr => {
+              const part: any = { functionResponse: tr.functionResponse };
+              if (thoughtSignature) {
+                part.thoughtSignature = thoughtSignature;
+              }
+              return part;
+            });
             
             streamResult = await streamMessage(formattedResults);
             response = streamResult.response;
@@ -795,12 +802,20 @@ Let me start with the analysis...
           content: `\n\n*Analyzing results...*\n\n`,
           timestamp: Date.now()
         });
-        
+
+        // CRITICAL: Preserve thought signatures for Gemini 3 thinking mode
+        // Gemini 3 requires thoughtSignature fields to be returned in multi-turn function calling
+        const thoughtSignature = candidate.thoughtSignature || null;
+
         // Format tool results properly for Gemini's continuation
-        // Must send as parts array with functionResponse objects
-        const formattedResults = toolResults.map(tr => ({
-          functionResponse: tr.functionResponse
-        }));
+        // Must send as parts array with functionResponse objects + thoughtSignature
+        const formattedResults = toolResults.map(tr => {
+          const part: any = { functionResponse: tr.functionResponse };
+          if (thoughtSignature) {
+            part.thoughtSignature = thoughtSignature;
+          }
+          return part;
+        });
         
         streamResult = await streamMessage(formattedResults);
         response = streamResult.response;
