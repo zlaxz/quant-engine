@@ -1131,29 +1131,52 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                     <div className="space-y-2">
                       {/* Active Tool Execution */}
                       {toolProgress.filter(p => p.type === 'executing').slice(-3).map((progress, idx) => (
-                        <div key={`exec-${idx}`} className="bg-yellow-500/10 border border-yellow-500/20 rounded px-3 py-2 flex items-center gap-2">
-                          <Loader2 className="h-3 w-3 animate-spin text-yellow-500" />
-                          <span className="text-sm font-medium">{progress.tool}</span>
-                          <span className="text-xs text-muted-foreground ml-auto">running...</span>
+                        <div key={`exec-${idx}`} className="bg-yellow-500/10 border border-yellow-500/20 rounded px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-3 w-3 animate-spin text-yellow-500 flex-shrink-0" />
+                            <span className="text-sm font-medium flex-1">{progress.tool}</span>
+                            <Badge variant="secondary" className="text-xs">running</Badge>
+                          </div>
+                          {progress.args && Object.keys(progress.args).length > 0 && (
+                            <div className="mt-2 text-xs text-muted-foreground">
+                              <pre className="whitespace-pre-wrap break-words font-mono">
+                                {JSON.stringify(progress.args, null, 2).slice(0, 150)}
+                                {JSON.stringify(progress.args).length > 150 && '...'}
+                              </pre>
+                            </div>
+                          )}
                         </div>
                       ))}
                       
                       {/* Recently Completed Tools */}
                       {toolProgress.filter(p => p.type === 'completed').slice(-3).map((progress, idx) => (
                         <div key={`done-${idx}`} className={cn(
-                          "rounded px-3 py-2 flex items-center gap-2 transition-all",
+                          "rounded px-3 py-2 transition-all",
                           progress.success 
                             ? "bg-green-500/10 border border-green-500/20" 
                             : "bg-red-500/10 border border-red-500/20"
                         )}>
-                          <span className={progress.success ? "text-green-500" : "text-red-500"}>
-                            {progress.success ? '✓' : '✗'}
-                          </span>
-                          <span className="text-sm font-medium">{progress.tool}</span>
-                          {progress.preview && (
-                            <span className="text-xs text-muted-foreground ml-auto truncate max-w-[200px]">
-                              {progress.preview.slice(0, 40)}...
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "flex-shrink-0",
+                              progress.success ? "text-green-500" : "text-red-500"
+                            )}>
+                              {progress.success ? '✓' : '✗'}
                             </span>
+                            <span className="text-sm font-medium flex-1">{progress.tool}</span>
+                            <Badge 
+                              variant={progress.success ? "default" : "destructive"} 
+                              className="text-xs"
+                            >
+                              {progress.success ? 'done' : 'error'}
+                            </Badge>
+                          </div>
+                          {progress.preview && (
+                            <div className="mt-2 text-xs">
+                              <pre className="whitespace-pre-wrap break-words font-mono text-muted-foreground max-h-20 overflow-y-auto">
+                                {progress.preview}
+                              </pre>
+                            </div>
                           )}
                         </div>
                       ))}
