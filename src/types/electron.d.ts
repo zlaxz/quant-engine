@@ -174,6 +174,8 @@ interface ElectronAPI {
     error?: string;
     timestamp: number;
     duration?: number;
+    whyThis?: string;
+    whatFound?: string;
   }) => void) => () => void;
 
   // Remove listeners (cleanup)

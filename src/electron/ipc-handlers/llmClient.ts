@@ -169,6 +169,8 @@ function emitToolEvent(event: {
   error?: string;
   timestamp: number;
   duration?: number;
+  whyThis?: string;      // Explanation of why this tool was needed
+  whatFound?: string;    // Summary of what was discovered
 }) {
   try {
     const windows = BrowserWindow.getAllWindows();
@@ -178,6 +180,30 @@ function emitToolEvent(event: {
   } catch (e) {
     // Silently fail if window not available
   }
+}
+
+/**
+ * Parse WHY_THIS and WHAT_FOUND markers from LLM response
+ * Returns { whyThis: string | undefined, whatFound: string | undefined }
+ */
+function parseToolMarkers(text: string, toolName: string): { whyThis?: string; whatFound?: string } {
+  const markers: { whyThis?: string; whatFound?: string } = {};
+  
+  // Parse WHY_THIS marker
+  const whyPattern = new RegExp(`\\[WHY_THIS:\\s*${toolName}\\]\\s*([^\n]+)`, 'i');
+  const whyMatch = text.match(whyPattern);
+  if (whyMatch) {
+    markers.whyThis = whyMatch[1].trim();
+  }
+  
+  // Parse WHAT_FOUND marker
+  const whatPattern = new RegExp(`\\[WHAT_FOUND:\\s*${toolName}\\]\\s*([^\n]+)`, 'i');
+  const whatMatch = text.match(whatPattern);
+  if (whatMatch) {
+    markers.whatFound = whatMatch[1].trim();
+  }
+  
+  return markers;
 }
 
 // Check if request is cancelled (resets the flag after checking)
@@ -711,12 +737,16 @@ Let me start with the analysis...
 
           const startTime = Date.now();
 
-          // Emit tool start event with full details
+          // Parse markers from accumulated text
+          const markers = parseToolMarkers(accumulatedText, toolName);
+
+          // Emit tool start event with full details + markers
           emitToolEvent({
             type: 'tool-start',
             tool: toolName,
             args: toolArgs,
-            timestamp: startTime
+            timestamp: startTime,
+            whyThis: markers.whyThis
           });
 
           // Emit BEFORE executing tool (legacy event)
@@ -738,14 +768,19 @@ Let me start with the analysis...
             const endTime = Date.now();
             const duration = endTime - startTime;
 
-            // Emit tool completion event with full details
+            // Re-parse markers after tool execution (may have WHAT_FOUND now)
+            const updatedMarkers = parseToolMarkers(accumulatedText, toolName);
+
+            // Emit tool completion event with full details + markers
             emitToolEvent({
               type: 'tool-complete',
               tool: toolName,
               args: toolArgs,
               result: output,
               timestamp: endTime,
-              duration
+              duration,
+              whyThis: updatedMarkers.whyThis,
+              whatFound: updatedMarkers.whatFound
             });
 
             // Emit AFTER executing tool (legacy event)
