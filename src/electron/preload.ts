@@ -141,6 +141,10 @@ contextBridge.exposeInMainWorld('electron', {
   // Check Claude Code availability
   checkClaudeCodeAvailability: () => ipcRenderer.invoke('claude-code:check-availability'),
 
+  // Decision override
+  overrideRoutingDecision: (decisionId: string, overrideTo: string) => 
+    ipcRenderer.invoke('override-routing-decision', { decisionId, overrideTo }),
+
   // Remove listeners (cleanup)
   removeToolProgressListener: () => ipcRenderer.removeAllListeners('tool-progress'),
   removeLLMStreamListener: () => ipcRenderer.removeAllListeners('llm-stream'),

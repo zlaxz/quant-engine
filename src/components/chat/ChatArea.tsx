@@ -1119,8 +1119,29 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                     <DecisionCard
                       decision={decisionCard}
                       onProceed={() => setDecisionCard(null)}
-                      onOverride={(alternative) => {
-                        console.log('Override to:', alternative);
+                      onOverride={async (alternative) => {
+                        if (decisionCard.id && window.electron?.overrideRoutingDecision) {
+                          try {
+                            const result = await window.electron.overrideRoutingDecision(
+                              decisionCard.id,
+                              alternative
+                            );
+                            
+                            if (result.success) {
+                              toast({
+                                title: 'Routing Override Applied',
+                                description: `Future similar tasks will use ${alternative}`,
+                              });
+                            }
+                          } catch (error) {
+                            console.error('Override failed:', error);
+                            toast({
+                              title: 'Override Failed',
+                              description: 'Could not apply routing override',
+                              variant: 'destructive',
+                            });
+                          }
+                        }
                         setDecisionCard(null);
                       }}
                       className="mb-4"

@@ -301,6 +301,31 @@ export function registerLlmHandlers() {
     return { success: true };
   });
 
+  // Handle routing decision override
+  ipcMain.handle('override-routing-decision', async (_event, { decisionId, overrideTo }) => {
+    try {
+      const decisionLogger = getDecisionLogger();
+      
+      // Log the override
+      decisionLogger.logOverride(decisionId, overrideTo);
+      
+      console.log(`[Override] Decision ${decisionId} overridden to: ${overrideTo}`);
+      
+      return {
+        success: true,
+        message: `Routing overridden to ${overrideTo}`,
+        decisionId,
+        overrideTo
+      };
+    } catch (error) {
+      console.error('[Override] Error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  });
+
   // Primary tier (Gemini) with tool calling - DIRECT API CALL
   ipcMain.handle('chat-primary', async (_event, messagesRaw: unknown) => {
     // Reset cancellation state at start of new request
