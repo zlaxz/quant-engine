@@ -176,8 +176,9 @@ function emitToolEvent(event: {
 }) {
   try {
     const windows = BrowserWindow.getAllWindows();
-    if (windows.length > 0) {
-      windows[0].webContents.send('tool-execution-event', event);
+    const mainWindow = windows.find(w => !w.isDestroyed());
+    if (mainWindow?.webContents) {
+      mainWindow.webContents.send('tool-execution-event', event);
     }
   } catch (e) {
     // Silently fail if window not available
@@ -360,8 +361,9 @@ export function registerLlmHandlers() {
       
       // Emit decision event to renderer for DecisionCard display
       const windows = BrowserWindow.getAllWindows();
-      if (windows.length > 0) {
-        windows[0].webContents.send('claude-code-event', {
+      const mainWindow = windows.find(w => !w.isDestroyed());
+      if (mainWindow?.webContents) {
+        mainWindow.webContents.send('claude-code-event', {
           type: 'decision',
           data: {
             id: routingDecisionId,

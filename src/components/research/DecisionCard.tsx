@@ -27,25 +27,20 @@ interface DecisionCardProps {
   className?: string;
 }
 
-function getConfidenceColor(confidence: DecisionReasoning['confidence']): string {
-  switch (confidence) {
-    case 'HIGH': return 'green';
-    case 'MEDIUM': return 'yellow';
-    case 'LOW': return 'orange';
-  }
-}
+const confidenceStyles = {
+  HIGH: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
+  MEDIUM: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300',
+  LOW: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+} as const;
 
-function getChosenLabel(chosen: DecisionReasoning['chosen']): string {
-  switch (chosen) {
-    case 'claude-code': return 'Claude Code';
-    case 'gemini-direct': return 'Direct Handling';
-    case 'deepseek-swarm': return 'DeepSeek Swarm';
-  }
-}
+const chosenLabels = {
+  'claude-code': 'Claude Code',
+  'gemini-direct': 'Direct Handling',
+  'deepseek-swarm': 'DeepSeek Swarm'
+} as const;
 
 export function DecisionCard({ decision, onProceed, onOverride, className }: DecisionCardProps) {
   const [showDetails, setShowDetails] = useState(false);
-  const confidenceColor = getConfidenceColor(decision.confidence);
 
   return (
     <Card className={cn('border-l-4 border-l-blue-500 shadow-sm', className)}>
@@ -70,7 +65,7 @@ export function DecisionCard({ decision, onProceed, onOverride, className }: Dec
               </Badge>
             </div>
             <p className="text-sm">
-              <span className="font-medium text-primary">→ {getChosenLabel(decision.chosen)}</span>
+              <span className="font-medium text-primary">→ {chosenLabels[decision.chosen]}</span>
               {decision.alternativeConsidered && (
                 <span className="text-muted-foreground">
                   {' '}(vs {decision.alternativeConsidered})

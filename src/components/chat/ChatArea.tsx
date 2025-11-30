@@ -369,6 +369,12 @@ const ChatAreaComponent = () => {
         setProgressPanel(null);
         setEvidenceChain([]);
         setClaudeCodeArtifact(null);
+        setMemoryRecalls([]);
+        setActiveAgents([]);
+        setThinkingContent('');
+        setCheckpoint(null);
+        setCurrentError(null);
+        setOperationPhases([]);
       }
     }
   }, [isLoading, messages]);
