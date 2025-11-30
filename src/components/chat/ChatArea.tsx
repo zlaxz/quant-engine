@@ -1199,6 +1199,22 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                   {evidenceChain.length > 0 && (
                     <EvidenceChain
                       nodes={evidenceChain}
+                      onVerify={(nodeId) => {
+                        setEvidenceChain(prev => prev.map(n =>
+                          n.id === nodeId ? { ...n, verified: true } : n
+                        ));
+                        toast({ title: 'Evidence Verified', description: 'Marked as verified' });
+                      }}
+                      onViewSource={(nodeId) => {
+                        const node = evidenceChain.find(n => n.id === nodeId);
+                        if (node) {
+                          toast({
+                            title: 'View Source',
+                            description: `${node.source}${node.lineRange ? ` (lines ${node.lineRange})` : ''}`,
+                            duration: 5000
+                          });
+                        }
+                      }}
                       className="mb-4"
                     />
                   )}
