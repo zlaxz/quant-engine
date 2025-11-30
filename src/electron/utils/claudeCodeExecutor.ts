@@ -207,8 +207,10 @@ class ClaudeCodeExecutor {
    */
   private emitProgress(phase: ClaudeCodePhase, progress: number, task: string): void {
     const windows = BrowserWindow.getAllWindows();
-    if (windows.length > 0) {
-      windows[0].webContents.send('claude-code-event', {
+    const mainWindow = windows.find(w => !w.isDestroyed());
+    if (mainWindow?.webContents) {
+      try {
+        mainWindow.webContents.send('claude-code-event', {
         type: 'progress',
         data: {
           task,

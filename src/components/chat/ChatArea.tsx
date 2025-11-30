@@ -233,7 +233,9 @@ const ChatAreaComponent = () => {
       } else if (data.type === 'done') {
         setIsStreaming(false);
         // Clear streaming content after it's shown in final message
-        setTimeout(() => setStreamingContent(''), 100);
+        if (streamCleanupTimer) clearTimeout(streamCleanupTimer);
+      const timer = setTimeout(() => setStreamingContent(''), 100);
+      setStreamCleanupTimer(timer);
       } else if (data.type === 'error') {
         setIsStreaming(false);
         setStreamingContent('');
