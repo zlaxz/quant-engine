@@ -13,6 +13,7 @@ import { registerLlmHandlers } from './ipc-handlers/llmClient';
 import { registerMemoryHandlers, setMemoryServices, registerAnalysisHandlers } from './ipc-handlers/memoryHandlers';
 import { registerDaemonHandlers, stopDaemonOnExit } from './ipc-handlers/daemonManager';
 import { registerContextHandlers } from './ipc-handlers/contextHandlers';
+import { registerDecisionHandlers } from './ipc-handlers/decisionHandlers';
 import { setFileSystemRoot, addAllowedPath } from './services/FileSystemService';
 import { MemoryDaemon } from './memory/MemoryDaemon';
 import { RecallEngine } from './memory/RecallEngine';
@@ -383,6 +384,7 @@ app.whenReady().then(() => {
   registerPythonExecutionHandlers();
   registerLlmHandlers();
   registerDaemonHandlers();
+  registerDecisionHandlers();
 
   // Connect memory services to handlers BEFORE registering handlers
   setMemoryServices(memoryDaemon, recallEngine);

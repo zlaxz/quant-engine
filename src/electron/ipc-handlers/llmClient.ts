@@ -9,6 +9,8 @@ import {
   SwarmPromptsSchema,
 } from '../validation/schemas';
 import { MODELS } from '../../config/models';
+import { getDecisionLogger } from '../utils/decisionLogger';
+import { routeTask } from '../utils/routingDecision';
 
 // LLM routing config - centralized
 const PRIMARY_MODEL = MODELS.PRIMARY.model;
@@ -897,6 +899,11 @@ Let me start with the analysis...
         timestamp: Date.now()
       });
 
+      // Track successful outcome
+      if (typeof (_event as any)._trackOutcome === 'function') {
+        (_event as any)._trackOutcome(true);
+      }
+
       return {
         content: finalText + toolSummary,
         provider: PRIMARY_PROVIDER,
@@ -905,6 +912,12 @@ Let me start with the analysis...
       };
     } catch (error) {
       console.error('Error in chat-primary:', error);
+      
+      // Track failed outcome
+      if (typeof (_event as any)._trackOutcome === 'function') {
+        (_event as any)._trackOutcome(false, error instanceof Error ? error.message : 'Unknown error');
+      }
+      
       // Signal error
       _event.sender.send('llm-stream', {
         type: 'error',
