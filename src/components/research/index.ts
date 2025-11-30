@@ -20,6 +20,7 @@ export { ClaudeCodeResultCard } from './ClaudeCodeResultCard';
 export { DecisionCard } from './DecisionCard';
 export { EvidenceChain, parseEvidenceTrail } from './EvidenceChain';
 export { WorkingMemoryCheckpoint } from './WorkingMemoryCheckpoint';
+export { ResumeTaskDialog } from './ResumeTaskDialog';
 
 export type { AgentSpawn } from './AgentSpawnMonitor';
 export type { ToolCall } from './ToolCallTree';
@@ -33,3 +34,4 @@ export type { ClaudeCodeProgressData, ClaudeCodePhase } from './ClaudeCodeProgre
 export type { DecisionReasoning } from './DecisionCard';
 export type { EvidenceNode } from './EvidenceChain';
 export type { WorkingMemoryState } from './WorkingMemoryCheckpoint';
+export type { UnfinishedTask } from './ResumeTaskDialog';

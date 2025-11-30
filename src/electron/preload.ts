@@ -191,6 +191,17 @@ contextBridge.exposeInMainWorld('electron', {
   }) => ipcRenderer.invoke('context-build-llm-messages', params),
   contextClearCanonCache: (workspaceId?: string) =>
     ipcRenderer.invoke('context-clear-canon-cache', workspaceId),
+
+  // Checkpoint Management (Phase 6)
+  checkpointStart: (checkpoint: any) => ipcRenderer.invoke('checkpoint:start', checkpoint),
+  checkpointUpdate: (id: string, updates: any) => ipcRenderer.invoke('checkpoint:update', { id, updates }),
+  checkpointComplete: (id: string) => ipcRenderer.invoke('checkpoint:complete', id),
+  checkpointAbandon: (id: string) => ipcRenderer.invoke('checkpoint:abandon', id),
+  checkpointGetActive: () => ipcRenderer.invoke('checkpoint:get-active'),
+  checkpointGet: (id: string) => ipcRenderer.invoke('checkpoint:get', id),
+  checkpointGetRecent: () => ipcRenderer.invoke('checkpoint:get-recent'),
+  checkpointDelete: (id: string) => ipcRenderer.invoke('checkpoint:delete', id),
+  checkpointClearAll: () => ipcRenderer.invoke('checkpoint:clear-all'),
 });
 
 // The ElectronAPI type is defined in src/types/electron.d.ts as a global type

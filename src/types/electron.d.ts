@@ -307,6 +307,17 @@ interface ElectronAPI {
     error?: string;
   }>;
   contextClearCanonCache: (workspaceId?: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Checkpoint Management (Phase 6: Working Memory Checkpoints)
+  checkpointStart: (checkpoint: any) => Promise<{ success: boolean; checkpointId?: string; error?: string }>;
+  checkpointUpdate: (id: string, updates: any) => Promise<{ success: boolean; error?: string }>;
+  checkpointComplete: (id: string) => Promise<{ success: boolean; error?: string }>;
+  checkpointAbandon: (id: string) => Promise<{ success: boolean; error?: string }>;
+  checkpointGetActive: () => Promise<{ success: boolean; checkpoints: any[]; error?: string }>;
+  checkpointGet: (id: string) => Promise<{ success: boolean; checkpoint: any | null; error?: string }>;
+  checkpointGetRecent: () => Promise<{ success: boolean; checkpoints: any[]; error?: string }>;
+  checkpointDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
+  checkpointClearAll: () => Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {
