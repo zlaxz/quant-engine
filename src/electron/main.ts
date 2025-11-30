@@ -16,6 +16,7 @@ import { registerContextHandlers } from './ipc-handlers/contextHandlers';
 import { registerDecisionHandlers } from './ipc-handlers/decisionHandlers';
 import { registerClaudeCodeHandlers } from './ipc-handlers/claudeCodeHandlers';
 import { setupCheckpointHandlers } from './ipc-handlers/checkpoints';
+import { setupPatternHandlers } from './ipc-handlers/patterns';
 import { setFileSystemRoot, addAllowedPath } from './services/FileSystemService';
 import { MemoryDaemon } from './memory/MemoryDaemon';
 import { RecallEngine } from './memory/RecallEngine';
@@ -389,6 +390,7 @@ app.whenReady().then(() => {
   registerDecisionHandlers();
   registerClaudeCodeHandlers();
   setupCheckpointHandlers();
+  setupPatternHandlers();
 
   // Connect memory services to handlers BEFORE registering handlers
   setMemoryServices(memoryDaemon, recallEngine);
