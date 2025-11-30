@@ -21,6 +21,7 @@ export { DecisionCard } from './DecisionCard';
 export { EvidenceChain, parseEvidenceTrail } from './EvidenceChain';
 export { WorkingMemoryCheckpoint } from './WorkingMemoryCheckpoint';
 export { ResumeTaskDialog } from './ResumeTaskDialog';
+export { ContextualEducationOverlay } from './ContextualEducationOverlay';
 
 export type { AgentSpawn } from './AgentSpawnMonitor';
 export type { ToolCall } from './ToolCallTree';
@@ -35,3 +36,4 @@ export type { DecisionReasoning } from './DecisionCard';
 export type { EvidenceNode } from './EvidenceChain';
 export type { WorkingMemoryState } from './WorkingMemoryCheckpoint';
 export type { UnfinishedTask } from './ResumeTaskDialog';
+export type { PersonalPattern } from './ContextualEducationOverlay';

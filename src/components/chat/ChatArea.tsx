@@ -51,6 +51,7 @@ import {
   DecisionCard,
   WorkingMemoryCheckpoint,
   EvidenceChain,
+  ContextualEducationOverlay,
   type AgentSpawn,
   type ToolCall,
   type ErrorDetails,
@@ -62,6 +63,7 @@ import {
   type DecisionReasoning,
   type WorkingMemoryState,
   type EvidenceNode,
+  type PersonalPattern,
 } from '@/components/research';
 import { ClaudeCodeArtifact } from '@/types/api-contract';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -117,6 +119,7 @@ const ChatAreaComponent = () => {
   const [checkpoint, setCheckpoint] = useState<WorkingMemoryState | null>(null);
   const [evidenceChain, setEvidenceChain] = useState<EvidenceNode[]>([]);
   const [claudeCodeArtifact, setClaudeCodeArtifact] = useState<ClaudeCodeArtifact | null>(null);
+  const [personalPattern, setPersonalPattern] = useState<PersonalPattern | null>(null);
   const [thinkingContent, setThinkingContent] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [currentError, setCurrentError] = useState<ErrorDetails | null>(null);
@@ -532,6 +535,23 @@ const ChatAreaComponent = () => {
         }
       } else {
         // Regular chat message - build messages array and call LLM directly
+        
+        // Check for personal patterns before sending message (Phase 7)
+        if (selectedWorkspaceId && window.electron?.patternDetect) {
+          try {
+            const result = await window.electron.patternDetect(
+              selectedWorkspaceId,
+              messageContent
+            );
+            if (result.pattern && result.confidence > 0.7) {
+              setPersonalPattern(result.pattern);
+              // Pattern shown but doesn't block message sending
+            }
+          } catch (error) {
+            console.error('[Pattern Detection] Error:', error);
+            // Continue even if pattern detection fails
+          }
+        }
 
         // Add user message optimistically to UI
         const userMessage: Message = {
@@ -1218,6 +1238,42 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                         });
                       }}
                       className="mb-4"
+                    />
+                  )}
+                  
+                  {/* Personal Pattern Warning (Phase 7) */}
+                  {personalPattern && (
+                    <ContextualEducationOverlay
+                      pattern={personalPattern}
+                      currentContext={inputValue}
+                      onDismiss={() => {
+                        setPersonalPattern(null);
+                        toast({
+                          title: 'Pattern Noted',
+                          description: "I'll watch for this pattern",
+                        });
+                      }}
+                      onViewHistory={async () => {
+                        try {
+                          if (selectedWorkspaceId && window.electron?.patternGetHistory) {
+                            const history = await window.electron.patternGetHistory(
+                              selectedWorkspaceId
+                            );
+                            console.log('[Pattern History]', history);
+                            toast({
+                              title: 'Pattern History',
+                              description: `Found ${history.length} historical patterns`,
+                            });
+                          }
+                        } catch (error) {
+                          console.error('Pattern history error:', error);
+                          toast({
+                            title: 'Error',
+                            description: 'Failed to load pattern history',
+                            variant: 'destructive',
+                          });
+                        }
+                      }}
                     />
                   )}
                   

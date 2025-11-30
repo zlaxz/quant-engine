@@ -202,6 +202,14 @@ contextBridge.exposeInMainWorld('electron', {
   checkpointGetRecent: () => ipcRenderer.invoke('checkpoint:get-recent'),
   checkpointDelete: (id: string) => ipcRenderer.invoke('checkpoint:delete', id),
   checkpointClearAll: () => ipcRenderer.invoke('checkpoint:clear-all'),
+
+  // Pattern detection (Phase 7)
+  patternDetect: (workspaceId: string, context: string) =>
+    ipcRenderer.invoke('pattern:detect', { workspaceId, context }),
+  patternGetHistory: (workspaceId: string) =>
+    ipcRenderer.invoke('pattern:get-history', { workspaceId }),
+  patternDismiss: (patternId: string) =>
+    ipcRenderer.invoke('pattern:dismiss', { patternId }),
 });
 
 // The ElectronAPI type is defined in src/types/electron.d.ts as a global type

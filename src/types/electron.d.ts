@@ -318,6 +318,54 @@ interface ElectronAPI {
   checkpointGetRecent: () => Promise<{ success: boolean; checkpoints: any[]; error?: string }>;
   checkpointDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   checkpointClearAll: () => Promise<{ success: boolean; error?: string }>;
+
+  // Pattern Detection (Phase 7: Contextual Education)
+  patternDetect: (
+    workspaceId: string,
+    context: string
+  ) => Promise<{
+    pattern: {
+      id: string;
+      patternType: string;
+      title: string;
+      description: string;
+      occurrences: number;
+      lastOccurrence: string;
+      failures: Array<{
+        date: string;
+        runId: string;
+        strategyName: string;
+        degradation: number;
+        details: string;
+      }>;
+      recommendation: string;
+      severity: 'low' | 'medium' | 'high';
+    } | null;
+    confidence: number;
+  }>;
+  patternGetHistory: (
+    workspaceId: string
+  ) => Promise<
+    Array<{
+      id: string;
+      patternType: string;
+      title: string;
+      description: string;
+      occurrences: number;
+      lastOccurrence: string;
+      failures: Array<{
+        date: string;
+        runId: string;
+        strategyName: string;
+        degradation: number;
+        details: string;
+      }>;
+      recommendation: string;
+      severity: 'low' | 'medium' | 'high';
+      storedAt: string;
+    }>
+  >;
+  patternDismiss: (patternId: string) => Promise<{ success: boolean }>;
 }
 
 declare global {
