@@ -66,7 +66,7 @@ async function callChatModel(messages: ChatMessage[]): Promise<string> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-5-mini',
+      model: 'gpt-4o-mini',
       messages,
       max_completion_tokens: 1000,
     }),

@@ -52,15 +52,17 @@ import {
   type OperationPhase,
   type OperationCardData,
 } from '@/components/research';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface Message {
   id: string;
   role: string;
   content: string;
   created_at: string;
+  model?: string; // Which model generated this: 'gemini' | 'claude' | 'deepseek'
 }
 
-export const ChatArea = () => {
+const ChatAreaComponent = () => {
   const { selectedSessionId, selectedWorkspaceId, activeExperiment, setActiveExperiment } = useChatContext();
   const displayContext = useResearchDisplay();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -156,7 +158,7 @@ export const ChatArea = () => {
       setIsFetchingMessages(true);
       const { data, error } = await supabase
         .from('messages')
-        .select('id, role, content, created_at')
+        .select('id, role, content, created_at, model, provider')
         .eq('session_id', selectedSessionId)
         .order('created_at', { ascending: true });
 
@@ -299,7 +301,7 @@ export const ChatArea = () => {
     if (isLoading && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
       // Only clear if the last message is from the user (new request starting)
-      if (lastMessage.role === 'user') {
+      if (lastMessage?.role === 'user') {
         setToolCallTree([]);
         setOperationCards([]);
       }
@@ -933,7 +935,7 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
           </div>
         ) : (
           <div className="space-y-4 min-w-0">
-            {messages.map((message) => {
+            {messages?.map((message) => {
               // Check for special message types
               const backtestResult = isBacktestResult(message.content);
 
@@ -965,12 +967,23 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
               }
 
               // Regular message rendering
+              // Detect model from content markers or metadata
+              const detectModel = (msg: Message): 'gemini' | 'claude' | 'deepseek' | undefined => {
+                if (msg.model) return msg.model as any;
+                if (msg.content.includes('[CLAUDE CODE EXECUTION')) return 'claude';
+                if (msg.content.includes('[DEEPSEEK AGENT') || msg.content.includes('DIRECT DEEPSEEK')) return 'deepseek';
+                // Default to gemini for assistant messages (primary model)
+                if (msg.role === 'assistant') return 'gemini';
+                return undefined;
+              };
+
               return (
                 <MessageCard
                   key={message.id}
                   role={message.role as 'user' | 'assistant' | 'system'}
                   content={message.content}
                   timestamp={message.created_at}
+                  model={detectModel(message)}
                 />
               );
             })}
@@ -1369,3 +1382,9 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
     </div>
   );
 };
+
+export const ChatArea = () => (
+  <ErrorBoundary>
+    <ChatAreaComponent />
+  </ErrorBoundary>
+);

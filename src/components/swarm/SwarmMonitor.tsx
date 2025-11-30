@@ -366,7 +366,7 @@ export function SwarmMonitor({
             getGridCols(progress.totalTasks)
           )}
         >
-          {progress.tasks.map((task) => (
+          {progress.tasks?.map((task) => (
             <TaskDot
               key={task.id}
               task={task}

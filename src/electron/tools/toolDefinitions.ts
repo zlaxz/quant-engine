@@ -656,6 +656,43 @@ export const DATA_TOOLS: FunctionDeclaration[] = [
   }
 ];
 
+// Claude Code CLI execution - MULTI-MODEL ARCHITECTURE
+// Gemini (reasoning) -> Claude Code CLI (execution)
+// Claude Code handles agents: native Claude agents for minor tasks, DeepSeek for MASSIVE parallel
+// Uses Claude Max subscription for cost-effective execution
+export const CLAUDE_TOOLS: FunctionDeclaration[] = [
+  {
+    name: 'execute_via_claude_code',
+    description: `Hand off execution task to Claude Code CLI. Uses Claude Max subscription (fixed cost). Claude Code has full tool access: bash, python, file operations, git, and can spawn agents.
+
+WHEN TO USE: Code writing, file modifications, git operations, running tests/backtests, any task requiring tool execution.
+
+AGENT STRATEGY (Claude Code decides based on scale):
+• Minor/normal tasks: Claude handles directly or spawns native Claude agents (free with Max subscription)
+• MASSIVE parallel compute: Claude spawns DeepSeek agents via curl (cost-efficient at scale)
+  Examples of massive: analyze all 6 regimes simultaneously, 50+ parameter sweeps, bulk data processing`,
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        task: {
+          type: SchemaType.STRING,
+          description: 'Clear description of what to execute. Be specific about expected output.'
+        },
+        context: {
+          type: SchemaType.STRING,
+          description: 'Your reasoning and analysis that led to this task. Helps Claude Code understand the WHY.'
+        },
+        parallel_hint: {
+          type: SchemaType.STRING,
+          enum: ['none', 'minor', 'massive'],
+          description: 'Hint about parallelization needs: none (single task), minor (few parallel tasks - Claude agents), massive (many parallel tasks - DeepSeek for cost efficiency)'
+        }
+      },
+      required: ['task']
+    }
+  }
+];
+
 // Agent spawning tools - AUTOMATIC DELEGATION TO DEEPSEEK
 // These tools are handled by TypeScript handlers that automatically call DeepSeek
 // Gemini just needs to call the tool - everything else happens automatically
@@ -741,8 +778,8 @@ export const QUANT_TOOLS: FunctionDeclaration[] = [
     }
   },
   {
-    name: 'get_strategy_card',
-    description: 'Get performance card for a specific convexity profile strategy. Returns Sharpe ratio, win rate, max drawdown, annual return, trade duration, and a mini equity curve. Profiles 1-6 correspond to: Long Dated Gamma, Short Dated Gamma, Charm Harvester, Vanna Play, Skew Trader, Vol-of-Vol.',
+    name: 'get_strategy_details',
+    description: 'Get performance details for a specific convexity profile strategy. Returns Sharpe ratio, win rate, max drawdown, annual return, trade duration, and a mini equity curve. Profiles 1-6 correspond to: Long Dated Gamma, Short Dated Gamma, Charm Harvester, Vanna Play, Skew Trader, Vol-of-Vol.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -763,16 +800,16 @@ export const QUANT_TOOLS: FunctionDeclaration[] = [
     }
   },
   {
-    name: 'run_scenario',
+    name: 'run_simulation',
     description: 'Run what-if scenario simulation. Given a price change and volatility change, calculate projected P&L, surviving/failing strategies, and margin call risk. Use this to stress-test the portfolio.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
-        price_change_pct: {
+        price_change: {
           type: SchemaType.NUMBER,
           description: 'Price change as decimal (e.g., -0.05 for 5% drop)'
         },
-        vol_change_pct: {
+        vol_change: {
           type: SchemaType.NUMBER,
           description: 'Volatility change as decimal (e.g., 0.20 for 20% vol spike)'
         },
@@ -781,7 +818,7 @@ export const QUANT_TOOLS: FunctionDeclaration[] = [
           description: 'Days forward for theta decay calculation (default: 1)'
         }
       },
-      required: ['price_change_pct', 'vol_change_pct']
+      required: ['price_change', 'vol_change']
     }
   }
 ];
@@ -826,9 +863,11 @@ export const RESPONSE_TOOLS: FunctionDeclaration[] = [
 ];
 
 // All tools combined - respond_directly FIRST so it's preferred
+// CLAUDE_TOOLS high priority - enables multi-model architecture
 export const ALL_TOOLS: FunctionDeclaration[] = [
   ...RESPONSE_TOOLS,
-  ...QUANT_TOOLS,  // High-level quant tools for regime/strategy analysis
+  ...CLAUDE_TOOLS,  // Multi-model execution via Claude Code CLI
+  ...QUANT_TOOLS,   // High-level quant tools for regime/strategy analysis
   ...FILE_TOOLS,
   ...PYTHON_TOOLS,
   ...GIT_TOOLS,
@@ -842,6 +881,7 @@ export const ALL_TOOLS: FunctionDeclaration[] = [
 
 // Tool names by category for filtering
 export const TOOL_CATEGORIES = {
+  claude: CLAUDE_TOOLS.map(t => t.name),
   quant: QUANT_TOOLS.map(t => t.name),
   file: FILE_TOOLS.map(t => t.name),
   python: PYTHON_TOOLS.map(t => t.name),

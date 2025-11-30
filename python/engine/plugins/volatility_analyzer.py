@@ -19,7 +19,8 @@ import pandas as pd
 from typing import Dict, Any, Optional
 
 # Import the base class from core
-from ..core.interfaces import QuantModule
+# Use absolute import for dynamic loading compatibility
+from engine.core.interfaces import QuantModule
 
 
 class VolatilityAnalyzer(QuantModule):

@@ -172,7 +172,9 @@ def main():
     """Main execution"""
 
     # Load existing tracked data
-    data_file = Path('/Users/zstoc/rotation-engine/data/backtest_results/full_tracking_results.json')
+    from pathlib import Path
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+    data_file = PROJECT_ROOT / 'data' / 'backtest_results' / 'full_tracking_results.json'
 
     if not data_file.exists():
         print(f"ERROR: Tracked data not found at {data_file}")
@@ -192,7 +194,7 @@ def main():
     print_analysis(results)
 
     # Save results
-    output_file = Path('/Users/zstoc/rotation-engine/data/backtest_results/phase1_analysis.json')
+    output_file = PROJECT_ROOT / 'data' / 'backtest_results' / 'phase1_analysis.json'
     with open(output_file, 'w') as f:
         json.dump(results, f, indent=2)
 

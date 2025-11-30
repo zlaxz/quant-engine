@@ -29,7 +29,11 @@ FIXES APPLIED:
 """
 
 import sys
-sys.path.append('/Users/zstoc/rotation-engine')
+from pathlib import Path
+
+# Get project root relative to script location
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import json
 import numpy as np

@@ -72,6 +72,12 @@ contextBridge.exposeInMainWorld('electron', {
   markMemoriesRecalled: (memoryIds: string[]) =>
     ipcRenderer.invoke('memory:mark-recalled', memoryIds),
 
+  // Analysis handlers
+  getWarnings: (strategy: string, regimeId: string, workspaceId: string) =>
+    ipcRenderer.invoke('analysis:get-warnings', strategy, regimeId, workspaceId),
+  tagRegime: (runId: string, startDate: string, endDate: string) =>
+    ipcRenderer.invoke('analysis:tag-regime', runId, startDate, endDate),
+
   // Tool progress events (for real-time tool execution visibility)
   onToolProgress: (callback: (data: {
     type: 'thinking' | 'tools-starting' | 'executing' | 'completed';

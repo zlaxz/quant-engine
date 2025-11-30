@@ -149,9 +149,18 @@ app.whenReady().then(() => {
   if (savedOpenai) process.env.OPENAI_API_KEY = savedOpenai;
   if (savedDeepseek) process.env.DEEPSEEK_API_KEY = savedDeepseek;
 
-  // Initialize Supabase credentials (public anon key - safe to embed)
-  process.env.SUPABASE_URL = 'https://ynaqtawyynqikfyranda.supabase.co';
-  process.env.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluYXF0YXd5eW5xaWtmeXJhbmRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM1NzM5NjMsImV4cCI6MjA3OTE0OTk2M30.VegcJvLluy8toSYqnR7Ufc5jx5XAl1-XeDRl8KbsIIw';
+  // Initialize Supabase credentials from environment or stored config
+  // Load from .env file or electron-store, never hardcode
+  const savedSupabaseUrl = store.get('supabase.url') || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const savedSupabaseKey = store.get('supabase.anonKey') || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
+
+  if (savedSupabaseUrl) process.env.SUPABASE_URL = savedSupabaseUrl;
+  if (savedSupabaseKey) process.env.SUPABASE_ANON_KEY = savedSupabaseKey;
+
+  // Warn if Supabase not configured (but don't crash - app may work in limited mode)
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+    console.warn('Supabase credentials not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env');
+  }
 
   // Register project directory IPC handlers
   ipcMain.handle('get-project-directory', () => {
@@ -212,16 +221,21 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('set-api-keys', (_event, keys: { gemini: string; openai: string; deepseek: string }) => {
-    store.set('apiKeys.gemini', keys.gemini);
-    store.set('apiKeys.openai', keys.openai);
-    store.set('apiKeys.deepseek', keys.deepseek);
+    try {
+      store.set('apiKeys.gemini', keys.gemini);
+      store.set('apiKeys.openai', keys.openai);
+      store.set('apiKeys.deepseek', keys.deepseek);
 
-    // Update environment variables for edge functions
-    if (keys.gemini) process.env.GEMINI_API_KEY = keys.gemini;
-    if (keys.openai) process.env.OPENAI_API_KEY = keys.openai;
-    if (keys.deepseek) process.env.DEEPSEEK_API_KEY = keys.deepseek;
+      // Update environment variables for edge functions
+      if (keys.gemini) process.env.GEMINI_API_KEY = keys.gemini;
+      if (keys.openai) process.env.OPENAI_API_KEY = keys.openai;
+      if (keys.deepseek) process.env.DEEPSEEK_API_KEY = keys.deepseek;
 
-    return { success: true };
+      return { success: true };
+    } catch (error: any) {
+      console.error('[Main] Set API keys error:', error);
+      return { success: false, error: error.message };
+    }
   });
 
   // Infrastructure settings handlers
@@ -242,28 +256,33 @@ app.whenReady().then(() => {
     telegramChatId: string;
     dataDrivePath: string;
   }) => {
-    store.set('infra.massiveApiKey', config.massiveApiKey);
-    store.set('infra.polygonApiKey', config.polygonApiKey);
-    store.set('infra.telegramBotToken', config.telegramBotToken);
-    store.set('infra.telegramChatId', config.telegramChatId);
-    store.set('infra.dataDrivePath', config.dataDrivePath);
+    try {
+      store.set('infra.massiveApiKey', config.massiveApiKey);
+      store.set('infra.polygonApiKey', config.polygonApiKey);
+      store.set('infra.telegramBotToken', config.telegramBotToken);
+      store.set('infra.telegramChatId', config.telegramChatId);
+      store.set('infra.dataDrivePath', config.dataDrivePath);
 
-    // Update environment variables
-    if (config.massiveApiKey) process.env.AWS_ACCESS_KEY_ID = config.massiveApiKey;
-    if (config.polygonApiKey) {
-      process.env.POLYGON_API_KEY = config.polygonApiKey;
-      process.env.AWS_SECRET_ACCESS_KEY = config.polygonApiKey;
-    }
-    if (config.dataDrivePath) {
-      process.env.DATA_DIR = config.dataDrivePath;
-      // Add to allowed paths for agent file access
-      if (fs.existsSync(config.dataDrivePath)) {
-        addAllowedPath(config.dataDrivePath);
-        console.log(`[Main] Added data drive to allowed paths: ${config.dataDrivePath}`);
+      // Update environment variables
+      if (config.massiveApiKey) process.env.AWS_ACCESS_KEY_ID = config.massiveApiKey;
+      if (config.polygonApiKey) {
+        process.env.POLYGON_API_KEY = config.polygonApiKey;
+        process.env.AWS_SECRET_ACCESS_KEY = config.polygonApiKey;
       }
-    }
+      if (config.dataDrivePath) {
+        process.env.DATA_DIR = config.dataDrivePath;
+        // Add to allowed paths for agent file access
+        if (fs.existsSync(config.dataDrivePath)) {
+          addAllowedPath(config.dataDrivePath);
+          console.log(`[Main] Added data drive to allowed paths: ${config.dataDrivePath}`);
+        }
+      }
 
-    return { success: true };
+      return { success: true };
+    } catch (error: any) {
+      console.error('[Main] Set infra config error:', error);
+      return { success: false, error: error.message };
+    }
   });
 
   ipcMain.handle('test-data-drive', async (_event, drivePath: string) => {

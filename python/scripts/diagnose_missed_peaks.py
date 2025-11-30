@@ -13,9 +13,11 @@ import pandas as pd
 import numpy as np
 import sys
 from datetime import datetime
+from pathlib import Path
 
 # Add project root to path
-sys.path.append('/Users/zstoc/rotation-engine')
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.trading.simulator import TradeSimulator, SimulationConfig
 from src.trading.ai_exit_strategy import AIExitStrategy

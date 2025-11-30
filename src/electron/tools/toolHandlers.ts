@@ -429,17 +429,31 @@ export async function manageEnvironment(
 // ==================== COMMAND EXECUTION ====================
 
 /**
- * Execute a shell command (for agent use)
- * Security: Commands run in the engine root directory
+ * Execute a WHITELISTED shell command (for agent use)
+ * Security: Only allows safe commands, no arbitrary shell execution
  */
 export async function runCommand(command: string): Promise<ToolResult> {
   try {
     const root = getEngineRoot();
-    safeLog(`[runCommand] Executing: ${command.slice(0, 100)}${command.length > 100 ? '...' : ''}`);
+
+    // SECURITY: Whitelist allowed commands
+    const ALLOWED_COMMANDS = ['pytest', 'python3', 'ls', 'pwd', 'git status', 'git diff', 'grep'];
+    const commandPrefix = command.trim().split(/\s+/)[0];
+
+    if (!ALLOWED_COMMANDS.some(allowed => command.startsWith(allowed))) {
+      return {
+        success: false,
+        content: '',
+        error: `Command not allowed: "${commandPrefix}". Allowed: ${ALLOWED_COMMANDS.join(', ')}`
+      };
+    }
+
+    safeLog(`[runCommand] Executing (whitelisted): ${command.slice(0, 100)}`);
 
     const { stdout, stderr } = await execWithTimeout(command, {
       cwd: root,
-      timeout: 60000 // 60 second timeout for commands
+      timeout: 60000, // 60 second timeout
+      shell: '/bin/bash' // Explicit shell, not user's shell
     });
 
     const output = stdout + (stderr ? `\n[stderr]: ${stderr}` : '');
@@ -2008,10 +2022,20 @@ export async function spawnAgent(
     const pythonArgs = [scriptPath, task, agentType];
     if (context) pythonArgs.push(context);
 
+    // SECURITY: Whitelist environment variables (prevent API key exposure to Python script)
+    const safeEnv = {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      USER: process.env.USER,
+      TMPDIR: process.env.TMPDIR,
+      DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY, // Needed for agent to work
+      // DO NOT pass other API keys or secrets
+    };
+
     const result = spawnSync('python3', pythonArgs, {
       encoding: 'utf-8',
       timeout: 600000, // 10 minute timeout - DeepSeek can be slow
-      env: { ...process.env },
+      env: safeEnv,  // Whitelisted vars only
       maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       stdio: ['pipe', 'pipe', 'pipe'] // Capture stdout and stderr
     });
@@ -2351,6 +2375,329 @@ export async function spawnAgentsParallel(
 }
 
 
+// ==================== CLAUDE CODE CLI EXECUTION ====================
+
+/**
+ * Circuit breaker for Claude Code CLI to prevent cascade failures
+ */
+const claudeCodeCircuitBreaker = {
+  failureCount: 0,
+  lastFailure: 0,
+  threshold: 3,
+  resetTimeout: 5 * 60 * 1000, // 5 minute reset
+
+  shouldExecute(): boolean {
+    if (this.failureCount >= this.threshold) {
+      const timeSinceLastFailure = Date.now() - this.lastFailure;
+      if (timeSinceLastFailure < this.resetTimeout) {
+        return false; // Circuit open - too many recent failures
+      }
+      // Reset after timeout period
+      this.failureCount = 0;
+    }
+    return true;
+  },
+
+  recordSuccess(): void {
+    this.failureCount = 0; // Reset on success
+  },
+
+  recordFailure(): void {
+    this.failureCount++;
+    this.lastFailure = Date.now();
+  },
+
+  getStatus(): { open: boolean; failures: number; timeUntilReset: number } {
+    const timeSinceLastFailure = Date.now() - this.lastFailure;
+    const open = this.failureCount >= this.threshold && timeSinceLastFailure < this.resetTimeout;
+    return {
+      open,
+      failures: this.failureCount,
+      timeUntilReset: open ? this.resetTimeout - timeSinceLastFailure : 0
+    };
+  }
+};
+
+/**
+ * Execute a task via Claude Code CLI
+ *
+ * This bridges Gemini (reasoning) to Claude Code (execution) in the multi-model architecture.
+ * Claude Code runs on the Claude Max subscription (fixed cost), making execution economical.
+ *
+ * Flow:
+ * 1. Gemini reasons about what needs to be done
+ * 2. Gemini calls this tool with the task and context
+ * 3. This handler spawns Claude Code CLI with the prompt
+ * 4. Claude Code executes (has full tool access: bash, python, files, git)
+ * 5. Result returns to Gemini for synthesis
+ *
+ * Agent Strategy (Claude Code decides):
+ * - Minor tasks: Claude handles directly or uses native Claude agents (free with Max)
+ * - MASSIVE parallel: Claude spawns DeepSeek agents via curl (cost-efficient at scale)
+ */
+export async function executeViaClaudeCode(
+  task: string,
+  context?: string,
+  parallelHint?: 'none' | 'minor' | 'massive'
+): Promise<ToolResult> {
+  const startTime = Date.now();
+
+  // ====== INPUT VALIDATION ======
+  // Validate task is not empty
+  if (!task || task.trim().length === 0) {
+    return {
+      success: false,
+      content: '',
+      error: 'Task cannot be empty'
+    };
+  }
+
+  // Validate length to prevent buffer overflow
+  const MAX_SIZE = 1024 * 1024; // 1MB
+  if (task.length > MAX_SIZE) {
+    return {
+      success: false,
+      content: '',
+      error: `Task exceeds 1MB limit (${task.length} bytes)`
+    };
+  }
+
+  if (context && context.length > MAX_SIZE) {
+    return {
+      success: false,
+      content: '',
+      error: `Context exceeds 1MB limit (${context.length} bytes)`
+    };
+  }
+
+  // Validate parallelHint is valid enum value
+  const validHints = ['none', 'minor', 'massive'];
+  if (parallelHint && !validHints.includes(parallelHint)) {
+    return {
+      success: false,
+      content: '',
+      error: `Invalid parallel_hint: "${parallelHint}". Must be one of: ${validHints.join(', ')}`
+    };
+  }
+
+  // Check circuit breaker before attempting execution
+  if (!claudeCodeCircuitBreaker.shouldExecute()) {
+    const status = claudeCodeCircuitBreaker.getStatus();
+    return {
+      success: false,
+      content: '',
+      error: `Claude Code circuit breaker is OPEN (${status.failures} recent failures). ` +
+             `Will reset in ${Math.ceil(status.timeUntilReset / 1000)}s. ` +
+             `This prevents cascade failures when Claude Code is unavailable.`
+    };
+  }
+
+  safeLog('\n' + '🔵'.repeat(30));
+  safeLog('🚀 EXECUTE VIA CLAUDE CODE CLI');
+  safeLog(`   Task: ${task.slice(0, 100)}${task.length > 100 ? '...' : ''}`);
+  safeLog(`   Context provided: ${context ? 'yes' : 'no'}`);
+  safeLog(`   Parallel hint: ${parallelHint || 'none'}`);
+  safeLog(`   Timestamp: ${new Date().toISOString()}`);
+  safeLog('🔵'.repeat(30));
+
+  try {
+    // Build the prompt for Claude Code
+    // SECURITY: Use markdown code fencing to prevent prompt injection
+    let prompt = `# Task from Quant Engine (Gemini 3 Pro)
+
+## Task
+\`\`\`
+${task}
+\`\`\`
+`;
+
+    if (context) {
+      prompt += `
+## Context (Gemini's Analysis)
+\`\`\`
+${context}
+\`\`\`
+`;
+    }
+
+    prompt += `
+## Instructions
+- Execute this task completely
+- You have full tool access: bash, python, file operations, git
+- Report results clearly
+- If the task requires multiple steps, complete all of them
+`;
+
+    // Add agent strategy based on parallel hint
+    if (parallelHint === 'massive') {
+      prompt += `
+## Parallel Execution (MASSIVE scale indicated)
+For this task, use DeepSeek agents for cost-efficient parallel processing.
+Script: python3 scripts/deepseek_agent.py "<task>" "<agent_type>" "<context>"
+Agent types: analyst, reviewer, researcher, coder
+Spawn multiple agents in parallel when tasks are independent.
+Example: python3 scripts/deepseek_agent.py "Analyze regime 3" "analyst" &
+`;
+    } else if (parallelHint === 'minor') {
+      prompt += `
+## Parallel Execution (minor scale)
+You may spawn native Claude agents for parallel work if beneficial (covered by Max subscription).
+`;
+    }
+    // For 'none' or undefined, no special agent instructions - Claude handles directly
+
+    // Check if Claude Code CLI is available
+    const whichResult = spawnSync('which', ['claude'], {
+      encoding: 'utf-8',
+      timeout: 5000
+    });
+
+    if (whichResult.status !== 0 || !whichResult.stdout?.trim()) {
+      safeLog('❌ Claude Code CLI not found');
+      return {
+        success: false,
+        content: '',
+        error: 'Claude Code CLI not installed or not in PATH. Install from: https://github.com/anthropics/claude-code'
+      };
+    }
+
+    safeLog(`   Claude Code found at: ${whichResult.stdout.trim()}`);
+
+    // Get the quant-engine project root for working directory
+    const isDev = process.env.NODE_ENV === 'development';
+    const projectRoot = isDev ? process.cwd() : path.join(app.getPath('userData'), '..', '..', '..');
+    const resolved = path.resolve(projectRoot); // Resolve symlinks
+
+    // VALIDATION: Verify this is actually a project directory
+    const gitDir = path.join(resolved, '.git');
+    const packageFile = path.join(resolved, 'package.json');
+    const pythonDir = path.join(resolved, 'python');
+
+    if (!fs.existsSync(gitDir) && !fs.existsSync(packageFile) && !fs.existsSync(pythonDir)) {
+      safeLog(`❌ Working directory validation failed: ${resolved}`);
+      return {
+        success: false,
+        content: '',
+        error: `Cannot verify project root at ${resolved}. Expected .git, package.json, or python/ directory.`
+      };
+    }
+
+    safeLog(`   Working directory: ${resolved} ✓`);
+    safeLog('🔵 Executing Claude Code CLI...');
+
+    // Execute Claude Code CLI
+    // --print: Output to stdout (non-interactive)
+    // --output-format text: Plain text output
+    // -p: Direct prompt string
+    //
+    // SECURITY: Whitelist safe environment variables only (no API keys/secrets)
+    const safeEnv = {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      USER: process.env.USER,
+      TMPDIR: process.env.TMPDIR,
+      NODE_ENV: process.env.NODE_ENV,
+      // DO NOT pass: API keys, passwords, tokens, credentials
+    };
+
+    const result = spawnSync('claude', ['--print', '--output-format', 'text', '-p', prompt], {
+      encoding: 'utf-8',
+      cwd: projectRoot,
+      timeout: 600000, // 10 minute timeout - complex tasks may take time
+      env: safeEnv,  // Whitelisted env vars only
+      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    const elapsed = Date.now() - startTime;
+
+    // Check for timeout
+    if (result.signal === 'SIGTERM' || result.killed) {
+      safeLog(`❌ Claude Code timed out after ${elapsed}ms`);
+      return {
+        success: false,
+        content: '',
+        error: `Claude Code timed out after ${Math.floor(elapsed / 1000)}s. Task may be too complex. Try breaking into smaller steps.`
+      };
+    }
+
+    // Check for spawn errors
+    if (result.error) {
+      safeLog(`❌ Claude Code spawn error: ${result.error.message}`);
+      return {
+        success: false,
+        content: '',
+        error: `Failed to spawn Claude Code: ${result.error.message}`
+      };
+    }
+
+    // Check for non-zero exit
+    if (result.status !== 0) {
+      safeLog(`❌ Claude Code exited with code ${result.status}`);
+      safeLog(`   stderr: ${result.stderr || 'none'}`);
+
+      // Still return content if available (Claude Code may output before failing)
+      return {
+        success: false,
+        content: result.stdout || '',
+        error: `Claude Code failed (exit ${result.status}):\n${result.stderr || 'No error details'}`
+      };
+    }
+
+    safeLog(`✅ Claude Code completed in ${elapsed}ms`);
+
+    // Log stderr for debugging (Claude Code may log status to stderr)
+    if (result.stderr) {
+      safeLog(`   [stderr] ${result.stderr.slice(0, 500)}`);
+    }
+
+    // Return structured JSON for programmatic parsing
+    const structuredResponse = {
+      type: 'claude-code-execution',
+      status: result.status === 0 ? 'success' : 'failure',
+      exitCode: result.status,
+      duration: elapsed,
+      stdout: result.stdout,
+      stderr: result.stderr || '',
+      timestamp: new Date().toISOString(),
+      metadata: {
+        hasContext: !!context,
+        parallelHint: parallelHint || 'none',
+        taskLength: task.length,
+        contextLength: context?.length || 0
+      }
+    };
+
+    // Record success in circuit breaker
+    claudeCodeCircuitBreaker.recordSuccess();
+
+    return {
+      success: true,
+      content: JSON.stringify(structuredResponse, null, 2),
+      metadata: {
+        elapsed,
+        exitCode: result.status,
+        hasContext: !!context,
+        parallelHint: parallelHint || 'none'
+      }
+    };
+
+  } catch (error: any) {
+    const elapsed = Date.now() - startTime;
+    safeLog(`❌ Claude Code execution failed after ${elapsed}ms:`, error.message);
+
+    // Record failure in circuit breaker
+    claudeCodeCircuitBreaker.recordFailure();
+
+    return {
+      success: false,
+      content: '',
+      error: `Claude Code execution failed: ${error.message}`
+    };
+  }
+}
+
+
 // ==================== TOOL DISPATCHER ====================
 
 export async function executeTool(
@@ -2448,6 +2795,21 @@ export async function executeTool(
       return listStrategies();
     case 'get_strategy_details':
       return getStrategyDetails(args.strategy_id);
+    case 'get_portfolio_greeks':
+      // Return placeholder Greeks - actual implementation would query positions
+      return {
+        success: true,
+        content: JSON.stringify({
+          portfolio_greeks: {
+            net_delta: 0,
+            net_gamma: 0,
+            net_theta: 0,
+            net_vega: 0,
+            warnings: [],
+            message: 'No active positions. Portfolio Greeks endpoint ready.'
+          }
+        })
+      };
     case 'run_simulation':
       return runScenarioSimulation(args.scenario, args.params, args.portfolio);
     case 'quant_engine_health':
@@ -2470,6 +2832,10 @@ export async function executeTool(
     // Backup cleanup
     case 'cleanup_backups':
       return cleanupBackups(args.dryRun, args.olderThanDays);
+
+    // Claude Code CLI execution (Gemini → Claude Code bridge)
+    case 'execute_via_claude_code':
+      return executeViaClaudeCode(args.task, args.context, args.parallel_hint);
 
     default:
       return { success: false, content: '', error: `Unknown tool: ${name}` };

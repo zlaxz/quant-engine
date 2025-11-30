@@ -5,6 +5,10 @@
 SUPABASE_URL="${SUPABASE_URL:-https://ynaqtawyynqikfyranda.supabase.co}"
 SUPABASE_KEY="${SUPABASE_ANON_KEY}"
 
+# Get project root from environment or use script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="${ROTATION_ENGINE_ROOT:-$(dirname "$SCRIPT_DIR")}"
+
 if [ -z "$SUPABASE_KEY" ]; then
   echo "Error: SUPABASE_ANON_KEY not set"
   exit 1
@@ -18,7 +22,7 @@ echo
 
 # Find CRITICAL (Level 0) memories not recalled in >3 days
 echo "🔴 LEVEL 0 (IMMUTABLE) - Expected recall: Every 3 days"
-LEVEL0_STALE=$(npx supabase db execute --workdir /Users/zstoc/GitHub/quant-chat-scaffold "
+LEVEL0_STALE=$(npx supabase db execute --workdir "$PROJECT_ROOT" "
 SELECT
   summary,
   COALESCE(EXTRACT(DAY FROM NOW() - last_recalled_at)::INTEGER, 9999) as days_since_recall,
@@ -44,7 +48,7 @@ echo
 
 # Find PROTECTED (Level 1) memories not recalled in >7 days
 echo "🟡 LEVEL 1 (PROTECTED) - Expected recall: Every 7 days"
-LEVEL1_STALE=$(npx supabase db execute --workdir /Users/zstoc/GitHub/quant-chat-scaffold "
+LEVEL1_STALE=$(npx supabase db execute --workdir "$PROJECT_ROOT" "
 SELECT
   summary,
   COALESCE(EXTRACT(DAY FROM NOW() - last_recalled_at)::INTEGER, 9999) as days_since_recall

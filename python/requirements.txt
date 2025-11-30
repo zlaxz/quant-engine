@@ -35,3 +35,14 @@ python-dotenv
 
 # Added by Chief Quant on 2025-11-29
 scipy>=1.0.0
+
+# ML/Data Science - Added 2025-11-30
+xgboost>=0.90
+scikit-learn>=1.0.0
+
+# Data acquisition
+yfinance>=0.2.0
+
+# Visualization
+matplotlib>=3.5.0
+seaborn>=0.12.0

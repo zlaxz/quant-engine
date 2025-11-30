@@ -4,6 +4,10 @@
 
 SUPABASE_URL="${SUPABASE_URL:-https://ynaqtawyynqikfyranda.supabase.co}"
 
+# Get project root from environment or use script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="${ROTATION_ENGINE_ROOT:-$(dirname "$SCRIPT_DIR")}"
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  🔒 MEMORY INTEGRITY VERIFICATION"
 echo "  Date: $(date +%Y-%m-%d\ %H:%M:%S)"
@@ -12,7 +16,7 @@ echo
 
 # Check 1: Verify IMMUTABLE memories still exist
 echo "Check 1: Verifying immutable memories..."
-IMMUTABLE_COUNT=$(npx supabase db execute --workdir /Users/zstoc/GitHub/quant-chat-scaffold "
+IMMUTABLE_COUNT=$(npx supabase db execute --workdir "$PROJECT_ROOT" "
 SELECT COUNT(*) as count
 FROM memories
 WHERE protection_level = 0 AND immutable = true;
@@ -30,7 +34,7 @@ echo
 
 # Check 2: Verify RLS policies are active
 echo "Check 2: Verifying RLS policies..."
-RLS_ENABLED=$(npx supabase db execute --workdir /Users/zstoc/GitHub/quant-chat-scaffold "
+RLS_ENABLED=$(npx supabase db execute --workdir "$PROJECT_ROOT" "
 SELECT relrowsecurity
 FROM pg_class
 WHERE relname = 'memories';
@@ -46,7 +50,7 @@ echo
 
 # Check 3: Check for orphaned evidence
 echo "Check 3: Checking for orphaned evidence..."
-ORPHANED=$(npx supabase db execute --workdir /Users/zstoc/GitHub/quant-chat-scaffold "
+ORPHANED=$(npx supabase db execute --workdir "$PROJECT_ROOT" "
 SELECT COUNT(*) as count
 FROM memory_evidence me
 WHERE NOT EXISTS (
@@ -64,7 +68,7 @@ echo
 
 # Check 4: Verify regime performance matrix populated
 echo "Check 4: Checking regime-profile matrix..."
-MATRIX_ENTRIES=$(npx supabase db execute --workdir /Users/zstoc/GitHub/quant-chat-scaffold "
+MATRIX_ENTRIES=$(npx supabase db execute --workdir "$PROJECT_ROOT" "
 SELECT COUNT(*) as count
 FROM regime_profile_performance;
 " 2>/dev/null | grep -oE '[0-9]+' | head -1)
@@ -75,7 +79,7 @@ echo
 
 # Check 5: Verify overfitting warnings exist
 echo "Check 5: Checking overfitting warnings..."
-WARNING_COUNT=$(npx supabase db execute --workdir /Users/zstoc/GitHub/quant-chat-scaffold "
+WARNING_COUNT=$(npx supabase db execute --workdir "$PROJECT_ROOT" "
 SELECT COUNT(*) as count
 FROM overfitting_warnings;
 " 2>/dev/null | grep -oE '[0-9]+' | head -1)

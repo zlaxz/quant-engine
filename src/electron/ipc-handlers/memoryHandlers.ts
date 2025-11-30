@@ -206,12 +206,17 @@ export function registerAnalysisHandlers(
     async (_event, strategyRaw: unknown, regimeIdRaw: unknown, workspaceIdRaw: unknown) => {
       if (!warningSystem) return null;
 
-      // Validate at IPC boundary
-      const strategy = validateIPC(StrategyKeySchema, strategyRaw, 'strategy key');
-      const regimeId = validateIPC(RegimeIdSchema, regimeIdRaw, 'regime ID');
-      const workspaceId = validateIPC(WorkspaceIdSchema, workspaceIdRaw, 'workspace ID');
+      try {
+        // Validate at IPC boundary
+        const strategy = validateIPC(StrategyKeySchema, strategyRaw, 'strategy key');
+        const regimeId = validateIPC(RegimeIdSchema, regimeIdRaw, 'regime ID');
+        const workspaceId = validateIPC(WorkspaceIdSchema, workspaceIdRaw, 'workspace ID');
 
-      return await warningSystem.getRelevantWarnings(strategy, regimeId, workspaceId);
+        return await warningSystem.getRelevantWarnings(strategy, regimeId, workspaceId);
+      } catch (error: any) {
+        console.error('[MemoryHandlers] Get warnings error:', error);
+        return { success: false, error: error.message };
+      }
     }
   );
 
@@ -219,32 +224,47 @@ export function registerAnalysisHandlers(
   ipcMain.handle('memory:get-stale', async (_event, workspaceIdRaw: unknown) => {
     if (!staleInjector) return [];
 
-    // Validate at IPC boundary
-    const workspaceId = validateIPC(WorkspaceIdSchema, workspaceIdRaw, 'workspace ID');
-    return await staleInjector.getStaleMemories(workspaceId);
+    try {
+      // Validate at IPC boundary
+      const workspaceId = validateIPC(WorkspaceIdSchema, workspaceIdRaw, 'workspace ID');
+      return await staleInjector.getStaleMemories(workspaceId);
+    } catch (error: any) {
+      console.error('[MemoryHandlers] Get stale memories error:', error);
+      return { success: false, error: error.message };
+    }
   });
 
   // Trigger-based recall
   ipcMain.handle('memory:check-triggers', async (_event, messageRaw: unknown, workspaceIdRaw: unknown) => {
     if (!triggerRecall) return [];
 
-    // Validate at IPC boundary
-    const message = validateIPC(MemoryQuerySchema, messageRaw, 'message');
-    const workspaceId = validateIPC(WorkspaceIdSchema, workspaceIdRaw, 'workspace ID');
-    return await triggerRecall.checkTriggers(message, workspaceId);
+    try {
+      // Validate at IPC boundary
+      const message = validateIPC(MemoryQuerySchema, messageRaw, 'message');
+      const workspaceId = validateIPC(WorkspaceIdSchema, workspaceIdRaw, 'workspace ID');
+      return await triggerRecall.checkTriggers(message, workspaceId);
+    } catch (error: any) {
+      console.error('[MemoryHandlers] Check triggers error:', error);
+      return { success: false, error: error.message };
+    }
   });
 
   // Pattern detection
   ipcMain.handle('analysis:detect-patterns', async (_event, workspaceIdRaw: unknown) => {
     if (!patternDetector) return { repeated_lessons: [], regime_patterns: [] };
 
-    // Validate at IPC boundary
-    const workspaceId = validateIPC(WorkspaceIdSchema, workspaceIdRaw, 'workspace ID');
-    const [repeated, regimePatterns] = await Promise.all([
-      patternDetector.detectRepeatedLessons(workspaceId),
-      patternDetector.detectRegimeProfilePatterns(workspaceId),
-    ]);
-    return { repeated_lessons: repeated, regime_patterns: regimePatterns };
+    try {
+      // Validate at IPC boundary
+      const workspaceId = validateIPC(WorkspaceIdSchema, workspaceIdRaw, 'workspace ID');
+      const [repeated, regimePatterns] = await Promise.all([
+        patternDetector.detectRepeatedLessons(workspaceId),
+        patternDetector.detectRegimeProfilePatterns(workspaceId),
+      ]);
+      return { repeated_lessons: repeated, regime_patterns: regimePatterns };
+    } catch (error: any) {
+      console.error('[MemoryHandlers] Detect patterns error:', error);
+      return { success: false, error: error.message };
+    }
   });
 
   // Regime tagging for backtest runs

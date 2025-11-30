@@ -327,7 +327,9 @@ def main():
     print("Only reporting differences with p < 0.05 (Bonferroni) and |d| > 0.3\n")
 
     # Load data
-    data_file = '/Users/zstoc/rotation-engine/data/backtest_results/full_tracking_results.json'
+    from pathlib import Path
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+    data_file = PROJECT_ROOT / 'data' / 'backtest_results' / 'full_tracking_results.json'
     print(f"Loading trades from: {data_file}")
 
     all_data = load_trades(data_file)
@@ -355,7 +357,7 @@ def main():
     print("Generating reports...")
 
     # Markdown report
-    output_dir = Path('/Users/zstoc/rotation-engine/analysis')
+    output_dir = PROJECT_ROOT / 'analysis'
     output_dir.mkdir(parents=True, exist_ok=True)
 
     report_file = output_dir / 'entry_analysis_full_report.md'

@@ -149,7 +149,7 @@ Result returns to Gemini with thought signatures preserved
 
 ```
 🐍🐍🐍... SPAWN_AGENT VIA PYTHON
-   Project root: /Users/zstoc/GitHub/quant-chat-scaffold
+   Project root: /Users/zstoc/GitHub/quant-engine
    Script path: .../scripts/deepseek_agent.py
 🐍 Python agent completed in Xms
    [stderr] [DeepSeek Agent] Success! Tokens: X

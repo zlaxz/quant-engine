@@ -140,6 +140,10 @@ interface ElectronAPI {
   }>>;
   markMemoriesRecalled: (memoryIds: string[]) => Promise<{ success: boolean; error?: string }>;
 
+  // Analysis handlers
+  getWarnings: (strategy: string, regimeId: string, workspaceId: string) => Promise<any>;
+  tagRegime: (runId: string, startDate: string, endDate: string) => Promise<{ success: boolean; regime?: any; error?: string }>;
+
   // Tool progress events (for real-time tool execution visibility)
   onToolProgress: (callback: (data: {
     type: 'thinking' | 'tools-starting' | 'executing' | 'completed';

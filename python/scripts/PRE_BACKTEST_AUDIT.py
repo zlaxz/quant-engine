@@ -14,7 +14,11 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import sys
-sys.path.insert(0, '/Users/zstoc/rotation-engine')
+from pathlib import Path
+
+# Get project root relative to script location
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.loaders import OptionsDataLoader
 from src.profiles.detectors import ProfileDetectors
