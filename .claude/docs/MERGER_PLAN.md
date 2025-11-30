@@ -22,19 +22,24 @@ Merge two projects into a unified AI-powered quantitative discovery and backtest
 
 ## Architecture Decision: Keep Separate Repos
 
-**Recommendation: Maintain two repos, connected via environment variable**
+**ACTUAL IMPLEMENTATION: Monorepo (Merged 2025-11-29)**
 
-### Why NOT Monorepo
-1. rotation-engine is already public on GitHub (github.com/zlaxz/rotation-engine)
-2. Python and Node/TypeScript have very different toolchains
-3. The CLI interface (`cli_wrapper.py --profile X --start Y --end Z`) is clean
-4. Monorepo would require complex build orchestration
+### What Actually Happened
+1. rotation-engine code was merged directly into quant-engine/python/
+2. No separate repository maintained
+3. All Python code lives in python/ subdirectory
+4. ROTATION_ENGINE_ROOT points to python/ directory
 
-### Current Architecture (Keep This)
+### Current Architecture (Actual)
 ```
-~/github/quant-chat-scaffold/     # Electron + React UI
-    ↓ ROTATION_ENGINE_ROOT env var
-~/rotation-engine/                 # Python quant engine
+~/github/quant-engine/
+    ├── python/              # Merged rotation-engine code
+    │   ├── engine/          # Core quant modules
+    │   ├── scripts/         # Analysis scripts
+    │   ├── daemon.py        # Research daemon
+    │   └── server.py        # Flask API
+    ├── src/                 # Electron + React UI
+    └── scripts/             # DeepSeek agents, etc.
 ```
 
 **Connection Method:** Direct subprocess execution via `pythonExecution.ts`

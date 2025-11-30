@@ -67,7 +67,7 @@ async function startDaemon(): Promise<{ success: boolean; pid?: number; error?: 
 
   try {
     const engineRoot = getRotationEngineRoot();
-    const daemonPath = path.join(engineRoot, 'rotation-engine-bridge', 'research_daemon.py');
+    const daemonPath = path.join(engineRoot, 'daemon.py');  // Python backend daemon
 
     // Verify daemon script exists
     if (!fs.existsSync(daemonPath)) {

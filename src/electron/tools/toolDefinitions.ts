@@ -9,13 +9,13 @@ import { FunctionDeclaration, SchemaType } from '@google/generative-ai';
 export const FILE_TOOLS: FunctionDeclaration[] = [
   {
     name: 'read_file',
-    description: 'Read the contents of a file from the rotation-engine codebase',
+    description: 'Read the contents of a file from the Python engine codebase',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
         path: {
           type: SchemaType.STRING,
-          description: 'File path relative to rotation-engine root (e.g., "strategies/skew_convexity.py")'
+          description: 'File path relative to Python engine root (e.g., "strategies/skew_convexity.py")'
         }
       },
       required: ['path']
@@ -29,7 +29,7 @@ export const FILE_TOOLS: FunctionDeclaration[] = [
       properties: {
         path: {
           type: SchemaType.STRING,
-          description: 'Directory path relative to rotation-engine root (e.g., "strategies" or ".")'
+          description: 'Directory path relative to Python engine root (e.g., "strategies" or ".")'
         }
       },
       required: ['path']
@@ -37,7 +37,7 @@ export const FILE_TOOLS: FunctionDeclaration[] = [
   },
   {
     name: 'search_code',
-    description: 'Search for code patterns using regex across the rotation-engine codebase',
+    description: 'Search for code patterns using regex across the Python engine codebase',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -59,13 +59,13 @@ export const FILE_TOOLS: FunctionDeclaration[] = [
   },
   {
     name: 'write_file',
-    description: 'Write or overwrite a file in the rotation-engine codebase',
+    description: 'Write or overwrite a file in the Python engine codebase',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
         path: {
           type: SchemaType.STRING,
-          description: 'File path relative to rotation-engine root'
+          description: 'File path relative to Python engine root'
         },
         content: {
           type: SchemaType.STRING,
@@ -83,7 +83,7 @@ export const FILE_TOOLS: FunctionDeclaration[] = [
       properties: {
         path: {
           type: SchemaType.STRING,
-          description: 'File path relative to rotation-engine root'
+          description: 'File path relative to Python engine root'
         },
         content: {
           type: SchemaType.STRING,
@@ -95,13 +95,13 @@ export const FILE_TOOLS: FunctionDeclaration[] = [
   },
   {
     name: 'delete_file',
-    description: 'Delete a file from the rotation-engine codebase',
+    description: 'Delete a file from the Python engine codebase',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
         path: {
           type: SchemaType.STRING,
-          description: 'File path relative to rotation-engine root'
+          description: 'File path relative to Python engine root'
         }
       },
       required: ['path']
@@ -113,13 +113,13 @@ export const FILE_TOOLS: FunctionDeclaration[] = [
 export const PYTHON_TOOLS: FunctionDeclaration[] = [
   {
     name: 'run_python_script',
-    description: 'Execute a Python script in the rotation-engine environment and return its output. Use this to run backtests, data analysis, or any Python code. The script must already exist in the codebase.',
+    description: 'Execute a Python script in the Python engine environment and return its output. Use this to run backtests, data analysis, or any Python code. The script must already exist in the codebase.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
         script_path: {
           type: SchemaType.STRING,
-          description: 'Path to Python script relative to rotation-engine root (e.g., "rotation-engine-bridge/cli_wrapper.py" or "analysis/regime_classifier.py")'
+          description: 'Path to Python script relative to Python engine root (e.g., "Python engine-bridge/cli_wrapper.py" or "analysis/regime_classifier.py")'
         },
         args: {
           type: SchemaType.ARRAY,
@@ -340,7 +340,7 @@ export const GIT_TOOLS: FunctionDeclaration[] = [
 export const VALIDATION_TOOLS: FunctionDeclaration[] = [
   {
     name: 'run_tests',
-    description: 'Execute pytest test suite for rotation-engine',
+    description: 'Execute pytest test suite for Python engine',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -756,7 +756,7 @@ export const AGENT_TOOLS: FunctionDeclaration[] = [
   }
 ];
 
-// Quantitative Engine tools - High-level rotation-engine API
+// Quantitative Engine tools - High-level Python engine API
 export const QUANT_TOOLS: FunctionDeclaration[] = [
   {
     name: 'get_regime_heatmap',

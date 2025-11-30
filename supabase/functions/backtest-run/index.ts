@@ -136,7 +136,7 @@ async function callExternalEngine(
           return {
             metrics: bridgeData.metrics,
             equityCurve: bridgeData.equity_curve,
-            engineSource: 'rotation-engine-bridge',
+            engineSource: 'python-engine',
             trades: bridgeData.trades || []
           };
         }

@@ -436,7 +436,7 @@ async function handleCompare(args: string, context: CommandContext): Promise<Com
       const metrics = run.metrics;
       const period = `${run.params.startDate} to ${run.params.endDate}`;
       const engineLabel = run.engine_source === 'external' ? 'Live' :
-                         run.engine_source === 'rotation-engine-bridge' ? 'Bridge' :
+                         run.engine_source === 'python-engine' ? 'Python Engine' :
                          run.engine_source === 'stub_fallback' ? 'Fallback' : 'Stub';
       
       return `${idx + 1}. ${run.strategy_key}\n` +

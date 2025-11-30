@@ -76,7 +76,7 @@ curl -X POST http://localhost:8080/ingest-data \\
 
 **Method 2: Direct CLI**
 \`\`\`bash
-cd /Users/zstoc/rotation-engine/rotation-engine-bridge
+cd /Users/zstoc/GitHub/quant-engine/python
 python data_ingestor.py --date 2024-11-20 --type options_trades --tickers SPY,QQQ
 python data_ingestor.py --start 2024-11-01 --end 2024-11-20 --type stocks_trades
 python data_ingestor.py --inventory  # Check what's downloaded
@@ -98,7 +98,7 @@ The bridge_server.py must be running. It accepts POST requests to \`/run-backtes
 \`\`\`bash
 # Start the bridge (if not running)
 cd /Users/zstoc/rotation-engine
-python rotation-engine-bridge/bridge_server.py
+python server.py
 
 # Bridge listens on http://localhost:8080
 # Backtests are triggered by the app or curl
@@ -120,7 +120,7 @@ ps aux | grep research_daemon
 
 **Start the daemon:**
 \`\`\`bash
-cd /Users/zstoc/rotation-engine/rotation-engine-bridge
+cd /Users/zstoc/GitHub/quant-engine/python
 python research_daemon.py              # Normal mode (runs forever)
 python research_daemon.py --run-once   # Test mode (one cycle)
 \`\`\`
@@ -175,7 +175,7 @@ ps aux | grep bridge_server
 **Fix:** Restart the bridge:
 \`\`\`bash
 cd /Users/zstoc/rotation-engine
-python rotation-engine-bridge/bridge_server.py
+python server.py
 \`\`\`
 
 ---

@@ -105,7 +105,7 @@ export const ExperimentBrowser = ({
   const getEngineIcon = (engineSource?: string) => {
     switch (engineSource) {
       case 'external':
-      case 'rotation-engine-bridge':
+      case 'python-engine':
         return <Zap className="h-3 w-3" />;
       case 'stub_fallback':
         return <AlertCircle className="h-3 w-3" />;
@@ -118,8 +118,8 @@ export const ExperimentBrowser = ({
     switch (engineSource) {
       case 'external':
         return 'Live';
-      case 'rotation-engine-bridge':
-        return 'Bridge';
+      case 'python-engine':
+        return 'Python Engine';
       case 'stub_fallback':
         return 'Fallback';
       default:

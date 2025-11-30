@@ -35,7 +35,7 @@ export function registerPythonExecutionHandlers() {
       // Build Python command using cli_wrapper.py
       const cmd = [
         'python3',
-        'rotation-engine-bridge/cli_wrapper.py',
+        'server.py',  // Python Flask API server
         '--profile', params.strategyKey,
         '--start', params.startDate,
         '--end', params.endDate,
