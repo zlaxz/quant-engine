@@ -306,9 +306,48 @@ export function registerLlmHandlers() {
     // Reset cancellation state at start of new request
     resetCancellation();
 
+    const startTime = Date.now();
+    let routingDecisionId: string | null = null;
+
     try {
       // Validate messages at IPC boundary
       const messages = validateIPC(ChatMessagesSchema, messagesRaw, 'chat messages');
+
+      // Make routing decision for transparency
+      const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
+      const recommendation = await routeTask(lastUserMessage);
+      
+      // Log decision with task summary
+      const decisionLogger = getDecisionLogger();
+      const taskSummary = lastUserMessage.length > 100 
+        ? lastUserMessage.substring(0, 100) + '...' 
+        : lastUserMessage;
+      
+      const loggedDecision = decisionLogger.logDecision({
+        task: taskSummary,
+        chosen: recommendation.chosen,
+        confidence: recommendation.confidence,
+        alternativeConsidered: recommendation.alternativeConsidered,
+        reasoning: recommendation.reasoning
+      });
+      
+      routingDecisionId = loggedDecision.id;
+      
+      // Emit decision event to renderer for DecisionCard display
+      const windows = BrowserWindow.getAllWindows();
+      if (windows.length > 0) {
+        windows[0].webContents.send('claude-code-event', {
+          type: 'decision',
+          data: {
+            id: routingDecisionId,
+            task: taskSummary,
+            chosen: recommendation.chosen,
+            confidence: recommendation.confidence,
+            alternative: recommendation.alternativeConsidered || 'None',
+            reasoning: recommendation.reasoning
+          }
+        });
+      }
 
       const geminiClient = getGeminiClient();
       if (!geminiClient) {
@@ -900,8 +939,13 @@ Let me start with the analysis...
       });
 
       // Track successful outcome
-      if (typeof (_event as any)._trackOutcome === 'function') {
-        (_event as any)._trackOutcome(true);
+      if (routingDecisionId) {
+        const duration = Date.now() - startTime;
+        const decisionLogger = getDecisionLogger();
+        decisionLogger.logOutcome(routingDecisionId, {
+          success: true,
+          duration
+        });
       }
 
       return {
@@ -914,8 +958,14 @@ Let me start with the analysis...
       console.error('Error in chat-primary:', error);
       
       // Track failed outcome
-      if (typeof (_event as any)._trackOutcome === 'function') {
-        (_event as any)._trackOutcome(false, error instanceof Error ? error.message : 'Unknown error');
+      if (routingDecisionId) {
+        const duration = Date.now() - startTime;
+        const decisionLogger = getDecisionLogger();
+        decisionLogger.logOutcome(routingDecisionId, {
+          success: false,
+          duration,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
       
       // Signal error
