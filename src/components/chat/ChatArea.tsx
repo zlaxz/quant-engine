@@ -1076,7 +1076,7 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
               );
             })}
 
-            {/* Persistent Tool Execution Log - Horizontal Swimlane */}
+            {/* Persistent Tool Execution Log - Horizontal Swimlane (only when not loading to avoid duplication) */}
             {operationCards.length > 0 && !isLoading && (
               <div className="my-6 bg-card/50 rounded-lg border p-3">
                 <div className="flex items-center gap-2 mb-3">
@@ -1150,7 +1150,8 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                   
                   {/* Decision Card */}
                   {decisionCard && (
-                    <DecisionCard
+                    <ErrorBoundary>
+                      <DecisionCard
                       decision={decisionCard}
                       onProceed={() => setDecisionCard(null)}
                       onOverride={async (alternative) => {
@@ -1180,11 +1181,13 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                       }}
                       className="mb-4"
                     />
+                    </ErrorBoundary>
                   )}
 
                   {/* Progress Panel */}
                   {progressPanel && (
-                    <ClaudeCodeProgressPanel
+                    <ErrorBoundary>
+                      <ClaudeCodeProgressPanel
                       data={progressPanel}
                       onCancel={async () => {
                         if (window.electron?.cancelClaudeCode) {
@@ -1193,6 +1196,7 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                       }}
                       className="mb-4"
                     />
+                    </ErrorBoundary>
                   )}
 
                   {/* Evidence Chain */}
@@ -1303,8 +1307,8 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                     />
                   )}
                   
-                  {/* Operation Cards - Persistent visual audit trail */}
-                  {operationCards.length > 0 && (
+                  {/* Operation Cards - Only show during loading (embedded), not after (swimlane shows them) */}
+                  {isLoading && operationCards.length > 0 && (
                     <div className="space-y-3 mb-4">
                       <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
                         <span>Tool Executions</span>
