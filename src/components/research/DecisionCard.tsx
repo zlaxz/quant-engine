@@ -53,13 +53,9 @@ export function DecisionCard({ decision, onProceed, onOverride, className }: Dec
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h4 className="font-semibold text-sm">Routing Decision</h4>
-              <Badge 
-                variant="secondary" 
-                className={cn(
-                  'text-xs',
-                  `bg-${confidenceColor}-100 dark:bg-${confidenceColor}-900/30`,
-                  `text-${confidenceColor}-700 dark:text-${confidenceColor}-300`
-                )}
+              <Badge
+                variant="secondary"
+                className={cn('text-xs', confidenceStyles[decision.confidence])}
               >
                 {decision.confidence} Confidence
               </Badge>

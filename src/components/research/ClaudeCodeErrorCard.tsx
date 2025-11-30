@@ -30,15 +30,13 @@ interface ClaudeCodeErrorCardProps {
   className?: string;
 }
 
-function getErrorColor(type: ClaudeCodeError['type']): string {
-  switch (type) {
-    case 'timeout': return 'yellow';
-    case 'syntax': return 'orange';
-    case 'runtime': return 'red';
-    case 'spawn': return 'purple';
-    default: return 'gray';
-  }
-}
+const errorStyles = {
+  timeout: { border: 'border-l-yellow-500', bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-600 dark:text-yellow-400', icon: 'text-yellow-600 dark:text-yellow-400' },
+  syntax: { border: 'border-l-orange-500', bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-600 dark:text-orange-400', icon: 'text-orange-600 dark:text-orange-400' },
+  runtime: { border: 'border-l-red-500', bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-600 dark:text-red-400', icon: 'text-red-600 dark:text-red-400' },
+  spawn: { border: 'border-l-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-600 dark:text-purple-400', icon: 'text-purple-600 dark:text-purple-400' },
+  unknown: { border: 'border-l-gray-500', bg: 'bg-gray-100 dark:bg-gray-900/30', text: 'text-gray-600 dark:text-gray-400', icon: 'text-gray-600 dark:text-gray-400' }
+} as const;
 
 function parseErrorType(stderr: string, exitCode: number | undefined): ClaudeCodeError['type'] {
   if (stderr.includes('timeout') || stderr.includes('SIGTERM')) return 'timeout';
@@ -74,7 +72,7 @@ function generateSuggestion(type: ClaudeCodeError['type'], stderr: string): stri
 
 export function ClaudeCodeErrorCard({ error, onRetry, className }: ClaudeCodeErrorCardProps) {
   const [showDetails, setShowDetails] = useState(false);
-  const colorClass = getErrorColor(error.type);
+  const colorClass = errorStyles[error.type];
 
   return (
     <Card className={cn(
