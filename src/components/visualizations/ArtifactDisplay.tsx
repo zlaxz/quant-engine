@@ -20,6 +20,7 @@ const artifactIcons = {
   configuration: Settings,
   research_report: FileText,
   analysis_script: Code,
+  claude_code_result: FileCode,
 };
 
 const artifactLabels = {
@@ -27,6 +28,7 @@ const artifactLabels = {
   configuration: 'Configuration',
   research_report: 'Research Report',
   analysis_script: 'Analysis Script',
+  claude_code_result: 'Claude Code Result',
 };
 
 export const ArtifactDisplay = ({ artifact, onClose }: ArtifactDisplayProps) => {
