@@ -241,6 +241,8 @@ const ChatAreaComponent = () => {
       error?: string;
       timestamp: number;
       duration?: number;
+      whyThis?: string;
+      whatFound?: string;
     }) => {
       if (event.type === 'tool-start') {
         // Add new tool call to tree
@@ -252,13 +254,14 @@ const ChatAreaComponent = () => {
         };
         setToolCallTree(prev => [...prev, newCall]);
 
-        // Add placeholder operation card
+        // Add placeholder operation card with whyThis marker
         const newCard: OperationCardData = {
           id: `${event.tool}-${event.timestamp}`,
           tool: event.tool,
           args: event.args,
           timestamp: event.timestamp,
           success: false, // Pending
+          whyThis: event.whyThis
         };
         setOperationCards(prev => [...prev, newCard]);
       } else if (event.type === 'tool-complete' || event.type === 'tool-error') {
@@ -276,7 +279,7 @@ const ChatAreaComponent = () => {
           return call;
         }));
 
-        // Update operation card with result
+        // Update operation card with result + whatFound marker
         setOperationCards(prev => prev.map(card => {
           if (card.tool === event.tool && Math.abs(card.timestamp - event.timestamp) < 100) {
             return {
@@ -284,7 +287,8 @@ const ChatAreaComponent = () => {
               result: event.result,
               error: event.error,
               duration: event.duration,
-              success: event.type === 'tool-complete'
+              success: event.type === 'tool-complete',
+              whatFound: event.whatFound
             };
           }
           return card;

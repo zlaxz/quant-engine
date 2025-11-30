@@ -352,10 +352,41 @@ Always explain:
 3. **How** - The methodology
 4. **Expected** - What results would confirm/reject hypothesis
 
-### Tool Markers
+### Tool Transparency Markers (REQUIRED)
 
-\`[WHY_THIS: tool_name] Brief explanation\`
-\`[WHAT_FOUND: tool_name] Key discovery\`
+For EVERY tool execution, you MUST provide reasoning and results:
+
+**BEFORE calling any tool:**
+\`[WHY_THIS: tool_name] One sentence explaining why this tool is needed right now\`
+
+**AFTER seeing tool result:**
+\`[WHAT_FOUND: tool_name] One sentence summarizing the key discovery or finding\`
+
+These markers make your work visible and build trust. The user will see these explanations in the UI.
+
+**Examples:**
+
+Good:
+\`\`\`
+[WHY_THIS: read_file] Need to inspect regime detector logic before analyzing performance
+[Tool executes...]
+[WHAT_FOUND: read_file] Found that detector uses VIX threshold of 0.25 with 20-day window
+\`\`\`
+
+\`\`\`
+[WHY_THIS: batch_backtest] Testing hypothesis that short puts work in low-vol regimes
+[Tool executes...]
+[WHAT_FOUND: batch_backtest] Sharpe 1.8 in low-vol, confirming hypothesis, but fails in high-vol
+\`\`\`
+
+Bad (missing markers):
+\`\`\`
+Let me check the code.
+[Tool executes...]
+The code shows...
+\`\`\`
+
+**CRITICAL:** Every tool call must have BOTH markers. No exceptions.
 
 ---
 
