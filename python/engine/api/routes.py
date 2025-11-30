@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Any
 from ..analysis.regime_engine import RegimeEngine
 from ..trading.simulator import TradeSimulator
 from ..data.loaders import load_spy_data
+from ..core.plugin_loader import get_registry, reload_plugins
 
 
 # Strategy definitions (would be in database in production)
@@ -301,6 +302,104 @@ class QuantEngineAPI:
             'count': len(strategies)
         }
 
+    def get_discovery_matrix(self) -> Dict[str, Any]:
+        """
+        Get the Discovery Matrix - coverage of strategies across regimes.
+
+        Endpoint: GET /discovery
+
+        Returns a matrix showing which strategies are optimal for each regime,
+        plus coverage statistics.
+
+        Returns:
+            {
+                'success': True,
+                'matrix': {
+                    'BULL_QUIET': ['profile_2', 'profile_4', 'profile_6'],
+                    'BEAR_VOL': ['profile_1', 'profile_5'],
+                    ...
+                },
+                'coverage': {
+                    'total_regimes': 8,
+                    'covered_regimes': 7,
+                    'coverage_pct': 87.5
+                },
+                'strategy_reach': {
+                    'profile_1': ['BEAR_VOL', 'VOL_EXPANSION'],
+                    ...
+                }
+            }
+        """
+        # Build regime -> strategies mapping
+        regime_strategies = {}
+        for regime in REGIME_DESCRIPTIONS.keys():
+            regime_strategies[regime] = []
+
+        # Populate from strategy catalog
+        for strategy_id, strategy in STRATEGY_CATALOG.items():
+            for regime in strategy.get('optimal_regimes', []):
+                if regime in regime_strategies:
+                    regime_strategies[regime].append({
+                        'id': strategy_id,
+                        'name': strategy['name'],
+                        'risk_level': strategy['risk_level']
+                    })
+
+        # Build strategy -> regimes mapping (inverse)
+        strategy_reach = {}
+        for strategy_id, strategy in STRATEGY_CATALOG.items():
+            strategy_reach[strategy_id] = {
+                'name': strategy['name'],
+                'optimal_regimes': strategy.get('optimal_regimes', []),
+                'regime_count': len(strategy.get('optimal_regimes', []))
+            }
+
+        # Calculate coverage statistics
+        total_regimes = len(REGIME_DESCRIPTIONS)
+        covered_regimes = sum(1 for strategies in regime_strategies.values() if strategies)
+        coverage_pct = (covered_regimes / total_regimes * 100) if total_regimes > 0 else 0
+
+        # Find coverage gaps (regimes with no optimal strategies)
+        coverage_gaps = [
+            regime for regime, strategies in regime_strategies.items()
+            if not strategies
+        ]
+
+        # Calculate regime risk distribution
+        regime_risk_profile = {}
+        for regime, strategies in regime_strategies.items():
+            if strategies:
+                risk_levels = [s['risk_level'] for s in strategies]
+                regime_risk_profile[regime] = {
+                    'strategy_count': len(strategies),
+                    'dominant_risk': max(set(risk_levels), key=risk_levels.count) if risk_levels else 'unknown',
+                    'risk_distribution': {
+                        'low': risk_levels.count('low'),
+                        'medium': risk_levels.count('medium'),
+                        'high': risk_levels.count('high')
+                    }
+                }
+            else:
+                regime_risk_profile[regime] = {
+                    'strategy_count': 0,
+                    'dominant_risk': 'none',
+                    'risk_distribution': {'low': 0, 'medium': 0, 'high': 0}
+                }
+
+        return {
+            'success': True,
+            'matrix': regime_strategies,
+            'coverage': {
+                'total_regimes': total_regimes,
+                'covered_regimes': covered_regimes,
+                'coverage_pct': round(coverage_pct, 1),
+                'gaps': coverage_gaps
+            },
+            'strategy_reach': strategy_reach,
+            'regime_risk_profile': regime_risk_profile,
+            'regime_descriptions': REGIME_DESCRIPTIONS
+        }
+
     def run_simulation(
         self,
         scenario: Dict[str, Any]
@@ -555,6 +654,138 @@ class QuantEngineAPI:
                 'success': False,
                 'error': str(e)
             }
+
+    def run_plugin(
+        self,
+        plugin_name: str,
+        params: Optional[Dict[str, Any]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Execute a dynamically loaded plugin.
+
+        Endpoint: GET /analysis/<plugin_name>
+
+        Query params:
+            - start_date: YYYY-MM-DD (optional, defaults to 90 days ago)
+            - end_date: YYYY-MM-DD (optional, defaults to today)
+            - Any plugin-specific params
+
+        Returns:
+            {
+                'success': True,
+                'plugin': 'volatility_analyzer',
+                'result': { ... plugin output ... }
+            }
+        """
+        try:
+            # Get plugin from registry
+            registry = get_registry()
+            plugin = registry.get(plugin_name)
+
+            if plugin is None:
+                available = [p['name'] for p in registry.list_plugins()]
+                return {
+                    'success': False,
+                    'error': f'Plugin not found: {plugin_name}',
+                    'available_plugins': available
+                }
+
+            # Get data for plugin
+            spy_df = self._get_spy_data()
+
+            # Filter date range if provided
+            if start_date or end_date:
+                if start_date:
+                    start = datetime.strptime(start_date, '%Y-%m-%d').date()
+                else:
+                    start = (datetime.now() - timedelta(days=90)).date()
+
+                if end_date:
+                    end = datetime.strptime(end_date, '%Y-%m-%d').date()
+                else:
+                    end = datetime.now().date()
+
+                spy_df = spy_df[(spy_df['date'] >= start) & (spy_df['date'] <= end)].copy()
+
+            if len(spy_df) == 0:
+                return {
+                    'success': False,
+                    'error': 'No data available for specified date range'
+                }
+
+            # Validate data meets plugin requirements
+            plugin.validate_data(spy_df)
+
+            # Execute plugin
+            result = plugin.run(spy_df, params or {})
+
+            return {
+                'success': True,
+                'plugin': plugin_name,
+                'version': plugin.version,
+                'data_points': len(spy_df),
+                'result': result
+            }
+
+        except ValueError as e:
+            return {
+                'success': False,
+                'error': f'Validation error: {str(e)}'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Plugin error: {str(e)}'
+            }
+
+    def list_plugins(self) -> Dict[str, Any]:
+        """
+        List all available plugins.
+
+        Endpoint: GET /plugins
+
+        Returns:
+            {
+                'success': True,
+                'plugins': [
+                    {'name': 'vol_analyzer', 'description': '...', 'version': '1.0.0'},
+                    ...
+                ],
+                'count': 3
+            }
+        """
+        registry = get_registry()
+        plugins = registry.list_plugins()
+        errors = registry.get_errors()
+
+        return {
+            'success': True,
+            'plugins': plugins,
+            'count': len(plugins),
+            'load_errors': errors if errors else None
+        }
+
+    def reload_plugins(self) -> Dict[str, Any]:
+        """
+        Hot reload all plugins from disk.
+
+        Endpoint: POST /plugins/reload
+
+        Returns:
+            {
+                'success': True,
+                'loaded': ['plugin1', 'plugin2'],
+                'errors': {...},
+                'total': 2
+            }
+        """
+        result = reload_plugins()
+        return {
+            'success': True,
+            **result
+        }
 
 
 # Singleton instance for server use

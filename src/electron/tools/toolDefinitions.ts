@@ -135,6 +135,28 @@ export const PYTHON_TOOLS: FunctionDeclaration[] = [
       },
       required: ['script_path']
     }
+  },
+  {
+    name: 'manage_environment',
+    description: 'Manage Python packages for the quant engine. Install, uninstall, or check packages from PyPI. Only standard PyPI package names allowed (no URLs, git repos, or local paths). Updates requirements.txt automatically on install.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        action: {
+          type: SchemaType.STRING,
+          description: 'Action to perform: "install", "uninstall", "check", "list", or "sync" (install all from requirements.txt)'
+        },
+        package: {
+          type: SchemaType.STRING,
+          description: 'Package name with optional version specifier (e.g., "scipy", "pandas>=2.0.0", "scikit-learn[dev]"). Required for install/uninstall/check.'
+        },
+        upgrade: {
+          type: SchemaType.BOOLEAN,
+          description: 'If true, upgrade existing package to latest version (only for install action)'
+        }
+      },
+      required: ['action']
+    }
   }
 ];
 

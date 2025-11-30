@@ -1,309 +1,313 @@
 #!/usr/bin/env python3
 """
-Quant Engine HTTP Server
-========================
-Unified HTTP API for the rotation-engine backtesting system.
+Quant Engine HTTP Server (Flask)
+================================
+RESTful API for the rotation-engine backtesting system.
 
 Usage:
-    python -m python.server
-    # or from python/ directory:
+    cd python/
     python server.py
+    # or: flask run --port 5000
 
 Endpoints:
-    GET  /health              - Health check
-    GET  /regimes             - Get regime heatmap (query: start_date, end_date)
-    POST /regimes             - Get regime classification (legacy)
+    GET  /health              - Health check and version
+    GET  /regimes             - Regime heatmap (query: start_date, end_date)
+    POST /backtest            - Run a backtest
     GET  /strategies          - List all strategies
     GET  /strategies/<id>     - Get strategy card
-    POST /backtest            - Run a backtest
+    GET  /discovery           - Discovery matrix (strategies x regimes)
     POST /simulate            - Run scenario simulation
 """
 
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
-import json
 import os
-import re
-from datetime import datetime
+from datetime import datetime, timedelta
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 
-# Import from unified engine package
-from engine.api.routes import get_api, QuantEngineAPI
+# Import business logic from routes module
+from engine.api.routes import get_api, STRATEGY_CATALOG, REGIME_DESCRIPTIONS
+
+# Create Flask app
+app = Flask(__name__)
+
+# Enable CORS for React frontend
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Engine version
+ENGINE_VERSION = "2.2.0"
 
 
-class QuantEngineHandler(BaseHTTPRequestHandler):
-    """HTTP request handler for quant engine API."""
+# =============================================================================
+# ENDPOINTS
+# =============================================================================
 
-    # Strategy ID pattern: /strategies/profile_1, /strategies/profile_2, etc.
-    STRATEGY_PATTERN = re.compile(r'^/strategies/([a-zA-Z0-9_-]+)$')
+@app.route('/health', methods=['GET', 'POST'])
+def health():
+    """Health check endpoint."""
+    return jsonify({
+        'status': 'healthy',
+        'engine': 'quant-engine',
+        'version': ENGINE_VERSION,
+        'timestamp': datetime.utcnow().isoformat(),
+        'endpoints': [
+            'GET  /health',
+            'GET  /regimes?start_date=&end_date=',
+            'POST /backtest',
+            'GET  /strategies',
+            'GET  /strategies/<id>',
+            'GET  /discovery',
+            'POST /simulate',
+            'GET  /plugins',
+            'POST /plugins/reload',
+            'GET  /analysis/<plugin_name>'
+        ]
+    })
 
-    def __init__(self, *args, **kwargs):
-        self.api: QuantEngineAPI = get_api()
-        super().__init__(*args, **kwargs)
 
-    def do_POST(self):
-        """Handle POST requests."""
-        path = urlparse(self.path).path
+@app.route('/regimes', methods=['GET'])
+def get_regimes():
+    """
+    GET /regimes - Regime heatmap with query params.
 
-        if path == '/backtest':
-            self._handle_backtest()
-        elif path == '/regimes':
-            self._handle_regimes_post()
-        elif path == '/simulate':
-            self._handle_simulate()
-        elif path == '/health':
-            self._handle_health()
-        else:
-            self._send_json_response({'error': 'Not found'}, 404)
+    Query params:
+        start_date: YYYY-MM-DD (default: 30 days ago)
+        end_date: YYYY-MM-DD (default: today)
+    """
+    today = datetime.now()
+    default_start = (today - timedelta(days=30)).strftime('%Y-%m-%d')
+    default_end = today.strftime('%Y-%m-%d')
 
-    def do_GET(self):
-        """Handle GET requests."""
-        parsed = urlparse(self.path)
-        path = parsed.path
-        query = parse_qs(parsed.query)
+    start_date = request.args.get('start_date', default_start)
+    end_date = request.args.get('end_date', default_end)
 
-        if path == '/health':
-            self._handle_health()
-        elif path == '/regimes':
-            self._handle_regimes_get(query)
-        elif path == '/strategies':
-            self._handle_strategies_list()
-        elif self.STRATEGY_PATTERN.match(path):
-            match = self.STRATEGY_PATTERN.match(path)
-            strategy_id = match.group(1)
-            self._handle_strategy_card(strategy_id)
-        else:
-            self._send_json_response({'error': 'Not found'}, 404)
+    print(f"[Regimes GET] {start_date} to {end_date}")
 
-    def do_OPTIONS(self):
-        """Handle CORS preflight."""
-        self.send_response(200)
-        self._send_cors_headers()
-        self.end_headers()
+    api = get_api()
+    result = api.get_regime_heatmap(start_date, end_date)
 
-    def _send_cors_headers(self):
-        """Add CORS headers to response."""
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+    if result.get('success'):
+        return jsonify(result)
+    else:
+        return jsonify(result), 400
 
-    def _send_json_response(self, data: dict, status: int = 200):
-        """Send JSON response with proper headers."""
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json')
-        self._send_cors_headers()
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
 
-    def _read_json_body(self) -> dict:
-        """Read and parse JSON request body."""
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length)
-        return json.loads(body) if body else {}
+@app.route('/backtest', methods=['POST'])
+def run_backtest():
+    """
+    POST /backtest - Run strategy backtest.
 
-    # ==================== ENDPOINT HANDLERS ====================
+    Request body:
+        {
+            "strategy_key": "profile_1",
+            "params": {
+                "startDate": "2023-01-01",
+                "endDate": "2023-12-31",
+                "capital": 100000
+            }
+        }
+    """
+    try:
+        data = request.get_json() or {}
+        print(f"[Backtest] Received request: {data.get('strategy_key', 'unknown')}")
 
-    def _handle_health(self):
-        """Health check endpoint."""
-        self._send_json_response({
-            'status': 'healthy',
-            'engine': 'quant-engine',
-            'version': '2.1.0',
-            'timestamp': datetime.utcnow().isoformat(),
-            'endpoints': [
-                'GET  /health',
-                'GET  /regimes?start_date=&end_date=',
-                'POST /regimes',
-                'GET  /strategies',
-                'GET  /strategies/<id>',
-                'POST /backtest',
-                'POST /simulate'
-            ]
-        })
+        strategy_key = data.get('strategy_key', 'profile_1')
+        params = data.get('params', {})
+        start_date = params.get('startDate', '2023-01-01')
+        end_date = params.get('endDate', '2023-12-31')
+        capital = params.get('capital', 100000)
 
-    def _handle_regimes_get(self, query: dict):
-        """
-        GET /regimes - Regime heatmap with query params.
-
-        Query params:
-            start_date: YYYY-MM-DD (default: 30 days ago)
-            end_date: YYYY-MM-DD (default: today)
-        """
-        # Extract query params with defaults
-        today = datetime.now()
-        default_start = (today - timedelta(days=30)).strftime('%Y-%m-%d')
-        default_end = today.strftime('%Y-%m-%d')
-
-        start_date = query.get('start_date', [default_start])[0]
-        end_date = query.get('end_date', [default_end])[0]
-
-        print(f"[Regimes GET] {start_date} to {end_date}")
-
-        result = self.api.get_regime_heatmap(start_date, end_date)
+        api = get_api()
+        result = api.run_backtest(strategy_key, start_date, end_date, capital)
 
         if result.get('success'):
-            self._send_json_response(result)
+            print("[Backtest] Completed successfully")
+            return jsonify(result)
         else:
-            self._send_json_response(result, 400)
+            return jsonify(result), 400
 
-    def _handle_regimes_post(self):
-        """
-        POST /regimes - Legacy regime classification endpoint.
+    except Exception as e:
+        print(f"[Backtest] Error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-        Request body:
-            {
-                "start_date": "2023-01-01",
-                "end_date": "2023-12-31"
+
+@app.route('/strategies', methods=['GET'])
+def list_strategies():
+    """GET /strategies - List all available strategies."""
+    print("[Strategies] Listing all strategies")
+    api = get_api()
+    result = api.list_strategies()
+    return jsonify(result)
+
+
+@app.route('/strategies/<strategy_id>', methods=['GET'])
+def get_strategy(strategy_id):
+    """GET /strategies/<id> - Get strategy card with details."""
+    print(f"[Strategy] Getting card for: {strategy_id}")
+    api = get_api()
+    result = api.get_strategy_card(strategy_id)
+
+    if result.get('success'):
+        return jsonify(result)
+    else:
+        return jsonify(result), 404
+
+
+@app.route('/discovery', methods=['GET'])
+def get_discovery():
+    """
+    GET /discovery - Discovery Matrix.
+
+    Returns a matrix showing which strategies are optimal for each regime,
+    providing coverage analysis across all market states.
+    """
+    print("[Discovery] Generating discovery matrix")
+    api = get_api()
+    result = api.get_discovery_matrix()
+    return jsonify(result)
+
+
+@app.route('/simulate', methods=['POST'])
+def run_simulation():
+    """
+    POST /simulate - Run scenario simulation.
+
+    Request body:
+        {
+            "scenario": "vix_shock",
+            "params": {
+                "vix_increase": 50
+            },
+            "portfolio": {
+                "profile_1": 0.15,
+                "profile_2": 0.25
             }
-        """
-        try:
-            request = self._read_json_body()
-            start_date = request.get('start_date', '2023-01-01')
-            end_date = request.get('end_date', '2023-12-31')
+        }
 
-            print(f"[Regimes POST] {start_date} to {end_date}")
+    Supported scenarios:
+        - vix_shock: Simulate VIX spike
+        - price_drop: Simulate market crash
+        - vol_crush: Simulate volatility collapse
+    """
+    try:
+        data = request.get_json() or {}
+        print(f"[Simulate] Scenario: {data.get('scenario', 'unknown')}")
 
-            result = self.api.get_regime_heatmap(start_date, end_date)
-
-            if result.get('success'):
-                self._send_json_response(result)
-            else:
-                self._send_json_response(result, 400)
-
-        except Exception as e:
-            print(f"[Regimes] Error: {e}")
-            self._send_json_response({'success': False, 'error': str(e)}, 500)
-
-    def _handle_strategies_list(self):
-        """
-        GET /strategies - List all available strategies.
-        """
-        print("[Strategies] Listing all strategies")
-        result = self.api.list_strategies()
-        self._send_json_response(result)
-
-    def _handle_strategy_card(self, strategy_id: str):
-        """
-        GET /strategies/<id> - Get strategy card with details.
-        """
-        print(f"[Strategy] Getting card for: {strategy_id}")
-        result = self.api.get_strategy_card(strategy_id)
+        api = get_api()
+        result = api.run_simulation(data)
 
         if result.get('success'):
-            self._send_json_response(result)
+            return jsonify(result)
         else:
-            self._send_json_response(result, 404)
+            return jsonify(result), 400
 
-    def _handle_backtest(self):
-        """
-        POST /backtest - Run strategy backtest.
+    except Exception as e:
+        print(f"[Simulate] Error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-        Request body:
-            {
-                "strategy_key": "profile_1",
-                "params": {
-                    "startDate": "2023-01-01",
-                    "endDate": "2023-12-31",
-                    "capital": 100000
-                }
-            }
-        """
+
+# =============================================================================
+# PLUGIN ENDPOINTS
+# =============================================================================
+
+@app.route('/plugins', methods=['GET'])
+def list_plugins():
+    """
+    GET /plugins - List all available analysis plugins.
+
+    Returns all dynamically loaded QuantModule plugins with their metadata.
+    """
+    print("[Plugins] Listing available plugins")
+    api = get_api()
+    result = api.list_plugins()
+    return jsonify(result)
+
+
+@app.route('/plugins/reload', methods=['POST'])
+def reload_plugins():
+    """
+    POST /plugins/reload - Hot reload plugins from disk.
+
+    Scans engine/plugins/ directory and reloads all QuantModule implementations.
+    Use this after adding or modifying plugins without restarting the server.
+    """
+    print("[Plugins] Hot reloading plugins from disk")
+    api = get_api()
+    result = api.reload_plugins()
+    return jsonify(result)
+
+
+@app.route('/analysis/<plugin_name>', methods=['GET'])
+def run_analysis(plugin_name):
+    """
+    GET /analysis/<plugin_name> - Execute a dynamically loaded plugin.
+
+    Query params:
+        start_date: YYYY-MM-DD (optional, defaults to 90 days ago)
+        end_date: YYYY-MM-DD (optional, defaults to today)
+        ... any plugin-specific parameters
+
+    Example:
+        GET /analysis/volatility_analyzer?start_date=2024-01-01&end_date=2024-03-01&window=20
+    """
+    print(f"[Analysis] Running plugin: {plugin_name}")
+
+    # Extract query params
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    # Collect all other params for the plugin
+    params = {k: v for k, v in request.args.items()
+              if k not in ['start_date', 'end_date']}
+
+    # Convert numeric params
+    for key, value in params.items():
         try:
-            request = self._read_json_body()
-            print(f"[Backtest] Received request: {request.get('strategy_key', 'unknown')}")
-
-            # Extract parameters
-            strategy_key = request.get('strategy_key', 'profile_1')
-            params = request.get('params', {})
-            start_date = params.get('startDate', '2023-01-01')
-            end_date = params.get('endDate', '2023-12-31')
-            capital = params.get('capital', 100000)
-
-            result = self.api.run_backtest(strategy_key, start_date, end_date, capital)
-
-            if result.get('success'):
-                self._send_json_response(result)
-                print(f"[Backtest] Completed successfully")
+            if '.' in value:
+                params[key] = float(value)
             else:
-                self._send_json_response(result, 400)
+                params[key] = int(value)
+        except (ValueError, TypeError):
+            pass  # Keep as string
 
-        except Exception as e:
-            print(f"[Backtest] Error: {e}")
-            self._send_json_response({'success': False, 'error': str(e)}, 500)
+    api = get_api()
+    result = api.run_plugin(plugin_name, params, start_date, end_date)
 
-    def _handle_simulate(self):
-        """
-        POST /simulate - Run scenario simulation.
-
-        Request body:
-            {
-                "scenario": "vix_shock",
-                "params": {
-                    "vix_increase": 50
-                },
-                "portfolio": {
-                    "profile_1": 0.15,
-                    "profile_2": 0.25
-                }
-            }
-
-        Supported scenarios:
-            - vix_shock: Simulate VIX spike
-            - price_drop: Simulate market crash
-            - vol_crush: Simulate volatility collapse
-        """
-        try:
-            request = self._read_json_body()
-            print(f"[Simulate] Scenario: {request.get('scenario', 'unknown')}")
-
-            result = self.api.run_simulation(request)
-
-            if result.get('success'):
-                self._send_json_response(result)
-            else:
-                self._send_json_response(result, 400)
-
-        except Exception as e:
-            print(f"[Simulate] Error: {e}")
-            self._send_json_response({'success': False, 'error': str(e)}, 500)
-
-    def log_message(self, format, *args):
-        """Suppress default HTTP logging."""
-        pass
+    if result.get('success'):
+        return jsonify(result)
+    else:
+        return jsonify(result), 404 if 'not found' in str(result.get('error', '')).lower() else 400
 
 
-# Import timedelta for default date calculation
-from datetime import timedelta
+# =============================================================================
+# MAIN
+# =============================================================================
 
-
-def run_server(port: int = 5000):
-    """Start the quant engine HTTP server."""
-    server_address = ('', port)
-    httpd = HTTPServer(server_address, QuantEngineHandler)
-
+def run_server(port: int = 5001, debug: bool = False):
+    """Start the quant engine Flask server."""
     print("=" * 60)
-    print("Quant Engine HTTP Server v2.1")
+    print(f"Quant Engine HTTP Server v{ENGINE_VERSION}")
     print("=" * 60)
     print(f"Listening on http://localhost:{port}")
     print(f"Working directory: {os.getcwd()}")
     print("\nEndpoints:")
-    print("  GET  /health                     - Health check")
+    print("  GET  /health                        - Health check")
     print("  GET  /regimes?start_date=&end_date= - Regime heatmap")
-    print("  POST /regimes                    - Regime classification (legacy)")
-    print("  GET  /strategies                 - List all strategies")
-    print("  GET  /strategies/<id>            - Get strategy card")
-    print("  POST /backtest                   - Run backtest")
-    print("  POST /simulate                   - Run scenario simulation")
+    print("  POST /backtest                      - Run backtest")
+    print("  GET  /strategies                    - List all strategies")
+    print("  GET  /strategies/<id>               - Get strategy card")
+    print("  GET  /discovery                     - Discovery matrix")
+    print("  POST /simulate                      - Run scenario simulation")
+    print("\nPlugin System:")
+    print("  GET  /plugins                       - List available plugins")
+    print("  POST /plugins/reload                - Hot reload plugins")
+    print("  GET  /analysis/<name>               - Run analysis plugin")
     print("\nScenarios for /simulate:")
     print("  - vix_shock: params.vix_increase (percentage)")
     print("  - price_drop: params.drop_pct (percentage)")
     print("  - vol_crush: params.vol_drop (percentage)")
     print("\nPress Ctrl+C to stop\n")
 
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\nShutting down server...")
-        httpd.shutdown()
+    app.run(host='0.0.0.0', port=port, debug=debug)
 
 
 if __name__ == '__main__':

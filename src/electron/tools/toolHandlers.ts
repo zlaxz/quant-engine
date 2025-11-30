@@ -5,10 +5,11 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec, spawn } from 'child_process';
+import { exec, spawn, spawnSync } from 'child_process';
 import { promisify } from 'util';
 import { glob } from 'glob';
 import OpenAI from 'openai';
+import { app } from 'electron';
 import * as FileOps from './fileOperations';
 
 const execAsync = promisify(exec);
@@ -66,7 +67,6 @@ function getAppRoot(): string {
   if (process.env.NODE_ENV === 'development') {
     return process.cwd();
   }
-  const { app } = require('electron');
   return path.join(app.getPath('userData'), '..', '..', '..');
 }
 
@@ -275,6 +275,153 @@ export async function runPythonScript(
         duration,
         status: 'failed'
       }
+    };
+  }
+}
+
+// ==================== ENVIRONMENT MANAGEMENT ====================
+
+/**
+ * Manage Python packages for the quant engine.
+ * Uses the secure package_manager.py script to install/uninstall/check packages.
+ * Only allows standard PyPI packages (no URLs, git repos, or local paths).
+ */
+export async function manageEnvironment(
+  action: 'install' | 'uninstall' | 'check' | 'list' | 'sync',
+  packageName?: string,
+  upgrade?: boolean
+): Promise<ToolResult> {
+  const startTime = Date.now();
+
+  try {
+    const root = getEngineRoot();
+    const scriptPath = path.join(root, 'utils', 'package_manager.py');
+
+    // Verify script exists
+    if (!fs.existsSync(scriptPath)) {
+      return {
+        success: false,
+        content: '',
+        error: `Package manager script not found at ${scriptPath}`
+      };
+    }
+
+    // Validate action
+    const validActions = ['install', 'uninstall', 'check', 'list', 'sync'];
+    if (!validActions.includes(action)) {
+      return {
+        success: false,
+        content: '',
+        error: `Invalid action: ${action}. Must be one of: ${validActions.join(', ')}`
+      };
+    }
+
+    // Package name required for install/uninstall/check
+    if (['install', 'uninstall', 'check'].includes(action) && !packageName) {
+      return {
+        success: false,
+        content: '',
+        error: `Package name required for ${action} action`
+      };
+    }
+
+    // Build command arguments
+    const args = ['python3', scriptPath, action];
+    if (packageName) {
+      args.push(packageName);
+    }
+    if (upgrade && action === 'install') {
+      args.push('--upgrade');
+    }
+
+    safeLog(`[ManageEnvironment] Running: ${args.join(' ')}`);
+
+    // Execute the package manager script
+    const { stdout, stderr } = await execWithTimeout(args.join(' '), {
+      cwd: root,
+      timeout: 300000 // 5 minute timeout for package operations
+    });
+
+    const elapsed = Date.now() - startTime;
+
+    // Parse JSON output from the script
+    try {
+      const result = JSON.parse(stdout);
+
+      // Format human-readable output
+      let formattedContent = '';
+
+      if (action === 'install') {
+        if (result.success) {
+          formattedContent = `✅ Package "${packageName}" installed successfully`;
+          if (result.requirements_updated) {
+            formattedContent += '\n   (requirements.txt updated)';
+          }
+          if (result.warning) {
+            formattedContent += `\n   ⚠️ ${result.warning}`;
+          }
+        } else {
+          formattedContent = `❌ Failed to install "${packageName}": ${result.error}`;
+        }
+      } else if (action === 'uninstall') {
+        if (result.success) {
+          formattedContent = `✅ Package "${packageName}" uninstalled`;
+        } else {
+          formattedContent = `❌ Failed to uninstall: ${result.error}`;
+        }
+      } else if (action === 'check') {
+        if (result.installed) {
+          formattedContent = `✅ ${packageName} v${result.version} is installed`;
+          if (result.location) {
+            formattedContent += `\n   Location: ${result.location}`;
+          }
+        } else {
+          formattedContent = `❌ ${packageName} is NOT installed`;
+        }
+      } else if (action === 'list') {
+        if (result.success) {
+          formattedContent = `Installed packages (${result.count}):\n`;
+          const pkgs = result.packages.slice(0, 50); // Limit display
+          formattedContent += pkgs.map((p: any) => `  • ${p.name} v${p.version}`).join('\n');
+          if (result.count > 50) {
+            formattedContent += `\n  ... and ${result.count - 50} more`;
+          }
+        } else {
+          formattedContent = `❌ Failed to list packages: ${result.error}`;
+        }
+      } else if (action === 'sync') {
+        if (result.success) {
+          formattedContent = `✅ Requirements sync complete\n   ${result.packages_installed} package(s) installed`;
+        } else {
+          formattedContent = `❌ Sync failed: ${result.stderr}`;
+        }
+      }
+
+      return {
+        success: result.success !== false,
+        content: formattedContent,
+        metadata: {
+          action,
+          package: packageName,
+          elapsed,
+          result
+        }
+      };
+    } catch {
+      // If stdout isn't JSON, return raw output
+      return {
+        success: true,
+        content: stdout || stderr,
+        metadata: { action, package: packageName, elapsed }
+      };
+    }
+  } catch (error: any) {
+    const elapsed = Date.now() - startTime;
+    return {
+      success: false,
+      content: '',
+      error: `Package operation failed: ${error.message}`,
+      metadata: { action, package: packageName, elapsed }
     };
   }
 }
@@ -1841,7 +1988,6 @@ export async function spawnAgent(
     // Path to Python agent script
     // In production (electron-builder), use app.getPath('userData')/../
     // In development, use process.cwd()
-    const { app } = require('electron');
     const isDev = process.env.NODE_ENV === 'development';
     const projectRoot = isDev ? process.cwd() : path.join(app.getPath('userData'), '..', '..', '..');
     const scriptPath = path.join(projectRoot, 'scripts', 'deepseek_agent.py');
@@ -1859,7 +2005,6 @@ export async function spawnAgent(
 
     // Execute Python script - use spawnSync to prevent command injection
     // SECURITY: spawnSync passes args directly, no shell interpretation
-    const { spawnSync } = require('child_process');
     const pythonArgs = [scriptPath, task, agentType];
     if (context) pythonArgs.push(context);
 
@@ -2239,6 +2384,10 @@ export async function executeTool(
     // Python execution
     case 'run_python_script':
       return runPythonScript(args.script_path, args.args, args.timeout_seconds);
+
+    // Environment management
+    case 'manage_environment':
+      return manageEnvironment(args.action, args.package, args.upgrade);
 
     // Git operations
     case 'git_status':

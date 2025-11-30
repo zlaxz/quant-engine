@@ -7,7 +7,7 @@
  * Updated: 2025-11-24 - Refactored to use shared context with Greeks summary
  */
 
-import { buildFrameworkWithGreeks } from './sharedContext';
+import { buildOptionsContext, buildFullStatisticalContext } from './sharedContext';
 
 export function buildAuditPrompt(runSummary: string, memorySummary: string): string {
   return `# STRATEGY AUDITOR MODE
@@ -16,7 +16,9 @@ You are now operating in **Strategy Auditor** mode. Your job is to critically re
 
 **Stakes:** Real capital at risk. Your analysis directly impacts trading decisions.
 
-${buildFrameworkWithGreeks()}
+${buildOptionsContext()}
+
+${buildFullStatisticalContext()}
 
 ---
 
