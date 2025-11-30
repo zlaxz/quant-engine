@@ -83,8 +83,8 @@ export function ClaudeCodeErrorCard({ error, onRetry, className }: ClaudeCodeErr
       <div className="p-4 space-y-4">
         {/* Header */}
         <div className="flex items-start gap-3">
-          <div className={`p-2 rounded bg-${colorClass}-100 dark:bg-${colorClass}-900/30`}>
-            <AlertCircle className={`h-5 w-5 text-${colorClass}-600 dark:text-${colorClass}-400`} />
+          <div className={cn('p-2 rounded', styles.bg)}>
+            <AlertCircle className={cn('h-5 w-5', styles.icon)} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
