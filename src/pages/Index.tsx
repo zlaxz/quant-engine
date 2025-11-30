@@ -8,16 +8,20 @@ import { DualPurposePanel } from '@/components/visualizations/DualPurposePanel';
 import { RoadmapTracker } from '@/components/research/RoadmapTracker';
 import { HelperChatDialog } from '@/components/chat/HelperChatDialog';
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard';
+import { ResumeTaskDialog, type UnfinishedTask } from '@/components/research';
 import { DemoModeButton } from '@/components/visualizations/DemoModeButton';
 import { Button } from '@/components/ui/button';
 import { HelpCircle, Settings, LayoutDashboard, Command } from 'lucide-react';
 import { SystemStatus } from '@/components/dashboard/SystemStatus';
 import { RegimeIndicator } from '@/components/dashboard/RegimeIndicator';
+import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
   const [helperOpen, setHelperOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [unfinishedTasks, setUnfinishedTasks] = useState<UnfinishedTask[]>([]);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   // Check if first launch
   useEffect(() => {
@@ -25,6 +29,35 @@ const Index = () => {
     if (!hasCompletedOnboarding) {
       setOnboardingOpen(true);
     }
+  }, []);
+
+  // Check for unfinished tasks on startup (Phase 6: Working Memory Checkpoints)
+  useEffect(() => {
+    const checkForUnfinishedTasks = async () => {
+      if (!window.electron?.checkpointGetActive) return;
+
+      try {
+        const result = await window.electron.checkpointGetActive();
+        if (result.success && result.checkpoints.length > 0) {
+          // Convert checkpoint format to UnfinishedTask format
+          const tasks: UnfinishedTask[] = result.checkpoints.map(cp => ({
+            id: cp.id,
+            task: cp.task,
+            progress: cp.progress,
+            completedSteps: cp.completedSteps || [],
+            nextSteps: cp.nextSteps || [],
+            filesModified: cp.filesModified || [],
+            lastCheckpointAt: cp.executionContext.lastCheckpointAt,
+            estimatedTimeRemaining: cp.executionContext.estimatedTimeRemaining,
+          }));
+          setUnfinishedTasks(tasks);
+        }
+      } catch (error) {
+        console.error('Failed to check for unfinished tasks:', error);
+      }
+    };
+
+    checkForUnfinishedTasks();
   }, []);
 
   return (
@@ -113,6 +146,55 @@ const Index = () => {
           open={onboardingOpen} 
           onComplete={() => setOnboardingOpen(false)}
           onSkip={() => setOnboardingOpen(false)}
+        />
+
+        {/* Resume Task Dialog (Phase 6: Working Memory Checkpoints) */}
+        <ResumeTaskDialog
+          tasks={unfinishedTasks}
+          onResume={async (taskId) => {
+            try {
+              const task = unfinishedTasks.find(t => t.id === taskId);
+              if (!task) return;
+
+              toast({
+                title: 'Resuming Task',
+                description: `Continuing: ${task.task.slice(0, 50)}...`,
+              });
+
+              setUnfinishedTasks(prev => prev.filter(t => t.id !== taskId));
+            } catch (error) {
+              console.error('Failed to resume task:', error);
+              toast({
+                title: 'Resume Failed',
+                description: 'Could not resume task execution',
+                variant: 'destructive',
+              });
+            }
+          }}
+          onAbandon={async (taskId) => {
+            if (!window.electron?.checkpointAbandon) return;
+            
+            try {
+              await window.electron.checkpointAbandon(taskId);
+              setUnfinishedTasks(prev => prev.filter(t => t.id !== taskId));
+              toast({
+                title: 'Task Abandoned',
+                description: 'The interrupted task has been removed.',
+              });
+            } catch (error) {
+              console.error('Failed to abandon task:', error);
+            }
+          }}
+          onViewDetails={(taskId) => {
+            const task = unfinishedTasks.find(t => t.id === taskId);
+            if (task) {
+              toast({
+                title: 'Task Details',
+                description: task.task,
+                duration: 5000,
+              });
+            }
+          }}
         />
       </div>
     </SidebarProvider>
