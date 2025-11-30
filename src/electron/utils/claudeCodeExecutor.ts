@@ -58,9 +58,9 @@ class ClaudeCodeExecutor {
       if (this.cancelled) throw new Error('Execution cancelled by user');
 
       // Phase 4: Finalizing
-      this.emitProgress('finalizing', 90, config.task);
-      await this.delay(300); // Simulate finalization
-      
+      this.emitProgress('finalizing', 100, config.task); // Fix: Show 100% before complete
+      await this.delay(100); // Brief pause to show 100%
+
       // Complete
       this.emitComplete(config.task, result);
 
@@ -262,11 +262,14 @@ class ClaudeCodeExecutor {
    */
   private estimateRemaining(progress: number): number {
     if (progress <= 0) return 0;
-    
+    if (progress >= 100) return 0;
+
     const elapsed = Date.now() - this.startTime;
-    const estimatedTotal = (elapsed / progress) * 100;
+    // Fix: Convert progress to decimal (0-1) not percentage (0-100)
+    const progressDecimal = progress / 100;
+    const estimatedTotal = elapsed / progressDecimal;
     const remaining = estimatedTotal - elapsed;
-    
+
     return Math.max(0, remaining);
   }
 
