@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      active_sessions: {
+        Row: {
+          claude_calls: number | null
+          deepseek_calls: number | null
+          estimated_cost_usd: number | null
+          gemini_calls: number | null
+          id: string
+          last_activity: string | null
+          project_name: string | null
+          session_id: string
+          started_at: string | null
+          status: string | null
+        }
+        Insert: {
+          claude_calls?: number | null
+          deepseek_calls?: number | null
+          estimated_cost_usd?: number | null
+          gemini_calls?: number | null
+          id?: string
+          last_activity?: string | null
+          project_name?: string | null
+          session_id: string
+          started_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          claude_calls?: number | null
+          deepseek_calls?: number | null
+          estimated_cost_usd?: number | null
+          gemini_calls?: number | null
+          id?: string
+          last_activity?: string | null
+          project_name?: string | null
+          session_id?: string
+          started_at?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
       backtest_runs: {
         Row: {
           completed_at: string | null
@@ -1010,6 +1049,45 @@ export type Database = {
           },
         ]
       }
+      session_contexts: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          latency_ms: number | null
+          model: string
+          role: string
+          session_id: string
+          summary: string | null
+          tokens_used: number | null
+          tool_calls: Json | null
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          latency_ms?: number | null
+          model: string
+          role: string
+          session_id: string
+          summary?: string | null
+          tokens_used?: number | null
+          tool_calls?: Json | null
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          latency_ms?: number | null
+          model?: string
+          role?: string
+          session_id?: string
+          summary?: string | null
+          tokens_used?: number | null
+          tool_calls?: Json | null
+        }
+        Relationships: []
+      }
       shadow_positions: {
         Row: {
           closed_at: string | null
@@ -1682,6 +1760,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      cleanup_old_sessions: { Args: never; Returns: number }
       close_shadow_position: {
         Args: {
           p_exit_ask: number
@@ -1746,6 +1825,7 @@ export type Database = {
           total_tokens: number
         }[]
       }
+      get_latest_reasoning: { Args: { p_session_id: string }; Returns: string }
       get_memories_for_event: {
         Args: { event_name_filter: string; match_workspace_id: string }
         Returns: {
@@ -1767,6 +1847,15 @@ export type Database = {
           hash_valid: boolean
         }[]
       }
+      get_model_context: {
+        Args: { p_model: string; p_session_id: string }
+        Returns: {
+          content: string
+          created_at: string
+          id: string
+          role: string
+        }[]
+      }
       get_regime_performance: {
         Args: {
           match_workspace_id: string
@@ -1784,6 +1873,10 @@ export type Database = {
           run_ids: string[]
           total_runs: number
         }[]
+      }
+      get_session_context_text: {
+        Args: { p_session_id: string }
+        Returns: string
       }
       get_top_strategies: {
         Args: {
