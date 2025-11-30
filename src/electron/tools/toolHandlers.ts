@@ -682,7 +682,6 @@ export async function dryRunBacktest(
   capital?: number
 ): Promise<ToolResult> {
   try {
-    const root = getEngineRoot();
     const backtestCapital = capital || 100000;
 
     // Validate date format
