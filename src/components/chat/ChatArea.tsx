@@ -88,6 +88,7 @@ const ChatAreaComponent = () => {
   const [intentSuggestion, setIntentSuggestion] = useState<DetectedIntent | null>(null);
   const [appState, setAppState] = useState<AppState>({});
   const [showContextualSuggestions, setShowContextualSuggestions] = useState(true);
+  const [streamCleanupTimer, setStreamCleanupTimer] = useState<NodeJS.Timeout | null>(null);
   const [toolProgress, setToolProgress] = useState<Array<{
     type: string;
     tool?: string;
@@ -245,10 +246,11 @@ const ChatAreaComponent = () => {
     });
 
     return () => {
+      if (streamCleanupTimer) clearTimeout(streamCleanupTimer);
       unsubscribeTool();
       unsubscribeStream();
     };
-  }, []);
+  }, [streamCleanupTimer]);
 
   // Listen for detailed tool execution events for ToolCallTree and OperationCards
   useEffect(() => {
