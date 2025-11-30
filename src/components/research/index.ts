@@ -16,6 +16,7 @@ export { FindingsPanel } from './FindingsPanel';
 export { LearningCenter } from './LearningCenter';
 export { ClaudeCodeErrorCard, createClaudeCodeError } from './ClaudeCodeErrorCard';
 export { ClaudeCodeProgressPanel } from './ClaudeCodeProgressPanel';
+export { ClaudeCodeResultCard } from './ClaudeCodeResultCard';
 export { DecisionCard } from './DecisionCard';
 export { EvidenceChain, parseEvidenceTrail } from './EvidenceChain';
 export { WorkingMemoryCheckpoint } from './WorkingMemoryCheckpoint';

@@ -144,7 +144,8 @@ export type ArtifactType =
   | 'annotated_code' 
   | 'configuration' 
   | 'research_report' 
-  | 'analysis_script';
+  | 'analysis_script'
+  | 'claude_code_result';
 
 export interface Artifact {
   type: ArtifactType;
@@ -155,4 +156,32 @@ export interface Artifact {
     line: number;
     text: string;
   }[];
+}
+
+// Claude Code Result Artifact (Phase 5: Structured Artifacts)
+export interface ClaudeCodeArtifact extends Artifact {
+  type: 'claude_code_result';
+  files: Array<{
+    path: string;
+    content: string;
+    annotations?: Array<{ line: number; text: string }>;
+  }>;
+  tests?: { 
+    passed: number; 
+    failed: number; 
+    output?: string 
+  };
+  validation?: Record<string, any>;
+  nextActions?: string[];
+  costSummary?: {
+    thisExecution: number;
+    alternativeCost: number;
+    savings: number;
+  };
+  executionContext?: {
+    task: string;
+    parameters?: Record<string, any>;
+    filesTouched: string[];
+    timestamp: number;
+  };
 }

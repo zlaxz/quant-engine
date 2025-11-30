@@ -47,6 +47,7 @@ import {
   OperationCard,
   ClaudeCodeErrorCard,
   ClaudeCodeProgressPanel,
+  ClaudeCodeResultCard,
   DecisionCard,
   WorkingMemoryCheckpoint,
   EvidenceChain,
@@ -62,6 +63,7 @@ import {
   type WorkingMemoryState,
   type EvidenceNode,
 } from '@/components/research';
+import { ClaudeCodeArtifact } from '@/types/api-contract';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface Message {
@@ -114,6 +116,7 @@ const ChatAreaComponent = () => {
   const [progressPanel, setProgressPanel] = useState<ClaudeCodeProgressData | null>(null);
   const [checkpoint, setCheckpoint] = useState<WorkingMemoryState | null>(null);
   const [evidenceChain, setEvidenceChain] = useState<EvidenceNode[]>([]);
+  const [claudeCodeArtifact, setClaudeCodeArtifact] = useState<ClaudeCodeArtifact | null>(null);
   const [thinkingContent, setThinkingContent] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [currentError, setCurrentError] = useState<ErrorDetails | null>(null);
@@ -358,6 +361,7 @@ const ChatAreaComponent = () => {
         setErrorCard(null);
         setProgressPanel(null);
         setEvidenceChain([]);
+        setClaudeCodeArtifact(null);
       }
     }
   }, [isLoading, messages]);
@@ -1174,6 +1178,45 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                     <ClaudeCodeErrorCard
                       error={errorCard}
                       onRetry={() => setErrorCard(null)}
+                      className="mb-4"
+                    />
+                  )}
+
+                  {/* Claude Code Result Artifact (Phase 5) */}
+                  {claudeCodeArtifact && (
+                    <ClaudeCodeResultCard
+                      artifact={claudeCodeArtifact}
+                      onAccept={() => {
+                        setClaudeCodeArtifact(null);
+                      }}
+                      onRetry={async (modifiedTask, parameters) => {
+                        if (window.electron?.executeClaudeCode) {
+                          try {
+                            await window.electron.executeClaudeCode({
+                              task: modifiedTask,
+                              files: claudeCodeArtifact.executionContext?.filesTouched,
+                              ...parameters,
+                            });
+                            setClaudeCodeArtifact(null);
+                          } catch (error) {
+                            console.error('Retry failed:', error);
+                            toast({
+                              title: 'Retry Failed',
+                              description: 'Could not retry Claude Code execution',
+                              variant: 'destructive',
+                            });
+                          }
+                        }
+                      }}
+                      onUndo={async () => {
+                        // TODO: Implement file revert logic
+                        setClaudeCodeArtifact(null);
+                        toast({
+                          title: 'Undo Not Implemented',
+                          description: 'File revert logic coming soon',
+                          variant: 'destructive',
+                        });
+                      }}
                       className="mb-4"
                     />
                   )}
