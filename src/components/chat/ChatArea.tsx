@@ -49,6 +49,7 @@ import {
   ClaudeCodeProgressPanel,
   DecisionCard,
   WorkingMemoryCheckpoint,
+  EvidenceChain,
   type AgentSpawn,
   type ToolCall,
   type ErrorDetails,
@@ -59,6 +60,7 @@ import {
   type ClaudeCodeProgressData,
   type DecisionReasoning,
   type WorkingMemoryState,
+  type EvidenceNode,
 } from '@/components/research';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -111,6 +113,7 @@ const ChatAreaComponent = () => {
   const [errorCard, setErrorCard] = useState<ClaudeCodeError | null>(null);
   const [progressPanel, setProgressPanel] = useState<ClaudeCodeProgressData | null>(null);
   const [checkpoint, setCheckpoint] = useState<WorkingMemoryState | null>(null);
+  const [evidenceChain, setEvidenceChain] = useState<EvidenceNode[]>([]);
   const [thinkingContent, setThinkingContent] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [currentError, setCurrentError] = useState<ErrorDetails | null>(null);
@@ -354,6 +357,7 @@ const ChatAreaComponent = () => {
         setDecisionCard(null);
         setErrorCard(null);
         setProgressPanel(null);
+        setEvidenceChain([]);
       }
     }
   }, [isLoading, messages]);
@@ -1137,9 +1141,9 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                   )}
 
                   {/* Evidence Chain */}
-                  {evidenceChain && (
+                  {evidenceChain.length > 0 && (
                     <EvidenceChain
-                      data={evidenceChain}
+                      nodes={evidenceChain}
                       className="mb-4"
                     />
                   )}
