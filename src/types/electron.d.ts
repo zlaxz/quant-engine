@@ -209,7 +209,7 @@ interface ElectronAPI {
     message: string;
   }>;
   
-  // Override routing decision
+  // Override routing decision (allows user to override Chief Quant's routing choices)
   overrideRoutingDecision: (decisionId: string, overrideTo: string) => Promise<{
     success: boolean;
     message?: string;
