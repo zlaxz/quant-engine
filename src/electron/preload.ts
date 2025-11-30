@@ -114,9 +114,20 @@ contextBridge.exposeInMainWorld('electron', {
     error?: string;
     timestamp: number;
     duration?: number;
+    whyThis?: string;
+    whatFound?: string;
   }) => void) => {
     ipcRenderer.on('tool-execution-event', (_event, data) => callback(data));
     return () => ipcRenderer.removeAllListeners('tool-execution-event');
+  },
+
+  // Claude Code lifecycle events
+  onClaudeCodeEvent: (callback: (event: {
+    type: 'decision' | 'progress' | 'error' | 'checkpoint';
+    data: unknown;
+  }) => void) => {
+    ipcRenderer.on('claude-code-event', (_event, data) => callback(data));
+    return () => ipcRenderer.removeAllListeners('claude-code-event');
   },
 
   // Remove listeners (cleanup)
