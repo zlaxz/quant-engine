@@ -1136,6 +1136,14 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                     />
                   )}
 
+                  {/* Evidence Chain */}
+                  {evidenceChain && (
+                    <EvidenceChain
+                      data={evidenceChain}
+                      className="mb-4"
+                    />
+                  )}
+
                   {/* Claude Code Error Card */}
                   {errorCard && (
                     <ClaudeCodeErrorCard
