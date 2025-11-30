@@ -178,6 +178,12 @@ interface ElectronAPI {
     whatFound?: string;
   }) => void) => () => void;
 
+  // Claude Code lifecycle events (for transparency components)
+  onClaudeCodeEvent: (callback: (event: {
+    type: 'decision' | 'progress' | 'error' | 'checkpoint';
+    data: unknown;
+  }) => void) => () => void;
+
   // Remove listeners (cleanup)
   removeToolProgressListener: () => void;
   removeLLMStreamListener: () => void;

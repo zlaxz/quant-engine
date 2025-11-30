@@ -45,12 +45,20 @@ import {
   MemoryRecallToast,
   OperationProgress,
   OperationCard,
+  ClaudeCodeErrorCard,
+  ClaudeCodeProgressPanel,
+  DecisionCard,
+  WorkingMemoryCheckpoint,
   type AgentSpawn,
   type ToolCall,
   type ErrorDetails,
   type Memory,
   type OperationPhase,
   type OperationCardData,
+  type ClaudeCodeError,
+  type ClaudeCodeProgressData,
+  type DecisionReasoning,
+  type WorkingMemoryState,
 } from '@/components/research';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -99,6 +107,10 @@ const ChatAreaComponent = () => {
   const [activeAgents, setActiveAgents] = useState<AgentSpawn[]>([]);
   const [toolCallTree, setToolCallTree] = useState<ToolCall[]>([]);
   const [operationCards, setOperationCards] = useState<OperationCardData[]>([]);
+  const [decisionCard, setDecisionCard] = useState<DecisionReasoning | null>(null);
+  const [errorCard, setErrorCard] = useState<ClaudeCodeError | null>(null);
+  const [progressPanel, setProgressPanel] = useState<ClaudeCodeProgressData | null>(null);
+  const [checkpoint, setCheckpoint] = useState<WorkingMemoryState | null>(null);
   const [thinkingContent, setThinkingContent] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [currentError, setCurrentError] = useState<ErrorDetails | null>(null);
@@ -231,9 +243,9 @@ const ChatAreaComponent = () => {
 
   // Listen for detailed tool execution events for ToolCallTree and OperationCards
   useEffect(() => {
-    if (!window.electron?.onToolExecutionEvent) return;
+    if (!window.electron?.onToolExecutionEvent || !window.electron?.onClaudeCodeEvent) return;
 
-    const unsubscribe = window.electron.onToolExecutionEvent((event: {
+    const unsubToolEvents = window.electron.onToolExecutionEvent((event: {
       type: 'tool-start' | 'tool-complete' | 'tool-error';
       tool: string;
       args: Record<string, any>;
@@ -296,18 +308,37 @@ const ChatAreaComponent = () => {
       }
     });
 
-    return unsubscribe;
+    const unsubClaudeEvents = window.electron.onClaudeCodeEvent((event: {
+      type: 'decision' | 'progress' | 'error' | 'checkpoint';
+      data: unknown;
+    }) => {
+      if (event.type === 'decision') {
+        setDecisionCard(event.data as DecisionReasoning);
+      } else if (event.type === 'progress') {
+        setProgressPanel(event.data as ClaudeCodeProgressData);
+      } else if (event.type === 'error') {
+        setErrorCard(event.data as ClaudeCodeError);
+      } else if (event.type === 'checkpoint') {
+        setCheckpoint(event.data as WorkingMemoryState);
+      }
+    });
+
+    return () => {
+      unsubToolEvents();
+      unsubClaudeEvents();
+    };
   }, []);
 
-  // Clear tool call tree and operation cards ONLY when starting a NEW user message
-  // (not when response completes)
+  // Clear all transient UI when starting a NEW user message
   useEffect(() => {
     if (isLoading && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
-      // Only clear if the last message is from the user (new request starting)
       if (lastMessage?.role === 'user') {
         setToolCallTree([]);
         setOperationCards([]);
+        setDecisionCard(null);
+        setErrorCard(null);
+        setProgressPanel(null);
       }
     }
   }, [isLoading, messages]);
@@ -1064,6 +1095,37 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
 
                   {/* New Visual Enhancements */}
                   
+                  {/* Decision Card */}
+                  {decisionCard && (
+                    <DecisionCard
+                      decision={decisionCard}
+                      onProceed={() => setDecisionCard(null)}
+                      onOverride={(alternative) => {
+                        console.log('Override to:', alternative);
+                        setDecisionCard(null);
+                      }}
+                      className="mb-4"
+                    />
+                  )}
+
+                  {/* Progress Panel */}
+                  {progressPanel && (
+                    <ClaudeCodeProgressPanel
+                      data={progressPanel}
+                      onCancel={() => setProgressPanel(null)}
+                      className="mb-4"
+                    />
+                  )}
+
+                  {/* Claude Code Error Card */}
+                  {errorCard && (
+                    <ClaudeCodeErrorCard
+                      error={errorCard}
+                      onRetry={() => setErrorCard(null)}
+                      className="mb-4"
+                    />
+                  )}
+                  
                   {/* Operation Cards - Persistent visual audit trail */}
                   {operationCards.length > 0 && (
                     <div className="space-y-3 mb-4">
@@ -1129,6 +1191,17 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                     <ErrorCard
                       error={currentError}
                       onRetry={() => setCurrentError(null)}
+                      className="mb-3"
+                    />
+                  )}
+
+                  {/* Checkpoint */}
+                  {checkpoint && (
+                    <WorkingMemoryCheckpoint
+                      state={checkpoint}
+                      onContinue={() => setCheckpoint(null)}
+                      onSaveAndExit={() => console.log('Save and exit')}
+                      onAbandon={() => setCheckpoint(null)}
                       className="mb-3"
                     />
                   )}
