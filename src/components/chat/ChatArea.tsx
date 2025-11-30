@@ -1120,7 +1120,7 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                       decision={decisionCard}
                       onProceed={() => setDecisionCard(null)}
                       onOverride={async (alternative) => {
-                        if (decisionCard.id && window.electron?.overrideRoutingDecision) {
+                        if (decisionCard.id && window.electron.overrideRoutingDecision) {
                           try {
                             const result = await window.electron.overrideRoutingDecision(
                               decisionCard.id,
