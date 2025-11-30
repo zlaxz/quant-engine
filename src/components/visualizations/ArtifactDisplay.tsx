@@ -80,7 +80,7 @@ export const ArtifactDisplay = ({ artifact, onClose }: ArtifactDisplayProps) => 
                 Educational Notes
               </h4>
               {artifact.annotations.map((annotation, i) => (
-                <Card key={i} className="p-3 bg-primary/5 border-primary/20">
+                <Card key={`${annotation.line}-${annotation.text.slice(0, 10)}-${i}`} className="p-3 bg-primary/5 border-primary/20">
                   <div className="flex gap-2">
                     <span className="text-xs font-mono text-muted-foreground">
                       Line {annotation.line}:

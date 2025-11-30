@@ -101,7 +101,9 @@ class OptionsDataLoader:
         # Parse expiry date
         try:
             expiry = datetime.strptime(date_str, '%y%m%d').date()
-        except:
+        except ValueError as e:
+            import logging
+            logging.error(f"Failed to parse date '{date_str}': {e}")
             return None
 
         # Parse strike (divide by 1000)

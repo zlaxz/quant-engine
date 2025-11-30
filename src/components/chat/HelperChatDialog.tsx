@@ -83,7 +83,7 @@ export function HelperChatDialog({ open, onOpenChange }: HelperChatDialogProps) 
 
             {messages.map((msg, idx) => (
               <div
-                key={idx}
+                key={`${msg.role}-${msg.content.slice(0, 20)}-${idx}`}
                 className={`rounded-lg p-3 ${
                   msg.role === 'user'
                     ? 'bg-primary text-primary-foreground ml-8'

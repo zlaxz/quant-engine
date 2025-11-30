@@ -28,7 +28,9 @@ def load_event_dates(file_path: Optional[Path] = None) -> List[date]:
             try:
                 dt = datetime.strptime(row['date'], "%Y-%m-%d").date()
                 event_dates.append(dt)
-            except Exception:
+            except (ValueError, KeyError) as e:
+                import logging
+                logging.warning(f"Failed to parse event date from row: {e}")
                 continue
 
     return event_dates

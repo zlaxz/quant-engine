@@ -147,7 +147,7 @@ export function SystemStatus() {
     } catch (error) {
       console.error('Failed to fetch health:', error);
     }
-  }, [daemonStatus]);
+  }, []); // Fixed: Removed daemonStatus to prevent infinite loop
 
   useEffect(() => {
     fetchHealth();

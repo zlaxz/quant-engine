@@ -39,6 +39,9 @@ const store = new Store<{
   'infra.telegramBotToken'?: string;
   'infra.telegramChatId'?: string;
   'infra.dataDrivePath'?: string;
+  // Supabase configuration
+  'supabase.url'?: string;
+  'supabase.anonKey'?: string;
 }>();
 
 let mainWindow: BrowserWindow | null = null;

@@ -35,9 +35,10 @@ function validatePath(path: string, engineRoot: string): { valid: boolean; fullP
     // Construct full path
     const fullPath = `${engineRoot}/${cleanPath}`;
     
-    // Verify it's within engine root using realpath
-    const realFullPath = Deno.realPathSync(engineRoot);
-    if (!fullPath.startsWith(realFullPath)) {
+    // SECURITY FIX: Resolve BOTH paths to prevent symlink attacks
+    const realEngineRoot = Deno.realPathSync(engineRoot);
+    const realTargetPath = Deno.realPathSync(fullPath);
+    if (!realTargetPath.startsWith(realEngineRoot)) {
       return { valid: false, fullPath: '', error: 'Invalid path: outside rotation-engine root' };
     }
     

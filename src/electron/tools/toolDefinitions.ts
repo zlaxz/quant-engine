@@ -684,8 +684,7 @@ AGENT STRATEGY (Claude Code decides based on scale):
         },
         parallel_hint: {
           type: SchemaType.STRING,
-          enum: ['none', 'minor', 'massive'],
-          description: 'Hint about parallelization needs: none (single task), minor (few parallel tasks - Claude agents), massive (many parallel tasks - DeepSeek for cost efficiency)'
+          description: 'Hint about parallelization needs. Use "none" for single task, "minor" for few parallel tasks (Claude agents), "massive" for many parallel tasks (DeepSeek for cost efficiency)'
         }
       },
       required: ['task']

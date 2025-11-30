@@ -76,8 +76,10 @@ class MasterMiner:
         try:
             date_part = symbol[3:9]
             return datetime.strptime(date_part, '%y%m%d')
-        except:
-            return datetime.max
+        except ValueError as e:
+            import logging
+            logging.error(f"Failed to parse expiration from '{symbol}': {e}")
+            raise ValueError(f"Invalid option symbol format: {symbol}") from e
 
     def run(self, genome: StrategyGenome):
         print(f"--- LAUNCHING MINE: {genome.name} --- ")

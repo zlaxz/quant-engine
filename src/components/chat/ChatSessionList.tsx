@@ -72,7 +72,7 @@ export const ChatSessionList = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedSessionId, setSelectedSession]);
+  }, [setSelectedSession]); // Fixed: Removed selectedSessionId circular dependency
 
   useEffect(() => {
     loadSessions();

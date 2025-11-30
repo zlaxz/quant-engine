@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec, spawn, spawnSync } from 'child_process';
+import { exec, spawnSync } from 'child_process';
 import { promisify } from 'util';
 import { glob } from 'glob';
 import OpenAI from 'openai';
@@ -32,7 +32,7 @@ function safeLog(...args: any[]): void {
 const TOOL_TIMEOUT_MS = 30000;
 
 // Wrapper for execAsync with timeout
-async function execWithTimeout(command: string, options?: { cwd?: string; maxBuffer?: number; timeout?: number }): Promise<{ stdout: string; stderr: string }> {
+async function execWithTimeout(command: string, options?: { cwd?: string; maxBuffer?: number; timeout?: number; shell?: string }): Promise<{ stdout: string; stderr: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TOOL_TIMEOUT_MS);
 
@@ -2042,8 +2042,8 @@ export async function spawnAgent(
 
     const elapsed = Date.now() - startTime;
 
-    // Check for timeout (SIGTERM signal or killed flag)
-    if (result.signal === 'SIGTERM' || result.killed) {
+    // Check for timeout (SIGTERM signal)
+    if (result.signal === 'SIGTERM') {
       safeLog(`❌ Python agent timed out after ${elapsed}ms`);
       return {
         success: false,
@@ -2612,7 +2612,7 @@ You may spawn native Claude agents for parallel work if beneficial (covered by M
     const elapsed = Date.now() - startTime;
 
     // Check for timeout
-    if (result.signal === 'SIGTERM' || result.killed) {
+    if (result.signal === 'SIGTERM') {
       safeLog(`❌ Claude Code timed out after ${elapsed}ms`);
       return {
         success: false,
