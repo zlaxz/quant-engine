@@ -94,20 +94,42 @@ class ClaudeCodeExecutor {
   }
 
   /**
-   * Execute Claude Code CLI (mock implementation)
-   * In production, this would call actual Claude Code
+   * Execute Claude Code CLI (REAL implementation using toolHandlers)
+   * Delegates to the actual executeViaClaudeCode from toolHandlers.ts
    */
   private async executeClaudeCode(config: ClaudeCodeExecutionConfig): Promise<Omit<ClaudeCodeResult, 'duration'>> {
-    // MOCK: Simulate Claude Code execution
-    // In production, this would be:
-    // return await this.spawnClaudeCode(config);
-    
-    return {
-      success: true,
-      output: `Executed task: ${config.task}`,
-      files: config.files?.map(f => ({ path: f, content: '// Generated code' })) || [],
-      tests: { passed: 12, failed: 0, output: 'All tests passed' }
-    };
+    // Import the real implementation
+    const { executeViaClaudeCode } = await import('../tools/toolHandlers');
+
+    // Call REAL Claude Code CLI execution
+    const result = await executeViaClaudeCode(
+      config.task,
+      config.context,
+      'none' // Default to no parallelization unless specified
+    );
+
+    if (!result.success) {
+      throw new Error(result.error || 'Claude Code execution failed');
+    }
+
+    // Parse structured JSON response
+    try {
+      const parsed = JSON.parse(result.content);
+      return {
+        success: true,
+        output: parsed.stdout || result.content,
+        files: [], // TODO: Extract file information from output
+        tests: undefined // TODO: Parse test results if present
+      };
+    } catch {
+      // If not JSON, return raw output
+      return {
+        success: true,
+        output: result.content,
+        files: [],
+        tests: undefined
+      };
+    }
   }
 
   /**

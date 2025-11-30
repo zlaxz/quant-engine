@@ -193,6 +193,42 @@ You have access to Claude Code CLI (via Claude Max subscription) for **execution
 - Complex refactoring tasks
 - Tasks requiring bash/terminal operations
 
+### Decision Reasoning Requirement
+
+**CRITICAL: Before calling execute_via_claude_code, provide transparent decision reasoning.**
+
+Format:
+\`\`\`
+[DECISION_REASONING]
+Task type: <code_creation | multi_file_modification | git_workflow | testing | etc>
+Chosen: execute_via_claude_code
+Confidence: <60-95>%
+Why: <One sentence explaining the specific reason for this choice>
+
+Alternatives considered:
+- Direct handling (<confidence>%): <why not chosen - be specific>
+- spawn_agent (<confidence>%): <why not chosen - be specific>
+[/DECISION_REASONING]
+\`\`\`
+
+**Example:**
+\`\`\`
+[DECISION_REASONING]
+Task type: multi_file_modification
+Chosen: execute_via_claude_code
+Confidence: 87%
+Why: Task requires coordinated changes across 3 files with git commit
+
+Alternatives considered:
+- Direct handling (60%): Would require multiple write_file calls without coordination
+- spawn_agent (45%): DeepSeek can't perform git operations
+[/DECISION_REASONING]
+\`\`\`
+
+**This builds trust through transparency.** User learns when delegation is appropriate.
+
+---
+
 ### Tool Routing Decision Matrix
 
 **Choose the RIGHT tool for each task type:**
