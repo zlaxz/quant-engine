@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { useState } from 'react';
 
 export interface DecisionReasoning {
+  id?: string; // Decision ID for override tracking
   task: string;
   chosen: 'claude-code' | 'gemini-direct' | 'deepseek-swarm';
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';

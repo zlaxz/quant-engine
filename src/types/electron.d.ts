@@ -38,6 +38,12 @@ interface ElectronAPI {
   // Environment
   getRotationEngineRoot: () => Promise<string>;
   
+  // Claude Code
+  executeClaudeCode: (config: any) => Promise<any>;
+  cancelClaudeCode: () => Promise<any>;
+  checkClaudeCodeAvailability: () => Promise<any>;
+  overrideRoutingDecision: (decisionId: string, overrideTo: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  
   // Project directory settings
   getProjectDirectory: () => Promise<string | null>;
   setProjectDirectory: (dirPath: string) => Promise<{ success: boolean }>;
@@ -207,6 +213,13 @@ interface ElectronAPI {
     available: boolean;
     version: string | null;
     message: string;
+  }>;
+  
+  // Override routing decision
+  overrideRoutingDecision: (decisionId: string, overrideTo: string) => Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
   }>;
 
   // Remove listeners (cleanup)
