@@ -180,9 +180,34 @@ interface ElectronAPI {
 
   // Claude Code lifecycle events (for transparency components)
   onClaudeCodeEvent: (callback: (event: {
-    type: 'decision' | 'progress' | 'error' | 'checkpoint';
+    type: 'decision' | 'progress' | 'error' | 'checkpoint' | 'complete' | 'cancelled';
     data: unknown;
   }) => void) => () => void;
+  
+  // Claude Code execution
+  executeClaudeCode: (config: {
+    task: string;
+    context?: string;
+    files?: string[];
+    timeout?: number;
+  }) => Promise<{
+    success: boolean;
+    output?: string;
+    files?: Array<{ path: string; content: string }>;
+    tests?: { passed: number; failed: number; output?: string };
+    error?: string;
+    duration: number;
+  }>;
+  
+  // Cancel Claude Code execution
+  cancelClaudeCode: () => Promise<{ success: boolean; message: string }>;
+  
+  // Check Claude Code availability
+  checkClaudeCodeAvailability: () => Promise<{
+    available: boolean;
+    version: string | null;
+    message: string;
+  }>;
 
   // Remove listeners (cleanup)
   removeToolProgressListener: () => void;

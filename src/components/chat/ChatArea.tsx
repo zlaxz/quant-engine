@@ -309,14 +309,29 @@ const ChatAreaComponent = () => {
     });
 
     const unsubClaudeEvents = window.electron.onClaudeCodeEvent((event: {
-      type: 'decision' | 'progress' | 'error' | 'checkpoint';
+      type: 'decision' | 'progress' | 'error' | 'checkpoint' | 'complete' | 'cancelled';
       data: unknown;
     }) => {
       if (event.type === 'decision') {
         setDecisionCard(event.data as DecisionReasoning);
       } else if (event.type === 'progress') {
         setProgressPanel(event.data as ClaudeCodeProgressData);
+      } else if (event.type === 'complete') {
+        // Clear progress panel on completion
+        setProgressPanel(null);
+        toast({
+          title: 'Claude Code Execution Complete',
+          description: 'Task completed successfully',
+        });
+      } else if (event.type === 'cancelled') {
+        setProgressPanel(null);
+        toast({
+          title: 'Execution Cancelled',
+          description: (event.data as any).message || 'Claude Code execution was cancelled',
+          variant: 'destructive',
+        });
       } else if (event.type === 'error') {
+        setProgressPanel(null);
         setErrorCard(event.data as ClaudeCodeError);
       } else if (event.type === 'checkpoint') {
         setCheckpoint(event.data as WorkingMemoryState);
@@ -1112,7 +1127,11 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
                   {progressPanel && (
                     <ClaudeCodeProgressPanel
                       data={progressPanel}
-                      onCancel={() => setProgressPanel(null)}
+                      onCancel={async () => {
+                        if (window.electron?.cancelClaudeCode) {
+                          await window.electron.cancelClaudeCode();
+                        }
+                      }}
                       className="mb-4"
                     />
                   )}

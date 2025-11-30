@@ -123,12 +123,23 @@ contextBridge.exposeInMainWorld('electron', {
 
   // Claude Code lifecycle events
   onClaudeCodeEvent: (callback: (event: {
-    type: 'decision' | 'progress' | 'error' | 'checkpoint';
+    type: 'decision' | 'progress' | 'error' | 'checkpoint' | 'complete' | 'cancelled';
     data: unknown;
   }) => void) => {
-    ipcRenderer.on('claude-code-event', (_event, data) => callback(data));
-    return () => ipcRenderer.removeAllListeners('claude-code-event');
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('claude-code-event', handler);
+    return () => ipcRenderer.removeListener('claude-code-event', handler);
   },
+  
+  // Claude Code execution
+  executeClaudeCode: (config: { task: string; context?: string; files?: string[]; timeout?: number }) =>
+    ipcRenderer.invoke('claude-code:execute', config),
+  
+  // Cancel Claude Code execution
+  cancelClaudeCode: () => ipcRenderer.invoke('claude-code:cancel'),
+  
+  // Check Claude Code availability
+  checkClaudeCodeAvailability: () => ipcRenderer.invoke('claude-code:check-availability'),
 
   // Remove listeners (cleanup)
   removeToolProgressListener: () => ipcRenderer.removeAllListeners('tool-progress'),

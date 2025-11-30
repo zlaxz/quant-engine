@@ -14,6 +14,7 @@ import { registerMemoryHandlers, setMemoryServices, registerAnalysisHandlers } f
 import { registerDaemonHandlers, stopDaemonOnExit } from './ipc-handlers/daemonManager';
 import { registerContextHandlers } from './ipc-handlers/contextHandlers';
 import { registerDecisionHandlers } from './ipc-handlers/decisionHandlers';
+import { registerClaudeCodeHandlers } from './ipc-handlers/claudeCodeHandlers';
 import { setFileSystemRoot, addAllowedPath } from './services/FileSystemService';
 import { MemoryDaemon } from './memory/MemoryDaemon';
 import { RecallEngine } from './memory/RecallEngine';
@@ -385,6 +386,7 @@ app.whenReady().then(() => {
   registerLlmHandlers();
   registerDaemonHandlers();
   registerDecisionHandlers();
+  registerClaudeCodeHandlers();
 
   // Connect memory services to handlers BEFORE registering handlers
   setMemoryServices(memoryDaemon, recallEngine);
