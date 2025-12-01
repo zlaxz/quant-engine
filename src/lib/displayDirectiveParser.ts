@@ -1,5 +1,14 @@
 import { DisplayDirective, ResearchStage, VisualizationType, FocusArea } from '@/types/journey';
 import { Artifact, ArtifactType } from '@/types/api-contract';
+import {
+  ChartData,
+  TableData,
+  MetricsData,
+  CodeData,
+  NotificationData,
+  ChartUpdate,
+  TableUpdate
+} from '@/components/charts/types';
 
 // Valid values for type checking
 const VALID_STAGES: ResearchStage[] = [
@@ -58,6 +67,8 @@ export function parseDisplayDirectives(text: string): DisplayDirective[] {
           type: 'stage',
           value: directiveValue as ResearchStage,
         });
+      } else {
+        console.warn(`[Directive] Invalid stage: "${directiveValue}". Valid stages:`, VALID_STAGES);
       }
     } else if (directiveType === 'display') {
       const { value, params } = parseDirectiveValue(directiveValue);
@@ -68,6 +79,8 @@ export function parseDisplayDirectives(text: string): DisplayDirective[] {
           value: value as VisualizationType,
           params,
         });
+      } else {
+        console.warn(`[Directive] Invalid visualization: "${value}". Valid visualizations:`, VALID_VISUALIZATIONS);
       }
     } else if (directiveType === 'hide') {
       directives.push({
@@ -88,6 +101,8 @@ export function parseDisplayDirectives(text: string): DisplayDirective[] {
           type: 'focus',
           value: directiveValue as FocusArea,
         });
+      } else {
+        console.warn(`[Directive] Invalid focus area: "${directiveValue}". Valid areas:`, VALID_FOCUS_AREAS);
       }
     } else if (directiveType === 'todo_add') {
       // Format: [TODO_ADD:Category:Description]
@@ -99,13 +114,22 @@ export function parseDisplayDirectives(text: string): DisplayDirective[] {
           value: category,
           params: { description }
         });
+      } else {
+        const missingFields = [];
+        if (!category) missingFields.push('category');
+        if (!description) missingFields.push('description');
+        console.warn(`[Directive] TODO_ADD missing required fields: ${missingFields.join(', ')}`);
       }
     } else if (directiveType === 'todo_complete') {
       // Format: [TODO_COMPLETE:task-id]
-      directives.push({
-        type: 'todo_complete',
-        value: directiveValue
-      });
+      if (directiveValue) {
+        directives.push({
+          type: 'todo_complete',
+          value: directiveValue
+        });
+      } else {
+        console.warn(`[Directive] TODO_COMPLETE missing required field: task-id`);
+      }
     } else if (directiveType === 'todo_update') {
       // Format: [TODO_UPDATE:task-id:New description]
       const [taskId, ...descParts] = directiveValue.split(':');
@@ -116,6 +140,11 @@ export function parseDisplayDirectives(text: string): DisplayDirective[] {
           value: taskId,
           params: { description }
         });
+      } else {
+        const missingFields = [];
+        if (!taskId) missingFields.push('task-id');
+        if (!description) missingFields.push('description');
+        console.warn(`[Directive] TODO_UPDATE missing required fields: ${missingFields.join(', ')}`);
       }
     }
   }
@@ -149,8 +178,54 @@ function parseDirectiveValue(input: string): { value: string; params: Record<str
  * Only removes known directive types to preserve other bracketed content
  */
 export function stripDisplayDirectives(text: string): string {
+  let cleaned = text;
+
+  // Strip data-driven directives with balanced brace matching
+  const dataDrivenTypes = [
+    'DISPLAY_CHART', 'DISPLAY_TABLE', 'DISPLAY_METRICS', 'DISPLAY_CODE',
+    'UPDATE_CHART', 'UPDATE_TABLE', 'DISPLAY_NOTIFICATION'
+  ];
+
+  for (const type of dataDrivenTypes) {
+    let searching = true;
+    while (searching) {
+      const jsonStr = extractJsonFromDirective(cleaned, type);
+      if (!jsonStr) {
+        searching = false;
+        continue;
+      }
+
+      // Find and remove the complete directive [TYPE: {...}]
+      const directiveStart = cleaned.indexOf(`[${type}:`);
+      const jsonEnd = cleaned.indexOf(jsonStr) + jsonStr.length;
+
+      // Look for ] immediately after JSON (skip whitespace only)
+      let bracketEnd = jsonEnd;
+      while (bracketEnd < cleaned.length) {
+        const char = cleaned[bracketEnd];
+        if (char === ']') break;
+        if (char !== ' ' && char !== '\n' && char !== '\t') {
+          // Non-whitespace before ] = malformed
+          bracketEnd = -1;
+          break;
+        }
+        bracketEnd++;
+      }
+
+      if (directiveStart !== -1 && bracketEnd !== -1 && bracketEnd < cleaned.length && cleaned[bracketEnd] === ']') {
+        cleaned = cleaned.substring(0, directiveStart) + cleaned.substring(bracketEnd + 1);
+      } else {
+        console.warn(`[Strip] Malformed directive - no closing bracket found for ${type}`);
+        searching = false;
+      }
+    }
+  }
+
+  // Strip old-style simple directives
   const directivePattern = new RegExp(`\\[(${DIRECTIVE_TYPES.join('|')}):?\\s*([^\\]]+)?\\]`, 'gi');
-  return text.replace(directivePattern, '').trim();
+  cleaned = cleaned.replace(directivePattern, '');
+
+  return cleaned.trim();
 }
 
 /**
@@ -265,4 +340,202 @@ export function parseArtifactDirective(text: string): Artifact | null {
     content: params.content,
     language: params.language,
   };
+}
+
+/**
+ * Extract JSON from directive with balanced brace matching
+ */
+function extractJsonFromDirective(text: string, directiveName: string): string | null {
+  const startPattern = new RegExp(`\\[${directiveName}:\\s*`, 'i');
+  const startMatch = startPattern.exec(text);
+
+  if (!startMatch) return null;
+
+  let pos = startMatch.index + startMatch[0].length;
+  if (text[pos] !== '{') return null;
+
+  let braceCount = 0;
+  let jsonStart = pos;
+
+  while (pos < text.length) {
+    const char = text[pos];
+    if (char === '{') braceCount++;
+    if (char === '}') braceCount--;
+
+    if (braceCount === 0) {
+      // Found matching closing brace
+      return text.substring(jsonStart, pos + 1);
+    }
+    pos++;
+  }
+
+  return null; // Unmatched braces
+}
+
+/**
+ * Parse DISPLAY_CHART directive with embedded JSON data
+ * Format: [DISPLAY_CHART: {...json...}]
+ */
+export function parseChartDirective(text: string): ChartData | null {
+  const jsonStr = extractJsonFromDirective(text, 'DISPLAY_CHART');
+  if (!jsonStr) return null;
+
+  try {
+    const data = JSON.parse(jsonStr);
+
+    // Validate required fields
+    if (!data.type || !data.title || !data.data) {
+      console.warn('[Directive] DISPLAY_CHART missing required fields');
+      return null;
+    }
+
+    // Generate ID if not provided
+    if (!data.id) {
+      data.id = `chart-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    return data as ChartData;
+  } catch (error) {
+    console.warn('[Directive] Invalid DISPLAY_CHART JSON:', error);
+    return null;
+  }
+}
+
+/**
+ * Parse DISPLAY_TABLE directive with embedded JSON data
+ */
+export function parseTableDirective(text: string): TableData | null {
+  const jsonStr = extractJsonFromDirective(text, 'DISPLAY_TABLE');
+  if (!jsonStr) return null;
+
+  try {
+    const data = JSON.parse(jsonStr);
+
+    if (!data.columns || !data.rows) {
+      console.warn('[Directive] DISPLAY_TABLE missing columns or rows');
+      return null;
+    }
+
+    if (!data.id) {
+      data.id = `table-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    return data as TableData;
+  } catch (error) {
+    console.warn('[Directive] Invalid DISPLAY_TABLE JSON:', error);
+    return null;
+  }
+}
+
+/**
+ * Parse DISPLAY_METRICS directive
+ */
+export function parseMetricsDirective(text: string): MetricsData | null {
+  const jsonStr = extractJsonFromDirective(text, 'DISPLAY_METRICS');
+  if (!jsonStr) return null;
+
+  try {
+    const data = JSON.parse(jsonStr);
+
+    if (!data.metrics || !Array.isArray(data.metrics)) {
+      console.warn('[Directive] DISPLAY_METRICS missing metrics array');
+      return null;
+    }
+
+    if (!data.id) {
+      data.id = `metrics-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    return data as MetricsData;
+  } catch (error) {
+    console.warn('[Directive] Invalid DISPLAY_METRICS JSON:', error);
+    return null;
+  }
+}
+
+/**
+ * Parse DISPLAY_CODE directive
+ */
+export function parseCodeDirective(text: string): CodeData | null {
+  const jsonStr = extractJsonFromDirective(text, 'DISPLAY_CODE');
+  if (!jsonStr) return null;
+
+  try {
+    const data = JSON.parse(jsonStr);
+
+    if (!data.code || !data.language) {
+      console.warn('[Directive] DISPLAY_CODE missing code or language');
+      return null;
+    }
+
+    if (!data.id) {
+      data.id = `code-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    return data as CodeData;
+  } catch (error) {
+    console.warn('[Directive] Invalid DISPLAY_CODE JSON:', error);
+    return null;
+  }
+}
+
+/**
+ * Parse UPDATE_CHART directive (for real-time updates)
+ */
+export function parseUpdateChartDirective(text: string): ChartUpdate | null {
+  const jsonStr = extractJsonFromDirective(text, 'UPDATE_CHART');
+  if (!jsonStr) return null;
+
+  try {
+    const update = JSON.parse(jsonStr);
+
+    if (!update.id) {
+      console.warn('[Directive] UPDATE_CHART missing id');
+      return null;
+    }
+
+    return update as ChartUpdate;
+  } catch (error) {
+    console.warn('[Directive] Invalid UPDATE_CHART JSON:', error);
+    return null;
+  }
+}
+
+/**
+ * Parse UPDATE_TABLE directive (for real-time updates)
+ */
+export function parseUpdateTableDirective(text: string): TableUpdate | null {
+  const pattern = /\[UPDATE_TABLE:\s*(\{[\s\S]*?\})\]/gi;
+  const match = pattern.exec(text);
+
+  if (!match) return null;
+
+  try {
+    const update = JSON.parse(match[1]);
+
+    if (!update.id) {
+      console.warn('[Directive] UPDATE_TABLE missing id');
+      return null;
+    }
+
+    return update as TableUpdate;
+  } catch (error) {
+    console.warn('[Directive] Invalid UPDATE_TABLE JSON:', error);
+    return null;
+  }
+}
+
+/**
+ * Parse DISPLAY_NOTIFICATION directive
+ */
+export function parseNotificationDirective(text: string): NotificationData | null {
+  const jsonStr = extractJsonFromDirective(text, 'DISPLAY_NOTIFICATION');
+  if (!jsonStr) return null;
+
+  try {
+    return JSON.parse(jsonStr) as NotificationData;
+  } catch (error) {
+    console.warn('[Directive] Invalid DISPLAY_NOTIFICATION JSON:', error);
+    return null;
+  }
 }

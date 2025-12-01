@@ -2525,6 +2525,41 @@ ${context}
 - You have full tool access: bash, python, file operations, git
 - Report results clearly
 - If the task requires multiple steps, complete all of them
+
+## Execution Environment Details
+
+**Project Structure:**
+\`\`\`
+/Users/zstoc/GitHub/quant-engine/
+├── python/                    # Python quant engine (YOU ARE HERE)
+│   ├── server.py              # Flask server (port 5000)
+│   ├── engine/                # Core modules
+│   │   ├── data/              # Data loaders, features
+│   │   ├── analysis/          # Regime detection, metrics
+│   │   ├── trading/           # Backtesting, strategies
+│   │   ├── pricing/           # Options pricing, Greeks
+│   │   └── plugins/           # Extensible analysis plugins
+│   └── requirements.txt       # Python dependencies
+├── src/                       # React/Electron frontend
+└── SESSION_STATE.md           # Current project state
+\`\`\`
+
+**Data Storage:**
+- Market Data: /Volumes/VelocityData/market_data/ (8TB external SSD)
+  - Options: /us_options_opra/day_aggs_v1/
+  - Stocks: /velocity_om/parquet/stock/
+- Use yfinance as fallback if VelocityData unavailable
+
+**Python Environment:**
+- Version: 3.14.0
+- Key Packages: pandas, numpy, scipy, flask, yfinance
+- Check requirements.txt for full dependency list
+
+**Your Tools:**
+- **Bash:** Full shell access (cd, ls, mkdir, grep, curl, etc.)
+- **Python:** Execute any .py script with arguments
+- **Git:** Status, commit, push, branches, etc. (full access)
+- **File I/O:** Read, write, search any file in project
 `;
 
     // Add agent strategy based on parallel hint
@@ -2582,53 +2617,232 @@ You may spawn native Claude agents for parallel work if beneficial (covered by M
     }
 
     safeLog(`   Working directory: ${resolved} ✓`);
+
+    // Add SESSION_STATE.md if it exists
+    const sessionStatePath = path.join(resolved, 'SESSION_STATE.md');
+    if (fs.existsSync(sessionStatePath)) {
+      const sessionState = fs.readFileSync(sessionStatePath, 'utf-8');
+      safeLog(`   Including SESSION_STATE.md (${sessionState.length} bytes)`);
+
+      prompt += `
+
+## Project Current State (from SESSION_STATE.md)
+
+${sessionState}
+
+**IMPORTANT:**
+- Don't break anything marked "Working"
+- Focus on "In Progress" and "Next Actions"
+- Known issues are listed in "Broken" section
+`;
+    }
+
+    prompt += `
+## Expected Response Format
+
+Structure your response clearly:
+
+**Summary:** <What you accomplished in 1-2 sentences>
+
+**Results:**
+<Data, output, or confirmation. Use UI directives if displaying charts/tables>
+
+**Files Modified:**
+- path/to/file1.py (created)
+- path/to/file2.py (updated lines 45-67)
+
+**Issues:** <Any problems encountered, or "None">
+
+**Next Steps:** <If task is incomplete, what remains>
+
+## Output Limits
+
+- **Maximum output size:** 10MB
+- **If output exceeds limit:** First 10MB returned + truncation notice
+- **For large results:** Write to file and return file path instead
+
+Example for large data:
+\`\`\`python
+# Don't print 100MB of data
+results.to_csv('/tmp/backtest_results.csv')
+print("Results written to /tmp/backtest_results.csv (15MB)")
+\`\`\`
+
+## Context Verification
+
+Task context and reasoning from Gemini are included below. Verify you understand:
+- The problem being solved
+- Any constraints or limitations
+- Expected outcomes
+`;
+
+    // M11: Add context preservation validation logging
+    if (context) {
+      safeLog(`   Context provided: ${context.length} bytes`);
+      safeLog(`   Context preview: ${context.slice(0, 200)}...`);
+
+      prompt += `
+## Context (Gemini's Analysis)
+\`\`\`
+${context}
+\`\`\`
+`;
+    }
+
     safeLog('🔵 Executing Claude Code CLI...');
 
-    // Execute Claude Code CLI
-    // --print: Output to stdout (non-interactive)
-    // --output-format text: Plain text output
-    // -p: Direct prompt string
-    //
-    // SECURITY: Whitelist safe environment variables only (no API keys/secrets)
-    const safeEnv = {
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      USER: process.env.USER,
-      TMPDIR: process.env.TMPDIR,
-      NODE_ENV: process.env.NODE_ENV,
-      // DO NOT pass: API keys, passwords, tokens, credentials
-    };
+    // Execute Claude Code CLI via visible Terminal with background fallback
+    safeLog('   Setting up Claude Code execution...');
 
-    const result = spawnSync('claude', ['--print', '--output-format', 'text', '-p', prompt], {
+    // Create temp files for output
+    const outputFile = path.join(process.env.TMPDIR || '/tmp', `clauded-output-${Date.now()}.txt`);
+    const promptFile = path.join(process.env.TMPDIR || '/tmp', `clauded-prompt-${Date.now()}.txt`);
+
+    // Write prompt to file to avoid shell escaping issues
+    fs.writeFileSync(promptFile, prompt);
+
+    // Build command that runs in Terminal with visible output
+    const terminalCommand = `cd "${resolved}" && echo "🚀 Claude Code Execution" && echo "Working directory: ${resolved}" && echo "Task: ${task.slice(0, 100)}..." && echo "" && claude --print --output-format text -p "$(cat ${promptFile})" 2>&1 | tee ${outputFile}; EXIT_CODE=$?; echo "__EXIT_CODE__:$EXIT_CODE" >> ${outputFile}; echo ""; echo "✅ Claude Code execution complete (exit: $EXIT_CODE). Press any key to close..."; read -n 1`;
+
+    // Try to open Terminal.app with the command (visible for monitoring)
+    const appleScript = `
+tell application "Terminal"
+  activate
+  set newTab to do script "${terminalCommand.replace(/"/g, '\\"')}"
+end tell
+`;
+
+    safeLog('   Opening Terminal window for monitoring...');
+    const terminalResult = spawnSync('osascript', ['-e', appleScript], {
       encoding: 'utf-8',
-      cwd: projectRoot,
-      timeout: 600000, // 10 minute timeout - complex tasks may take time
-      env: safeEnv,  // Whitelisted env vars only
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-      stdio: ['pipe', 'pipe', 'pipe']
+      timeout: 5000
     });
 
+    // Declare result variable for use in both paths
+    let result: { stdout: string; stderr: string; status: number };
+
+    if (terminalResult.status !== 0) {
+      safeLog(`⚠️ Terminal launch failed: ${terminalResult.stderr}`);
+      safeLog(`   Falling back to background execution (no visible Terminal)`);
+
+      // Fallback: Execute clauded in background without Terminal
+      const bgResult = spawnSync('claude', ['--print', '--output-format', 'text', '-p', prompt], {
+        encoding: 'utf-8',
+        cwd: resolved,
+        timeout: 600000, // 10 minutes
+        maxBuffer: 10 * 1024 * 1024,
+        env: {
+          PATH: process.env.PATH,
+          HOME: process.env.HOME,
+          USER: process.env.USER,
+          TMPDIR: process.env.TMPDIR,
+          NODE_ENV: process.env.NODE_ENV,
+        }
+      });
+
+      const elapsed = Date.now() - startTime;
+
+      // Check for timeout
+      if (bgResult.signal === 'SIGTERM') {
+        claudeCodeCircuitBreaker.recordFailure();
+        return {
+          success: false,
+          content: '',
+          error: `Claude Code timed out after ${Math.floor(elapsed / 1000)}s`
+        };
+      }
+
+      // Check for errors
+      if (bgResult.error) {
+        claudeCodeCircuitBreaker.recordFailure();
+        return {
+          success: false,
+          content: '',
+          error: `Failed to spawn Claude Code: ${bgResult.error.message}`
+        };
+      }
+
+      // Success - process result
+      const MAX_OUTPUT_SIZE = 10 * 1024 * 1024; // 10MB
+      let stdout = bgResult.stdout;
+
+      if (stdout.length > MAX_OUTPUT_SIZE) {
+        safeLog(`⚠️ Large output (${(stdout.length / 1024 / 1024).toFixed(1)}MB), truncating to 10MB`);
+        stdout = stdout.slice(0, MAX_OUTPUT_SIZE) +
+          `\n\n[⚠️ OUTPUT TRUNCATED: Output is ${(stdout.length / 1024 / 1024).toFixed(1)}MB, showing first 10MB]`;
+      }
+
+      result = {
+        stdout: stdout,
+        stderr: bgResult.stderr,
+        status: bgResult.status || 0
+      };
+
+      safeLog(`✅ Background execution completed (exit ${result.status})`);
+
+      // Cleanup temp files
+      if (fs.existsSync(promptFile)) fs.unlinkSync(promptFile);
+      if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
+    } else {
+      safeLog('   Terminal window opened - waiting for completion...');
+
+      // Poll for output file (created when claude completes)
+      const maxWaitTime = 600000; // 10 minutes
+      const pollInterval = 1000; // Check every second
+      let waited = 0;
+
+      while (waited < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        waited += pollInterval;
+
+        // Check if output file exists and has content
+        if (fs.existsSync(outputFile)) {
+          const stats = fs.statSync(outputFile);
+          if (stats.size > 0) {
+            // Wait a bit more to ensure write is complete
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            break;
+          }
+        }
+      }
+
+      // Read result from output file
+      if (fs.existsSync(outputFile)) {
+        const rawOutput = fs.readFileSync(outputFile, 'utf-8');
+
+        // Extract exit code
+        const exitCodeMatch = rawOutput.match(/__EXIT_CODE__:(\d+)/);
+        const exitCode = exitCodeMatch ? parseInt(exitCodeMatch[1]) : 0;
+
+        // Remove exit code marker from output
+        const cleanOutput = rawOutput.replace(/__EXIT_CODE__:\d+\n?/, '');
+
+        result = {
+          stdout: cleanOutput,
+          stderr: '',
+          status: exitCode  // Now captures actual exit code
+        };
+
+        // Cleanup temp files
+        fs.unlinkSync(outputFile);
+        fs.unlinkSync(promptFile);
+      } else {
+        safeLog(`❌ Timeout: No output after ${waited}ms`);
+        // Cleanup prompt file
+        if (fs.existsSync(promptFile)) fs.unlinkSync(promptFile);
+
+        // Record failure in circuit breaker
+        claudeCodeCircuitBreaker.recordFailure();
+
+        return {
+          success: false,
+          content: '',
+          error: `Claude Code timed out after ${Math.floor(waited / 1000)}s. Task may be too complex. Try breaking into smaller steps.`
+        };
+      }
+    }
+
     const elapsed = Date.now() - startTime;
-
-    // Check for timeout
-    if (result.signal === 'SIGTERM') {
-      safeLog(`❌ Claude Code timed out after ${elapsed}ms`);
-      return {
-        success: false,
-        content: '',
-        error: `Claude Code timed out after ${Math.floor(elapsed / 1000)}s. Task may be too complex. Try breaking into smaller steps.`
-      };
-    }
-
-    // Check for spawn errors
-    if (result.error) {
-      safeLog(`❌ Claude Code spawn error: ${result.error.message}`);
-      return {
-        success: false,
-        content: '',
-        error: `Failed to spawn Claude Code: ${result.error.message}`
-      };
-    }
 
     // Check for non-zero exit
     if (result.status !== 0) {
