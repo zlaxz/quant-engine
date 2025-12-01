@@ -515,6 +515,10 @@ def load_spy_data(
     if df.empty:
         return df
 
+    # Alias vix_close to iv for RegimeEngine compatibility (MUST be before regime classification)
+    if 'vix_close' in df.columns:
+        df['iv'] = df['vix_close']
+
     # Add regime labels if requested
     if include_regimes:
         from ..analysis.regime_engine import RegimeEngine

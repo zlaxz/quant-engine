@@ -557,6 +557,10 @@ export const BACKTEST_TOOLS: FunctionDeclaration[] = [
         end_date: {
           type: SchemaType.STRING,
           description: 'End date in YYYY-MM-DD format'
+        },
+        capital: {
+          type: SchemaType.NUMBER,
+          description: 'Initial capital for backtest (default: 100000)'
         }
       },
       required: ['strategy_key', 'param_name', 'start', 'end', 'step', 'start_date', 'end_date']
@@ -777,6 +781,14 @@ export const QUANT_TOOLS: FunctionDeclaration[] = [
     }
   },
   {
+    name: 'list_strategies',
+    description: 'List all available trading strategies (profiles) with descriptions and target regimes',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {}
+    }
+  },
+  {
     name: 'get_strategy_details',
     description: 'Get performance details for a specific convexity profile strategy. Returns Sharpe ratio, win rate, max drawdown, annual return, trade duration, and a mini equity curve. Profiles 1-6 correspond to: Long Dated Gamma, Short Dated Gamma, Charm Harvester, Vanna Play, Skew Trader, Vol-of-Vol.',
     parameters: {
@@ -800,24 +812,32 @@ export const QUANT_TOOLS: FunctionDeclaration[] = [
   },
   {
     name: 'run_simulation',
-    description: 'Run what-if scenario simulation. Given a price change and volatility change, calculate projected P&L, surviving/failing strategies, and margin call risk. Use this to stress-test the portfolio.',
+    description: 'Run scenario simulation (VIX shock, price drop, vol crush) on current portfolio. Returns projected P&L, surviving/failing strategies, and margin call risk.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
-        price_change: {
-          type: SchemaType.NUMBER,
-          description: 'Price change as decimal (e.g., -0.05 for 5% drop)'
+        scenario: {
+          type: SchemaType.STRING,
+          description: 'Scenario type: vix_shock, price_drop, vol_crush'
         },
-        vol_change: {
-          type: SchemaType.NUMBER,
-          description: 'Volatility change as decimal (e.g., 0.20 for 20% vol spike)'
+        params: {
+          type: SchemaType.OBJECT,
+          description: 'Scenario parameters (optional)'
         },
-        days_forward: {
-          type: SchemaType.NUMBER,
-          description: 'Days forward for theta decay calculation (default: 1)'
+        portfolio: {
+          type: SchemaType.OBJECT,
+          description: 'Portfolio positions (optional)'
         }
       },
-      required: ['price_change', 'vol_change']
+      required: ['scenario']
+    }
+  },
+  {
+    name: 'quant_engine_health',
+    description: 'Check Python quant engine health status and connectivity',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {}
     }
   }
 ];

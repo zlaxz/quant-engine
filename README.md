@@ -1,114 +1,67 @@
-# Welcome to your Lovable project
+# Quant Engine
 
-## Project info
+**A general-purpose quantitative research workbench for ANY trading strategy**
 
-**URL**: https://lovable.dev/projects/356d4f16-13c6-49c7-ba84-d79c2277da62
+---
 
-## How can I edit this code?
+## What Is This?
 
-There are several ways of editing your application.
+Desktop app for quantitative trading research. Works for momentum, mean reversion, pairs trading, options, ML models, futures, crypto - **any quantitative strategy**.
 
-**Use Lovable**
+**Tech Stack:** Electron + React + Python
+**AI Models:** Gemini 3 Pro + Claude Code + DeepSeek
+**Status:** Production-ready (as of 2025-12-01)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/356d4f16-13c6-49c7-ba84-d79c2277da62) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## Quick Start
 
-**Use your preferred IDE**
+```bash
+# Install
+npm install
+pip install -r python/requirements.txt
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+# Run
+npm run electron:dev
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+# Build
+npm run electron:build
 ```
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Key Features
 
-**Use GitHub Codespaces**
+✅ **Generic Visualization System** - 8 chart types, data tables, metrics dashboards
+✅ **Multi-Model AI** - Gemini (reasoning) + Claude Code (execution) + DeepSeek (parallel)
+✅ **Data-Driven** - Pass your data in directives, no hardcoded assumptions
+✅ **Real-Time** - Charts/tables update live as analysis runs
+✅ **Flexible** - Works for ANY quant strategy, not locked to specific paradigm
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+---
 
-## Connecting Your Local Rotation Engine
+## Documentation
 
-This project includes code bridge commands (`/open_file`, `/list_dir`, `/search_code`, `/red_team_file`) that can read directly from your local rotation-engine directory.
+**Start Here:**
+- **ARCHITECTURE.md** - System overview and current capabilities
+- **SESSION_STATE.md** - Current project state and recent changes
+- **CLAUDE.md** - Developer guidance
 
-### Setup Instructions
+**Technical Details:**
+- `.claude/docs/` - Comprehensive technical documentation
+- `src/prompts/chiefQuantPrompt.ts` - AI system prompt
+- `src/components/charts/README.md` - Visualization component docs
 
-1. **Copy the example environment file:**
-   ```sh
-   cp .env.example .env.local
-   ```
+---
 
-2. **Set the rotation-engine path in `.env.local`:**
-   ```sh
-   VITE_ROTATION_ENGINE_ROOT="/Users/zstoc/rotation-engine"
-   ```
-   Replace with the absolute path to your local rotation-engine directory.
+## Architecture
 
-3. **Configure Supabase Edge Functions:**
-   
-   For local development with Supabase CLI:
-   ```sh
-   supabase secrets set ROTATION_ENGINE_ROOT="/Users/zstoc/rotation-engine"
-   ```
+**3 Layers:** React frontend → Electron main → Python backend
+**3 AI Models:** Gemini 3 Pro → Claude Code → DeepSeek agents
+**Dynamic UI:** Data-driven directives control charts/tables/metrics in real-time
 
-   For deployed edge functions, set the secret in your Supabase project dashboard:
-   - Navigate to: Settings → Edge Functions
-   - Add secret: `ROTATION_ENGINE_ROOT` with your server path
+See **ARCHITECTURE.md** for complete details.
 
-4. **Test the connection:**
-   - `/list_dir path:.` — List root directory
-   - `/list_dir path:profiles` — List profiles directory
-   - `/open_file path:profiles/skew.py` — Open a specific file
-   - `/search_code peakless` — Search across the codebase
-   - `/red_team_file path:profiles/skew.py` — Run code audit
+---
 
-### Safety Features
-
-- **Read-only access:** Edge functions can only read files, never write
-- **Path validation:** Directory traversal (`..`) and absolute paths are blocked
-- **Sandboxed:** Code bridge cannot access files outside the configured root
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/356d4f16-13c6-49c7-ba84-d79c2277da62) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Built for flexible quantitative research | **No hardcoded paradigms**

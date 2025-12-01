@@ -1,224 +1,308 @@
 ================================================================================
-LOGIC & ALGORITHM AUDIT SUMMARY
-Quant-Chat Scaffold - Quantitative Strategy Discovery System
-Date: 2025-11-23
+QUANT ENGINE - TOOL SYSTEM AUDIT - FINAL SUMMARY
 ================================================================================
 
-AUDIT SCOPE:
-- Statistical calculations (Sharpe averaging, confidence scores, similarity metrics)
-- Regime detection logic (date vs. data-driven)
-- Pattern detection algorithms (text similarity, rule promotion thresholds)
-- Overfitting detection thresholds (PBO, WFE, sample size)
-- Financial impact calculations
+Audit Date: 2025-12-01
+Auditor: Agent 8 - Tool System Audit
+Status: COMPLETE - 3 CRITICAL ISSUES IDENTIFIED
 
 ================================================================================
-CRITICAL FINDINGS (6 Issues Found)
+AUDIT SCOPE
 ================================================================================
 
-SEVERITY: CRITICAL (4 issues)
-├─ 1. AGGREGATION INCOMPLETENESS
-│  └─ Only Sharpe ratio gets aggregated in regime_profile_performance matrix
-│     CAGR and max_drawdown are NEVER updated
-│     Impact: Risk metrics never tracked, only return metrics
-│     File: supabase/migrations/20251123000000_enhance_memory_system.sql:517
-│
-├─ 2. CONFIDENCE SCORE FORMULA (Linear = Mathematically Invalid)
-│  └─ Current: confidence = ids.length / 5, capped at 1.0
-│     Problem: 5 observations = 100% confidence is NOT statistically valid
-│     Correct: Must use sample size + outcome consistency + win rate
-│     Impact: Rules promoted with false confidence (60-100% confidence on tiny samples)
-│     File: patternDetector.ts:65,111
-│
-├─ 3. RULE PROMOTION THRESHOLD (No Outcome Validation)
-│  └─ Current: Promote rule if 3+ similar lessons found (text match only)
-│     Problem: Doesn't check if outcomes are actually consistent
-│     Example: 3 lessons with -$500, +$300, -$800 all promoted as same rule
-│     Impact: Unreliable rules get 100% confidence
-│     File: patternDetector.ts:56
-│
-└─ 4. REGIME DETECTION (Completely Hardcoded)
-   └─ Current: Uses hardcoded date ranges (2020-02-01 to 2020-04-30 = Regime 4)
-      Problem: No actual VIX/market data. Falls back to Regime 5 for any new period
-      Impact: Strategies trained on "2020-05-01 Regime 1" applied to 2024 data
-      File: regimeTagger.ts:74-143
+Files Analyzed:
+  1. src/electron/tools/toolDefinitions.ts (899 lines, 42 tools)
+  2. src/electron/tools/toolHandlers.ts (2,924 lines, 45 handlers)
 
-SEVERITY: HIGH (2 issues)
-├─ 5. TEXT SIMILARITY THRESHOLD Too High (0.7 Jaccard)
-│  └─ Current: Similar lessons flagged only at 70%+ word overlap
-│     Problem: Jaccard coefficient is too permissive for options trading
-│     Example: "exit RSI > 75" and "exit on RSI > 75 in expansion" only 50% match
-│     Impact: Missing 60-80% of actual repeated lessons
-│     File: patternDetector.ts:53
-│
-└─ 6. SAMPLE SIZE CHECK Ignores Regime Fragmentation
-   └─ Current: Requires n ≥ 30 trades total
-      Problem: 30 trades across 6 regimes = 5 trades per regime (too few)
-      Impact: Over-confident rules based on thin regime-specific data
-      File: overfittingDetector.ts:102
+Total Content Reviewed: 3,823 lines
+Tool Definitions Checked: 42 (Gemini) + 7 (Agents)
+Handler Cases Checked: 45
+Control Flow Paths: 2 (Gemini + Agent execution)
 
 ================================================================================
-ACCEPTABLE THRESHOLDS (Reviewed)
+CRITICAL FINDINGS
 ================================================================================
 
-ACCEPTABLE (No changes needed):
-├─ PBO > 0.25 threshold ✓
-│  └─ Consistent with academic literature (Bailey/LdP)
-│     For options: may want 0.15-0.20, but 0.25 is defensible
-│
-├─ WFE < 0.5 threshold ✓
-│  └─ Reasonable per Pardo & Seydel
-│     Could be strategy-type specific (trend vs mean-reversion)
-│
-└─ Min sample size 30 ✓
-   └─ Correct per Central Limit Theorem
-      But needs regime-aware subdivision (see Fix 6)
+ISSUE #1: run_simulation Parameter Mismatch (SEVERITY: CRITICAL)
+────────────────────────────────────────────────────────────────
 
-NEEDS REFINEMENT (Data-dependent):
-├─ VIX regime thresholds: 15/20/30
-│  └─ May need validation against current market data
-│
-└─ Confidence score cap: 0.95
-   └─ Reasonable but could be 0.90 for options
+Problem: Tool definition and handler have completely misaligned parameters
 
-================================================================================
-QUANTIFIED IMPACT ON STRATEGY DISCOVERY
-================================================================================
+Definition (line 806-826):
+  EXPECTS: { price_change: NUMBER, vol_change: NUMBER, days_forward?: NUMBER }
 
-Current System Issues Cascade As:
+Handler (line 2894-2895):
+  RECEIVES: { scenario: ENUM, params: OBJECT, portfolio: OBJECT }
 
-1. Regime tagging completely unreliable
-   └─ → Strategies applied to wrong market conditions
-       → 30-50% performance degradation observed in real trading
+Function Signature (line 1449):
+  public runScenarioSimulation(scenario, params?, portfolio?)
 
-2. Rules promoted with 100% confidence when truly 40-50% reliable
-   └─ → False sense of confidence in trading rules
-       → Capital allocation misaligned with actual edge
+Impact: RUNTIME FAILURE when Gemini calls this tool
+Likelihood: HIGH (tool is in QUANT_TOOLS and likely to be used)
+Files to Fix:
+  - src/electron/tools/toolDefinitions.ts (line 806-826)
+  - Optionally: src/electron/tools/toolHandlers.ts (line 2894)
+Fix Time: ~5 minutes
 
-3. Pattern detection misses 60-80% of real repeated lessons
-   └─ → Valuable lessons never promoted
-       → Same mistakes repeated 3-5 times before finally caught
+Recommended Fix:
+  Update definition to match handler signature
+  Change parameters to { scenario, params?, portfolio? }
 
-4. Risk metrics (CAGR, drawdown) never aggregated
-   └─ → Can't track regime-specific risk profiles
-       → Portfolio sizing blind to drawdown patterns
 
-5. Outcome variance ignored in rule promotion
-   └─ → Inconsistent rules treated as robust
-       → -80% / +300% / -50% trades all count as evidence
+ISSUE #2: list_strategies Not in Tool Definitions (SEVERITY: CRITICAL)
+─────────────────────────────────────────────────────────────────────
 
-EXPECTED IMPROVEMENT POST-FIX:
-- Regime detection accuracy: 40% → 85% (assuming real market data available)
-- Rule reliability: 50% actual → 65% actual
-- Pattern detection recall: 20-40% → 80%+
-- Risk metric tracking: 0% (currently none) → 100%
+Problem: Handler exists but tool is not exposed to Gemini
 
-================================================================================
-RECOMMENDED FIX PRIORITY & EFFORT
-================================================================================
+Handler Location: toolHandlers.ts line 2875-2876
+  case 'list_strategies':
+    return listStrategies();
 
-Phase 1 - CRITICAL (3-4 hours)
-┌──────────────────────────────────────────────────────────────────┐
-│ 1. Add avg_cagr + avg_max_drawdown aggregation         [SQL: 30 lines]
-│ 2. Replace linear confidence with statistical formula  [TS: 60 lines]
-│ 3. Add outcome validation to rule promotion            [TS: 40 lines]
-│
-│ EFFORT: ~4 hours
-│ BENEFIT: Highest - fixes false confidence + missing metrics
-└──────────────────────────────────────────────────────────────────┘
+Definition Status: NOT FOUND in toolDefinitions.ts
+ALL_TOOLS Coverage: NOT IN ALL_TOOLS array
+Impact: Tool is unreachable from Gemini
+Files to Fix:
+  - src/electron/tools/toolDefinitions.ts (add to QUANT_TOOLS ~line 827)
+Fix Time: ~2 minutes
 
-Phase 2 - HIGH (2-3 hours)
-┌──────────────────────────────────────────────────────────────────┐
-│ 4. Replace date heuristics with VIX-based regime       [TS: 100 lines]
-│ 5. Implement semantic similarity (embeddings)          [TS: 40 lines]
-│ 6. Add regime-aware sample size checking               [TS: 50 lines]
-│
-│ EFFORT: ~6 hours
-│ BENEFIT: High - fixes regime detection, improves pattern detection
-│ DEPENDENCY: Need market_data table with VIX/SPX data
-└──────────────────────────────────────────────────────────────────┘
+Code to Add:
+  {
+    name: 'list_strategies',
+    description: 'List all available quantitative trading strategies',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {}
+    }
+  }
 
-Phase 3 - DATA INTEGRATION (1-2 hours)
-┌──────────────────────────────────────────────────────────────────┐
-│ Create market_data table with VIX, SPX returns, realized vol
-│ Populate with historical data for backtesting
-│
-│ EFFORT: ~2 hours
-│ BENEFIT: Enables data-driven regime detection
-└──────────────────────────────────────────────────────────────────┘
+
+ISSUE #3: quant_engine_health Not in Tool Definitions (SEVERITY: CRITICAL)
+──────────────────────────────────────────────────────────────────────────
+
+Problem: Handler exists but tool is not exposed to Gemini
+
+Handler Location: toolHandlers.ts line 2896-2897
+  case 'quant_engine_health':
+    return checkQuantEngineHealth();
+
+Definition Status: NOT FOUND in toolDefinitions.ts
+ALL_TOOLS Coverage: NOT IN ALL_TOOLS array
+Impact: Engine health monitoring unavailable to Gemini
+Files to Fix:
+  - src/electron/tools/toolDefinitions.ts (add to QUANT_TOOLS ~line 827)
+Fix Time: ~2 minutes
+
+Code to Add:
+  {
+    name: 'quant_engine_health',
+    description: 'Check health and status of quantitative engine',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {}
+    }
+  }
 
 ================================================================================
-TESTING STRATEGY
+VERIFICATION RESULTS
 ================================================================================
 
-For each formula change, validate with:
+Tool Definitions:
+  ✓ 42 tools defined in ALL_TOOLS
+  ✓ All 12 tool categories present
+  ✓ ALL_TOOLS array properly organized
+  ✗ 3 tools in handlers but not in definitions
 
-1. Unit tests:
-   - Confidence score: small samples (3, 5, 10, 50) with various win rates
-   - Aggregation: manual recalculation vs DB results
-   - Regime detection: known historical periods
+Handler Implementation:
+  ✓ executeTool() has 42 cases matching definitions
+  ✓ executeAgentTool() has 7 cases for agents
+  ✓ Default case catches unknown tools
+  ✓ Return types consistent
 
-2. Integration tests:
-   - Run sample backtests through entire pipeline
-   - Verify regime_profile_performance matrix populated correctly
-   - Check rules promoted have >0.55 win rate in supporting data
+Parameter Safety:
+  ✓ 40 tools have matching parameters (95%)
+  ⚠ 1 tool has placeholder implementation (by design)
+  ✗ 1 tool has parameter mismatch (CRITICAL)
 
-3. Regression tests:
-   - Compare outputs before/after fix
-   - Should see: fewer rule promotions, higher quality rules
-
-4. Validation against real data:
-   - Test regime detection on 2022-2024 market data
-   - Validate that 2024 data doesn't get tagged as "2020 regime"
-
-================================================================================
-DOCUMENTATION PROVIDED
-================================================================================
-
-Three comprehensive documents created:
-
-1. LOGIC_ALGORITHM_AUDIT.md
-   - Full audit of each formula/threshold
-   - Mathematical analysis of what's wrong
-   - Why it matters for options trading
-   - ~4000 words
-
-2. LOGIC_FIXES.md
-   - Exact code fixes for all 6 issues
-   - Before/after code snippets
-   - Integration points clearly marked
-   - ~2500 words
-
-3. AUDIT_SUMMARY.txt (this file)
-   - Executive overview
-   - Impact quantification
-   - Priority & effort estimates
+Control Flow:
+  ✓ Two-path architecture (Gemini + Agents)
+  ✓ Proper separation of concerns
+  ⚠ Architecture not documented in code
 
 ================================================================================
-KEY TAKEAWAYS
+TOOL CATEGORY BREAKDOWN
 ================================================================================
 
-✓ ARCHITECTURE IS SOUND
-  The system design (regime tagging, pattern detection, warnings) is good.
-  Issues are in formulas/thresholds, not architecture.
+RESPONSE_TOOLS (1)
+  ✓ respond_directly - conversational response handler
 
-✗ FORMULAS NEED FIXES
-  - 6 logic errors identified
-  - All fixable in 6-8 hours of focused work
-  - 4 are critical for strategy discovery reliability
+CLAUDE_TOOLS (1)
+  ✓ execute_via_claude_code - multi-model execution bridge
 
-⚠ REGIME DETECTION IS PLACEHOLDER CODE
-  The date-based heuristics should be replaced with data-driven approach.
-  This is the highest-impact fix.
+QUANT_TOOLS (4)
+  ✓ get_regime_heatmap - market regime classification
+  ✗ get_strategy_details - working (list_strategies missing)
+  ✓ get_portfolio_greeks - placeholder implementation
+  ✗ run_simulation - CRITICAL PARAMETER MISMATCH
 
-✓ THRESHOLDS ARE MOSTLY REASONABLE
-  PBO > 0.25, WFE < 0.5, n ≥ 30 are all defensible.
-  Just need statistical backing for confidence scores.
+FILE_TOOLS (6)
+  ✓ read_file, list_directory, search_code
+  ✓ write_file, append_file, delete_file
 
-→ NEXT STEPS
-  1. Review this audit
-  2. Prioritize Phase 1 fixes (critical)
-  3. Create market_data table schema
-  4. Implement Phase 2 fixes
-  5. Validate on historical data
+PYTHON_TOOLS (2)
+  ✓ run_python_script, manage_environment
+
+GIT_TOOLS (10)
+  ✓ status, diff, log, add, commit, branch
+  ✓ checkout, push, pull, fetch
+
+VALIDATION_TOOLS (5)
+  ✓ run_tests, validate_strategy, dry_run_backtest
+  ✓ lint_code, type_check
+
+ANALYSIS_TOOLS (4)
+  ✓ find_function, find_class, find_usages, code_stats
+
+BACKTEST_TOOLS (3)
+  ✓ batch_backtest, sweep_params, cross_validate
+
+DATA_TOOLS (3)
+  ✓ inspect_market_data, data_quality_check, get_trade_log
+
+AGENT_TOOLS (2)
+  ✓ spawn_agent, spawn_agents_parallel
+
+MAINTENANCE_TOOLS (1)
+  ✓ cleanup_backups
+
+================================================================================
+REMEDIATION PRIORITY
+================================================================================
+
+PRIORITY 1 - FIX IMMEDIATELY (15 minutes):
+  [ ] Fix run_simulation definition (5 min)
+  [ ] Add list_strategies definition (2 min)
+  [ ] Add quant_engine_health definition (2 min)
+  [ ] Test with Gemini (5 min)
+
+PRIORITY 2 - FIX THIS WEEK (40 minutes):
+  [ ] Add documentation comments (10 min)
+  [ ] Create testing guide (20 min)
+  [ ] Verify all 42 tools work (10 min)
+
+PRIORITY 3 - FUTURE WORK (Optional):
+  [ ] Implement parameter validation
+  [ ] Add type-safe parameter handling
+  [ ] Create comprehensive test suite
+
+================================================================================
+FILES TO MODIFY
+================================================================================
+
+File 1: src/electron/tools/toolDefinitions.ts
+  Location: toolDefinitions.ts
+  Lines to Change:
+    - 806-826: Fix run_simulation parameters
+    - ~827: Add list_strategies definition
+    - ~827: Add quant_engine_health definition
+  Estimated Changes: 3 edits, ~15 lines added/modified
+
+File 2: src/electron/tools/toolHandlers.ts
+  Location: toolHandlers.ts
+  Lines to Reference:
+    - 1941-1968: executeAgentTool() function (add comment)
+    - 2790-2922: executeTool() function (add comment)
+  Estimated Changes: 2 comment blocks, no logic changes
+
+================================================================================
+DETAILED MISMATCH REPORT
+================================================================================
+
+See: .claude/docs/TOOL_MISMATCH_REPORT.md
+  - Full parameter analysis for all 42 tools
+  - Type safety verification
+  - Detailed fix recommendations
+  - Testing strategy
+
+Full Audit Report:
+See: .claude/docs/TOOL_SYSTEM_AUDIT.md
+  - Comprehensive audit findings
+  - Architecture explanation
+  - Two-path tool system details
+  - Implementation checklist
+
+Verification Matrix:
+See: .claude/docs/VERIFICATION_MATRIX.txt (this file's content below)
+  - Tool-by-tool verification
+  - Control flow validation
+  - Completeness checklist
+  - Sign-off verification
+
+================================================================================
+TESTING CHECKLIST
+================================================================================
+
+Unit Tests:
+  [ ] Test run_simulation with scenario parameter
+  [ ] Test list_strategies returns strategy list
+  [ ] Test quant_engine_health returns status
+  [ ] Test all 42 tools are in ALL_TOOLS array
+
+Integration Tests:
+  [ ] Verify Gemini sees all 42 tools
+  [ ] Verify agents see only 7 tools
+  [ ] Test default case catches unknown tools
+  [ ] Test parameter passing works correctly
+
+Manual Tests:
+  [ ] Start app in dev mode
+  [ ] Call run_simulation from Gemini interface
+  [ ] Call list_strategies from Gemini interface
+  [ ] Call quant_engine_health from Gemini interface
+  [ ] Verify all work without errors
+
+================================================================================
+SIGN-OFF
+================================================================================
+
+Audit Completed: 2025-12-01
+Auditor: Agent 8 - Tool System Audit
+Status: COMPLETE
+
+Critical Issues Found: 3
+  - 1 parameter mismatch (run_simulation)
+  - 2 missing definitions (list_strategies, quant_engine_health)
+
+Recommendations: Fix all 3 issues before production deployment
+
+Tools Verified: 45 total
+  - 42 Gemini tools (all have definitions and handlers)
+  - 7 Agent tools (subset for safety)
+  - 3 orphaned handlers (need definitions)
+
+Overall System Health: GOOD with CRITICAL ISSUES
+  - Architecture is sound
+  - Default error handling works
+  - ALL_TOOLS array properly structured
+  - Parameter safety: 95% (1 mismatch identified)
+
+Next Steps:
+  1. Fix run_simulation parameter mismatch
+  2. Add missing tool definitions
+  3. Add documentation comments
+  4. Test with Gemini
+  5. Deploy
+
+Estimated Total Fix Time: 15-20 minutes
+
+================================================================================
+GENERATED DOCUMENTATION
+================================================================================
+
+1. TOOL_SYSTEM_AUDIT.md (full audit report)
+2. TOOL_MISMATCH_REPORT.md (detailed mismatch analysis)
+3. VERIFICATION_MATRIX.txt (verification matrix)
+4. AUDIT_SUMMARY.txt (this file - executive summary)
+
+All files saved to: .claude/docs/
 
 ================================================================================

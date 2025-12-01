@@ -195,3 +195,33 @@ class TradeSimulator:
                 'exit_reason': t.exit_reason
             })
         return pd.DataFrame(data)
+
+    def run(self, data: pd.DataFrame, strategy_key: str) -> dict:
+        """
+        High-level backtest runner (INCOMPLETE).
+
+        This method is called by the API but is not yet implemented.
+        TradeSimulator is currently a low-level execution engine.
+
+        TODO: Either:
+        1. Implement strategy loading and backtest loop here, OR
+        2. Refactor API routes to use Profile classes directly
+
+        Args:
+            data: DataFrame with market data (OHLCV, regimes, features)
+            strategy_key: Strategy identifier (e.g., 'profile_1')
+
+        Returns:
+            dict with keys: metrics, equity_curve, trades
+
+        Raises:
+            NotImplementedError: This method needs implementation
+        """
+        raise NotImplementedError(
+            f"TradeSimulator.run() is not implemented. "
+            f"The API endpoint at /backtest calls this method but it doesn't exist yet. "
+            f"Options:\n"
+            f"1. Use Profile classes directly (e.g., Profile1LongDatedGamma.run_backtest())\n"
+            f"2. Implement this method to load strategies and execute backtest loop\n"
+            f"Current strategy requested: {strategy_key}"
+        )

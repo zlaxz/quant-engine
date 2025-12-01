@@ -2,8 +2,9 @@ import { ipcMain } from "electron";
 import { createClient } from "@supabase/supabase-js";
 import { PatternDetector } from "../../lib/patternDetection";
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL!;
-const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY!;
+// Supabase public credentials (anon key is safe for local app)
+const supabaseUrl = 'https://ynaqtawyynqikfyranda.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluYXF0YXd5eW5xaWtmeXJhbmRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM1NzM5NjMsImV4cCI6MjA3OTE0OTk2M30.VegcJvLluy8toSYqnR7Ufc5jx5XAl1-XeDRl8KbsIIw';
 
 export function setupPatternHandlers() {
   const supabase = createClient(supabaseUrl, supabaseKey);

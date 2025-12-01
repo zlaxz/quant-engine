@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 import { ALL_TOOLS } from '../tools/toolDefinitions';
 import { executeTool } from '../tools/toolHandlers';
+import { detectTaskContext, selectTools } from '../tools/toolSelector';
 import {
   validateIPC,
   ChatMessagesSchema,
@@ -486,6 +487,12 @@ Let me start with the analysis...
 
       const fullSystemInstruction = (systemMessage?.content || '') + toolDirective;
 
+      // Detect task context from user message (reuse lastUserMessage from routing)
+      const taskContext = detectTaskContext(lastUserMessage);
+      const contextualTools = selectTools(taskContext);
+
+      safeLog(`[LLM] Task context: ${taskContext}, providing ${contextualTools.length} tools`);
+
       // Get model with tools enabled, explicit toolConfig, and system instruction
       // ANY mode encourages aggressive tool usage - Gemini should call tools when user asks
       // This is CRITICAL - without ANY mode, Gemini will avoid using tools and apologize
@@ -494,7 +501,7 @@ Let me start with the analysis...
       // See: https://ai.google.dev/gemini-api/docs/gemini-3?thinking=high
       const model = geminiClient.getGenerativeModel({
         model: PRIMARY_MODEL,
-        tools: [{ functionDeclarations: ALL_TOOLS }],
+        tools: [{ functionDeclarations: contextualTools }],  // ← Use contextual subset
         toolConfig: {
           functionCallingConfig: {
             mode: 'ANY' as any, // ANY forces Gemini to use tools - prevents "I can't" responses
@@ -504,6 +511,11 @@ Let me start with the analysis...
         generationConfig: {
           temperature: 1.0, // Gemini 3 Pro default - DO NOT CHANGE
           // thinking_level: 'high' is default - no need to specify
+          // L2: Uncomment to enable includeThoughts (debug mode only)
+          // When enabled, Gemini returns reasoning summaries between thinking and response
+          // Useful for understanding model decision-making in complex reasoning tasks
+          // NOTE: May increase latency and output length - only enable for debugging
+          // includeThoughts: true,
         },
       });
 
@@ -589,7 +601,36 @@ Let me start with the analysis...
         }
 
         const candidate = (response as any).candidates?.[0];
-        if (!candidate) break;
+        if (!candidate) {
+          safeLog('[Gemini] ERROR: Invalid response structure - no candidates array');
+
+          _event.sender.send('llm-stream', {
+            type: 'error',
+            error: 'Gemini returned invalid response format. This may indicate API issues or safety filters.',
+            timestamp: Date.now()
+          });
+
+          throw new Error('Invalid Gemini response: missing candidates array');
+        }
+
+        // L1: Log finishReason to help diagnose model behavior
+        const finishReason = candidate.finishReason;
+        if (finishReason) {
+          safeLog(`[Gemini] Finish reason: ${finishReason}`);
+
+          if (finishReason === 'SAFETY') {
+            console.warn('[Gemini] Response blocked by safety filters');
+            _event.sender.send('llm-stream', {
+              type: 'chunk',
+              content: '\n\n⚠️ *Response was filtered by safety systems. Try rephrasing your request.*\n',
+              timestamp: Date.now()
+            });
+          } else if (finishReason === 'MAX_TOKENS') {
+            console.warn('[Gemini] Response truncated at token limit');
+          } else if (finishReason === 'RECITATION') {
+            console.warn('[Gemini] Response blocked due to recitation');
+          }
+        }
 
         // DEBUG: Log exactly what Gemini returned
         const allParts = candidate.content?.parts || [];
@@ -935,6 +976,19 @@ Let me start with the analysis...
         response = streamResult.response;
         accumulatedText += streamResult.fullText;
         iterations++;
+      }
+
+      // Check if we hit max iterations
+      if (iterations >= MAX_TOOL_ITERATIONS) {
+        safeLog(`⚠️ Reached maximum tool call iterations (${MAX_TOOL_ITERATIONS})`);
+        safeLog(`   This may indicate an infinite loop or task that's too complex`);
+
+        // Warn user
+        _event.sender.send('llm-stream', {
+          type: 'chunk',
+          content: '\n\n⚠️ *Reached maximum tool iterations (10). The task may be too complex for single execution. Consider breaking it into smaller steps.*\n',
+          timestamp: Date.now()
+        });
       }
 
       // Get final text response - use accumulated text from streaming

@@ -130,6 +130,17 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on('claude-code-event', handler);
     return () => ipcRenderer.removeListener('claude-code-event', handler);
   },
+
+  // Claude Code directive emissions (for real-time UI control)
+  onClaudeCodeDirectives: (callback: (event: {
+    directives: any[];
+    source: string;
+    timestamp: number;
+  }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('claude-code-directives', handler);
+    return () => ipcRenderer.removeListener('claude-code-directives', handler);
+  },
   
   // Claude Code execution
   executeClaudeCode: (config: { task: string; context?: string; files?: string[]; timeout?: number }) =>

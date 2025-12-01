@@ -25,9 +25,13 @@ export interface ModelConfig {
 export const MODELS = {
   // Primary tier - high quality, main conversations, tool use
   // Gemini 3 Pro Preview - Google's latest flagship model (released after Nov 2024)
+  // L3: Locked to November 2025 version for consistency
+  // Google releases version-locked model names (gemini-3-pro-preview-11-2025, etc.)
+  // Using explicit version prevents unexpected behavior changes from latest/preview variants
+  // Check Google's API docs for latest available versions: https://ai.google.dev/models
   PRIMARY: {
     provider: (import.meta.env?.VITE_PRIMARY_PROVIDER || 'google') as ProviderName,
-    model: import.meta.env?.VITE_PRIMARY_MODEL || 'gemini-3-pro-preview',
+    model: import.meta.env?.VITE_PRIMARY_MODEL || 'gemini-3-pro-preview-11-2025',
     description: 'Primary model for complex reasoning, code writing, and tool use'
   },
 
@@ -47,9 +51,10 @@ export const MODELS = {
 
   // Architect tier - complex code mutation and evolutionary strategy design
   // Uses Gemini 3 Pro for advanced code understanding and generation
+  // L3: Locked to November 2025 version for consistency (same as PRIMARY)
   ARCHITECT: {
     provider: (import.meta.env?.VITE_ARCHITECT_PROVIDER || 'google') as ProviderName,
-    model: import.meta.env?.VITE_ARCHITECT_MODEL || 'gemini-3-pro-preview',
+    model: import.meta.env?.VITE_ARCHITECT_MODEL || 'gemini-3-pro-preview-11-2025',
     description: 'The Architect - for complex code mutation and evolutionary strategy design'
   },
 

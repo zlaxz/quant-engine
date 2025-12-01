@@ -36,6 +36,14 @@ import {
   extractTodoAdd,
   extractTodoComplete,
   extractTodoUpdate,
+  // NEW: Data-driven directive parsers
+  parseChartDirective,
+  parseTableDirective,
+  parseMetricsDirective,
+  parseCodeDirective,
+  parseUpdateChartDirective,
+  parseUpdateTableDirective,
+  parseNotificationDirective,
 } from '@/lib/displayDirectiveParser';
 import {
   AgentSpawnMonitor,
@@ -51,6 +59,7 @@ import {
   DecisionCard,
   WorkingMemoryCheckpoint,
   EvidenceChain,
+  parseEvidenceTrail,
   ContextualEducationOverlay,
   type AgentSpawn,
   type ToolCall,
@@ -88,7 +97,6 @@ const ChatAreaComponent = () => {
   const [intentSuggestion, setIntentSuggestion] = useState<DetectedIntent | null>(null);
   const [appState, setAppState] = useState<AppState>({});
   const [showContextualSuggestions, setShowContextualSuggestions] = useState(true);
-  const [streamCleanupTimer, setStreamCleanupTimer] = useState<NodeJS.Timeout | null>(null);
   const [toolProgress, setToolProgress] = useState<Array<{
     type: string;
     tool?: string;
@@ -132,6 +140,29 @@ const ChatAreaComponent = () => {
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Check Python server health on mount
+  useEffect(() => {
+    const checkPythonServer = async () => {
+      if (!window.electron?.checkQuantEngineHealth) return;
+
+      try {
+        const health = await window.electron.checkQuantEngineHealth();
+        if (!health.available) {
+          toast({
+            title: 'Python Server Not Running',
+            description: 'Start the Python server with: python python/server.py',
+            variant: 'destructive',
+            duration: 10000,
+          });
+        }
+      } catch (error) {
+        console.warn('[ChatArea] Could not check Python server health:', error);
+      }
+    };
+
+    checkPythonServer();
+  }, [toast]);
 
   // Function to save messages with retry logic
   const saveMessagesToDb = async (messages: any[]): Promise<boolean> => {
@@ -216,6 +247,8 @@ const ChatAreaComponent = () => {
       return;
     }
 
+    let currentCleanupTimer: NodeJS.Timeout | null = null;
+
     // Subscribe to tool progress
     const unsubscribeTool = window.electron.onToolProgress((data) => {
       setToolProgress(prev => [...prev, data]);
@@ -226,33 +259,185 @@ const ChatAreaComponent = () => {
       if (data.type === 'chunk' && data.content) {
         setStreamingContent(prev => prev + data.content);
         setIsStreaming(true);
-      } else if (data.type === 'thinking' && data.content) {
-        // Show thinking/reasoning text in italics
-        setStreamingContent(prev => prev + data.content);
-        setIsStreaming(true);
       } else if (data.type === 'done') {
         setIsStreaming(false);
         // Clear streaming content after it's shown in final message
-        if (streamCleanupTimer) clearTimeout(streamCleanupTimer);
-      const timer = setTimeout(() => setStreamingContent(''), 100);
-      setStreamCleanupTimer(timer);
+        if (currentCleanupTimer) clearTimeout(currentCleanupTimer);
+        currentCleanupTimer = setTimeout(() => setStreamingContent(''), 100);
       } else if (data.type === 'error') {
         setIsStreaming(false);
-        setStreamingContent('');
+        console.error('[ChatArea] Stream error:', data);
+      } else if (data.type === 'thinking') {
+        setThinkingContent(data.content || 'Thinking...');
       } else if (data.type === 'cancelled') {
         // Request was cancelled by user
         setIsStreaming(false);
-        setStreamingContent('');
-        setToolProgress([]);
+        setIsLoading(false);
       }
     });
 
     return () => {
-      if (streamCleanupTimer) clearTimeout(streamCleanupTimer);
+      if (currentCleanupTimer) clearTimeout(currentCleanupTimer);
       unsubscribeTool();
       unsubscribeStream();
     };
-  }, [streamCleanupTimer]);
+  }, []);
+
+  // Listen for Claude Code directive emissions (real-time UI control)
+  useEffect(() => {
+    if (!window.electron?.onClaudeCodeDirectives) return;
+
+    const unsubDirectives = window.electron.onClaudeCodeDirectives((event) => {
+      console.log('[ChatArea] Claude Code emitted directives:', event.directives);
+
+      // Process old-style directives (backwards compat)
+      event.directives.forEach((directive: any) => {
+        try {
+          if (directive.type === 'stage') {
+            displayContext.updateStage(directive.value);
+          } else if (directive.type === 'display') {
+            displayContext.showVisualization(directive.value, directive.params);
+          } else if (directive.type === 'progress') {
+            const percent = parseInt(directive.value);
+            displayContext.updateProgress(percent, directive.params?.message);
+          } else if (directive.type === 'focus') {
+            displayContext.setFocus(directive.value);
+          } else if (directive.type === 'hide') {
+            displayContext.hideAllVisualizations();
+          } else if (directive.type === 'todo_add') {
+            displayContext.addTask(directive.params?.description || '', directive.value as any);
+          } else if (directive.type === 'todo_complete') {
+            displayContext.completeTask(directive.value);
+          } else if (directive.type === 'todo_update') {
+            displayContext.updateTask(directive.value, directive.params?.description || '');
+          }
+        } catch (error) {
+          console.error('[ChatArea] Failed to process Claude Code directive:', directive.type, error);
+          toast({
+            title: 'Directive Error',
+            description: `Failed to process ${directive.type} directive`,
+            variant: 'destructive',
+            duration: 3000
+          });
+        }
+      });
+
+      // Also parse new data-driven directives from the raw text
+      // (Claude Code outputs text with directives, need to parse again)
+      const fullOutput = event.rawOutput || '';
+
+      const chartDir = parseChartDirective(fullOutput);
+      if (chartDir) {
+        try {
+          console.log('[ChatArea] Claude Code chart directive:', chartDir);
+          displayContext.showChart(chartDir);
+        } catch (error) {
+          console.error('[ChatArea] Failed to show chart:', error);
+          toast({
+            title: 'Chart Error',
+            description: 'Failed to display chart directive',
+            variant: 'destructive',
+            duration: 3000
+          });
+        }
+      }
+
+      const tableDir = parseTableDirective(fullOutput);
+      if (tableDir) {
+        try {
+          console.log('[ChatArea] Claude Code table directive:', tableDir);
+          displayContext.showTable(tableDir);
+        } catch (error) {
+          console.error('[ChatArea] Failed to show table:', error);
+          toast({
+            title: 'Table Error',
+            description: 'Failed to display table directive',
+            variant: 'destructive',
+            duration: 3000
+          });
+        }
+      }
+
+      const metricsDir = parseMetricsDirective(fullOutput);
+      if (metricsDir) {
+        try {
+          console.log('[ChatArea] Claude Code metrics directive:', metricsDir);
+          displayContext.showMetrics(metricsDir);
+        } catch (error) {
+          console.error('[ChatArea] Failed to show metrics:', error);
+          toast({
+            title: 'Metrics Error',
+            description: 'Failed to display metrics directive',
+            variant: 'destructive',
+            duration: 3000
+          });
+        }
+      }
+
+      const codeDir = parseCodeDirective(fullOutput);
+      if (codeDir) {
+        try {
+          console.log('[ChatArea] Claude Code code directive:', codeDir);
+          displayContext.showCode(codeDir);
+        } catch (error) {
+          console.error('[ChatArea] Failed to show code:', error);
+          toast({
+            title: 'Code Error',
+            description: 'Failed to display code directive',
+            variant: 'destructive',
+            duration: 3000
+          });
+        }
+      }
+
+      const updateChartDir = parseUpdateChartDirective(fullOutput);
+      if (updateChartDir) {
+        try {
+          console.log('[ChatArea] Claude Code update chart directive:', updateChartDir);
+          displayContext.updateChart(updateChartDir.id, updateChartDir);
+        } catch (error) {
+          console.error('[ChatArea] Failed to update chart:', error);
+          toast({
+            title: 'Chart Update Error',
+            description: 'Failed to update chart',
+            variant: 'destructive',
+            duration: 3000
+          });
+        }
+      }
+
+      const updateTableDir = parseUpdateTableDirective(fullOutput);
+      if (updateTableDir) {
+        try {
+          console.log('[ChatArea] Claude Code update table directive:', updateTableDir);
+          displayContext.updateTable(updateTableDir.id, updateTableDir);
+        } catch (error) {
+          console.error('[ChatArea] Failed to update table:', error);
+          toast({
+            title: 'Table Update Error',
+            description: 'Failed to update table',
+            variant: 'destructive',
+            duration: 3000
+          });
+        }
+      }
+
+      const notificationDir = parseNotificationDirective(fullOutput);
+      if (notificationDir) {
+        console.log('[ChatArea] Claude Code notification directive:', notificationDir);
+        toast({
+          title: notificationDir.title || 'Notification',
+          description: notificationDir.message,
+          variant: notificationDir.type === 'error' ? 'destructive' : 'default',
+          duration: notificationDir.duration || 5000,
+        });
+      }
+    });
+
+    return () => {
+      unsubDirectives();
+    };
+  }, [toast]); // Removed displayContext - methods are stable via useCallback
 
   // Listen for detailed tool execution events for ToolCallTree and OperationCards
   useEffect(() => {
@@ -680,6 +865,85 @@ const ChatAreaComponent = () => {
         if (artifact) {
           console.log('[ChatArea] Parsed artifact directive:', artifact);
           displayContext.showArtifact(artifact);
+        }
+
+        // Parse evidence trail from response
+        const evidenceNodes = parseEvidenceTrail(response.content);
+        if (evidenceNodes.length > 0) {
+          console.log('[ChatArea] Parsed evidence trail:', evidenceNodes);
+          setEvidenceChain(evidenceNodes);
+        }
+
+        // NEW: Parse data-driven directives
+        const chartDirective = parseChartDirective(response.content);
+        if (chartDirective) {
+          try {
+            console.log('[ChatArea] Parsed chart directive:', chartDirective);
+            displayContext.showChart(chartDirective);
+          } catch (error) {
+            console.error('[ChatArea] Failed to show chart:', error);
+          }
+        }
+
+        const tableDirective = parseTableDirective(response.content);
+        if (tableDirective) {
+          try {
+            console.log('[ChatArea] Parsed table directive:', tableDirective);
+            displayContext.showTable(tableDirective);
+          } catch (error) {
+            console.error('[ChatArea] Failed to show table:', error);
+          }
+        }
+
+        const metricsDirective = parseMetricsDirective(response.content);
+        if (metricsDirective) {
+          try {
+            console.log('[ChatArea] Parsed metrics directive:', metricsDirective);
+            displayContext.showMetrics(metricsDirective);
+          } catch (error) {
+            console.error('[ChatArea] Failed to show metrics:', error);
+          }
+        }
+
+        const codeDirective = parseCodeDirective(response.content);
+        if (codeDirective) {
+          try {
+            console.log('[ChatArea] Parsed code directive:', codeDirective);
+            displayContext.showCode(codeDirective);
+          } catch (error) {
+            console.error('[ChatArea] Failed to show code:', error);
+          }
+        }
+
+        const updateChartDirective = parseUpdateChartDirective(response.content);
+        if (updateChartDirective) {
+          try {
+            console.log('[ChatArea] Parsed update chart directive:', updateChartDirective);
+            displayContext.updateChart(updateChartDirective.id, updateChartDirective);
+          } catch (error) {
+            console.error('[ChatArea] Failed to update chart:', error);
+          }
+        }
+
+        const updateTableDirective = parseUpdateTableDirective(response.content);
+        if (updateTableDirective) {
+          try {
+            console.log('[ChatArea] Parsed update table directive:', updateTableDirective);
+            displayContext.updateTable(updateTableDirective.id, updateTableDirective);
+          } catch (error) {
+            console.error('[ChatArea] Failed to update table:', error);
+          }
+        }
+
+        const notificationDirective = parseNotificationDirective(response.content);
+        if (notificationDirective) {
+          console.log('[ChatArea] Parsed notification directive:', notificationDirective);
+          toast({
+            title: notificationDirective.title || 'Notification',
+            description: notificationDirective.message,
+            variant: notificationDirective.type === 'error' ? 'destructive' : 'default',
+            duration: notificationDirective.duration || 5000,
+          });
         }
 
         // Strip directives from content for clean display

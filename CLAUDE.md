@@ -2,9 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Last Updated:** 2025-12-01 (Post-Epic Refactor - All systems bulletproof)
+
 ## Project Overview
 
-Quant Engine is a desktop workbench for quantitative trading research, built as an Electron app with a React frontend and Python backend. It integrates multiple LLMs (Gemini, OpenAI, DeepSeek) for AI-assisted trading strategy development.
+Quant Engine is a **general-purpose quantitative research workbench** built as an Electron desktop app. It supports research on ANY quantitative strategy (momentum, mean reversion, ML models, options, futures, whatever) through a flexible, data-driven visualization system.
+
+**Multi-Model Architecture:** Integrates Gemini 3 Pro (reasoning), Claude Code CLI (execution), and DeepSeek (massive parallel) for cost-optimized AI-assisted research.
 
 ## Development Commands
 

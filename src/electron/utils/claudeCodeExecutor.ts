@@ -211,15 +211,18 @@ class ClaudeCodeExecutor {
     if (mainWindow?.webContents) {
       try {
         mainWindow.webContents.send('claude-code-event', {
-        type: 'progress',
-        data: {
-          task,
-          phase,
-          progress,
-          startTime: this.startTime,
-          estimatedRemaining: this.estimateRemaining(progress)
-        }
-      });
+          type: 'progress',
+          data: {
+            task,
+            phase,
+            progress,
+            startTime: this.startTime,
+            estimatedRemaining: this.estimateRemaining(progress)
+          }
+        });
+      } catch (error) {
+        console.error('Failed to send progress event:', error);
+      }
     }
   }
 
@@ -228,15 +231,20 @@ class ClaudeCodeExecutor {
    */
   private emitComplete(_task: string, result: Omit<ClaudeCodeResult, 'duration'>): void {
     const windows = BrowserWindow.getAllWindows();
-    if (windows.length > 0) {
-      windows[0].webContents.send('claude-code-event', {
-        type: 'complete',
-        data: {
-          task: _task,
-          result,
-          duration: Date.now() - this.startTime
-        }
-      });
+    const mainWindow = windows.find(w => !w.isDestroyed());
+    if (mainWindow?.webContents) {
+      try {
+        mainWindow.webContents.send('claude-code-event', {
+          type: 'complete',
+          data: {
+            task: _task,
+            result,
+            duration: Date.now() - this.startTime
+          }
+        });
+      } catch (error) {
+        console.error('Failed to send complete event:', error);
+      }
     }
   }
 
@@ -245,15 +253,20 @@ class ClaudeCodeExecutor {
    */
   private emitError(_task: string, error: string): void {
     const windows = BrowserWindow.getAllWindows();
-    if (windows.length > 0) {
-      windows[0].webContents.send('claude-code-event', {
-        type: 'error',
-        data: {
-          type: 'runtime' as const,
-          message: error,
-          suggestion: 'Review error details and retry with adjusted parameters'
-        }
-      });
+    const mainWindow = windows.find(w => !w.isDestroyed());
+    if (mainWindow?.webContents) {
+      try {
+        mainWindow.webContents.send('claude-code-event', {
+          type: 'error',
+          data: {
+            type: 'runtime' as const,
+            message: error,
+            suggestion: 'Review error details and retry with adjusted parameters'
+          }
+        });
+      } catch (error) {
+        console.error('Failed to send error event:', error);
+      }
     }
   }
 

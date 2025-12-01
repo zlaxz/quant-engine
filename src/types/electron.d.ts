@@ -183,6 +183,14 @@ interface ElectronAPI {
     type: 'decision' | 'progress' | 'error' | 'checkpoint' | 'complete' | 'cancelled';
     data: unknown;
   }) => void) => () => void;
+
+  // Claude Code directive emissions (real-time UI control from Claude Code output)
+  onClaudeCodeDirectives: (callback: (event: {
+    directives: any[];
+    source: string;
+    timestamp: number;
+    rawOutput: string;
+  }) => void) => () => void;
   
   // Claude Code execution
   executeClaudeCode: (config: {

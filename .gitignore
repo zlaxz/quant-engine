@@ -38,3 +38,4 @@ SESSION_STATE.md
 
 # Supabase temp files
 supabase/.temp/
+__pycache__/

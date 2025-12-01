@@ -4,6 +4,7 @@
  */
 
 import { getFileSystemService } from '../services/FileSystemService';
+import { app } from 'electron';
 import path from 'path';
 
 export interface ToolResult {
@@ -13,9 +14,13 @@ export interface ToolResult {
   metadata?: any; // Additional structured data for specialized rendering
 }
 
-// Get rotation-engine root from environment or settings
+// Get rotation-engine root - uses app-relative path to match toolHandlers
 function getEngineRoot(): string {
-  return process.env.ROTATION_ENGINE_ROOT || path.join(process.env.HOME || '', 'rotation-engine');
+  // Use app-relative path to match toolHandlers
+  const appRoot = app.isPackaged
+    ? path.dirname(app.getPath('exe'))
+    : process.cwd();
+  return path.join(appRoot, 'python');
 }
 
 export async function readFile(filePath: string): Promise<ToolResult> {

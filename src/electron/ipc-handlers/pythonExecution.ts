@@ -5,13 +5,9 @@ import fs from 'fs/promises';
 import { createClient } from '@supabase/supabase-js';
 import { validateIPC, BacktestParamsSchema } from '../validation/schemas';
 
-// SECURITY: Use environment variables instead of hardcoded credentials
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment');
-}
+// Supabase public credentials (anon key is safe for local app)
+const SUPABASE_URL = 'https://ynaqtawyynqikfyranda.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluYXF0YXd5eW5xaWtmeXJhbmRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM1NzM5NjMsImV4cCI6MjA3OTE0OTk2M30.VegcJvLluy8toSYqnR7Ufc5jx5XAl1-XeDRl8KbsIIw';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

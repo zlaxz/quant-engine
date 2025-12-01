@@ -11,6 +11,7 @@ import { glob } from 'glob';
 import OpenAI from 'openai';
 import { app } from 'electron';
 import * as FileOps from './fileOperations';
+import { ALL_TOOLS } from './toolDefinitions';
 
 const execAsync = promisify(exec);
 const fsPromises = fs.promises;
@@ -2918,6 +2919,27 @@ export async function executeTool(
   args: Record<string, any>
 ): Promise<ToolResult> {
   safeLog(`[Tool] Executing: ${name}`, args);
+
+  // Validate required arguments
+  const toolDef = ALL_TOOLS.find(t => t.name === name);
+  if (toolDef?.parameters?.required) {
+    const missing: string[] = [];
+
+    for (const requiredParam of toolDef.parameters.required) {
+      if (!(requiredParam in args) || args[requiredParam] === undefined || args[requiredParam] === null) {
+        missing.push(requiredParam);
+      }
+    }
+
+    if (missing.length > 0) {
+      safeLog(`[Tool] ERROR: Missing required parameters for ${name}:`, missing);
+      return {
+        success: false,
+        content: '',
+        error: `Missing required parameters for tool "${name}": ${missing.join(', ')}. Please provide all required arguments.`
+      };
+    }
+  }
 
   switch (name) {
     // Direct response (no-op tool for conversational responses)

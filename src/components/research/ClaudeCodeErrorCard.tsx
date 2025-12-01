@@ -72,12 +72,12 @@ function generateSuggestion(type: ClaudeCodeError['type'], stderr: string): stri
 
 export function ClaudeCodeErrorCard({ error, onRetry, className }: ClaudeCodeErrorCardProps) {
   const [showDetails, setShowDetails] = useState(false);
-  const colorClass = errorStyles[error.type];
+  const styles = errorStyles[error.type];
 
   return (
     <Card className={cn(
       'border-l-4 shadow-md',
-      `border-l-${colorClass}-500`,
+      styles.border,
       className
     )}>
       <div className="p-4 space-y-4">

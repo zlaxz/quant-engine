@@ -282,7 +282,7 @@ def run_analysis(plugin_name):
 # MAIN
 # =============================================================================
 
-def run_server(port: int = 5001, debug: bool = False):
+def run_server(port: int = 5000, debug: bool = False):
     """Start the quant engine Flask server."""
     print("=" * 60)
     print(f"Quant Engine HTTP Server v{ENGINE_VERSION}")
