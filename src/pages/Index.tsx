@@ -63,57 +63,63 @@ const Index = () => {
   return (
     <SidebarProvider defaultOpen>
       <div className="h-screen flex flex-col bg-background w-full">
-        {/* Header with System Status and Navigation - ALWAYS VISIBLE */}
-        <header className="sticky top-0 z-50 border-b border-border bg-card px-4 py-2.5 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-4">
+        {/* Header with System Status and Navigation */}
+        <header className="sticky top-0 z-50 border-b border-border bg-card px-3 py-2 flex items-center gap-3 flex-shrink-0 min-h-[52px]">
+          {/* Left section - always visible */}
+          <div className="flex items-center gap-3 shrink-0">
             <SidebarTrigger />
-            <h1 className="text-lg font-semibold text-foreground">QuantOS Research IDE</h1>
-            {/* Cmd+K hint */}
-            <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 text-xs font-mono text-muted-foreground bg-muted rounded-md border cursor-pointer hover:bg-accent"
-                 onClick={() => {
-                   const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true });
-                   document.dispatchEvent(event);
-                 }}>
-              <Command className="h-3 w-3" />K
-            </kbd>
+            <h1 className="text-base font-semibold text-foreground whitespace-nowrap">QuantOS Research IDE</h1>
           </div>
 
-          {/* System Status (Heartbeat) + Regime */}
-          <div className="flex items-center gap-3">
+          {/* Center section - status indicators, hidden on small screens */}
+          <div className="hidden md:flex items-center gap-2 flex-1 justify-center min-w-0">
             <DemoModeButton />
-            <div className="hidden sm:flex items-center gap-3">
-              <RegimeIndicator />
-              <SystemStatus />
-            </div>
+            <RegimeIndicator />
+            <SystemStatus />
+          </div>
 
-            <div className="flex items-center gap-2 border-l pl-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate('/dashboard')}
-                title="Research Dashboard"
-              >
-                <LayoutDashboard className="h-4 w-4 sm:mr-1" />
-                <span className="hidden sm:inline">Dashboard</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate('/settings')}
-                title="Settings"
-              >
-                <Settings className="h-4 w-4 sm:mr-1" />
-                <span className="hidden sm:inline">Settings</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setHelperOpen(true)}
-                title="Getting Started Helper"
-              >
-                <HelpCircle className="h-4 w-4" />
-              </Button>
-            </div>
+          {/* Right section - navigation */}
+          <div className="flex items-center gap-1 shrink-0 ml-auto">
+            {/* Cmd+K hint - hidden on small screens */}
+            <kbd 
+              className="hidden lg:inline-flex items-center gap-1 px-2 py-1 text-xs font-mono text-muted-foreground bg-muted rounded border cursor-pointer hover:bg-accent mr-2"
+              onClick={() => {
+                const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true });
+                document.dispatchEvent(event);
+              }}
+            >
+              <Command className="h-3 w-3" />K
+            </kbd>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2"
+              onClick={() => navigate('/dashboard')}
+              title="Dashboard"
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              <span className="hidden lg:inline ml-1.5">Dashboard</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2"
+              onClick={() => navigate('/settings')}
+              title="Settings"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="hidden lg:inline ml-1.5">Settings</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setHelperOpen(true)}
+              title="Help"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </Button>
           </div>
         </header>
 

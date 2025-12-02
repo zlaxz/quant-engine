@@ -212,48 +212,31 @@ export const ChatSessionList = () => {
   return (
     <TooltipProvider>
       <div className="flex-1 flex flex-col min-h-0">
-        {!isCollapsed && (
-          <div className="p-3 border-b border-panel-border flex items-center justify-between">
-            <span className="text-xs font-mono uppercase text-muted-foreground tracking-wider">
+        <div className={cn(
+          "border-b border-border flex items-center",
+          isCollapsed ? "p-2 justify-center" : "px-3 py-2.5 justify-between"
+        )}>
+          {!isCollapsed && (
+            <span className="text-sm font-medium text-foreground">
               Chat Sessions
             </span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  size="icon" 
-                  variant="ghost" 
-                  className="h-6 w-6"
-                  onClick={createNewSession}
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <p>Create new session</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        )}
-
-        {isCollapsed && (
-          <div className="p-2 border-b border-panel-border flex justify-center">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  size="icon" 
-                  variant="ghost" 
-                  className="h-8 w-8"
-                  onClick={createNewSession}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <p>Create new session</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        )}
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className={cn(isCollapsed ? "h-8 w-8" : "h-7 w-7")}
+                onClick={createNewSession}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>New chat</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
         <ScrollArea className="flex-1 min-w-0">
           <div className="p-2 space-y-1 min-w-0">
@@ -272,49 +255,55 @@ export const ChatSessionList = () => {
               )
             ) : (
               sessions.map((session) => (
-                <Tooltip key={session.id}>
-                  <TooltipTrigger asChild>
-                    <div
-                      className={cn(
-                        'rounded-md transition-colors mb-1 flex items-center gap-1 min-w-0',
-                        'hover:bg-muted/50',
-                        selectedSessionId === session.id && 'bg-muted',
-                        isCollapsed ? 'p-2 justify-center' : 'p-1.5'
-                      )}
-                    >
-                      {isCollapsed ? (
-                        <button
-                          onClick={() => setSelectedSession(session.id, session.workspace_id)}
-                          className="flex items-center justify-center"
-                        >
-                          <MessageSquare className={cn(
-                            "text-muted-foreground shrink-0",
-                            selectedSessionId === session.id && "text-primary",
-                            "h-4 w-4"
-                          )} />
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => setSelectedSession(session.id, session.workspace_id)}
-                            className="flex-1 flex items-center gap-1.5 text-left min-w-0 overflow-hidden"
-                          >
-                            <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            <div className="flex-1 min-w-0 overflow-hidden">
-                              <div className="font-medium text-xs break-words">
-                                {session.title}
-                              </div>
-                              <div className="text-[10px] text-muted-foreground break-words">
-                                {new Date(session.created_at).toLocaleDateString()}
-                              </div>
-                            </div>
-                          </button>
-
-                          <div className="flex items-center gap-0.5 shrink-0">
+                <div
+                  key={session.id}
+                  className={cn(
+                    'group rounded-lg transition-colors flex items-start gap-2 min-w-0 cursor-pointer',
+                    'hover:bg-accent/50',
+                    selectedSessionId === session.id && 'bg-accent',
+                    isCollapsed ? 'p-2 justify-center' : 'px-2.5 py-2'
+                  )}
+                  onClick={() => setSelectedSession(session.id, session.workspace_id)}
+                >
+                  {isCollapsed ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <MessageSquare className={cn(
+                          "shrink-0 h-4 w-4",
+                          selectedSessionId === session.id ? "text-primary" : "text-muted-foreground"
+                        )} />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p className="font-medium">{session.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(session.created_at).toLocaleDateString()}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <>
+                      <MessageSquare className={cn(
+                        "h-4 w-4 mt-0.5 shrink-0",
+                        selectedSessionId === session.id ? "text-primary" : "text-muted-foreground"
+                      )} />
+                      <div className="flex-1 min-w-0">
+                        <div className={cn(
+                          "text-sm leading-tight truncate",
+                          selectedSessionId === session.id ? "font-medium text-foreground" : "text-foreground/80"
+                        )}>
+                          {session.title}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {new Date(session.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-6 w-6 shrink-0"
+                              className="h-6 w-6"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openRenameDialog(session);
@@ -322,10 +311,15 @@ export const ChatSessionList = () => {
                             >
                               <Pencil className="h-3 w-3" />
                             </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Rename</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-6 w-6 hover:text-destructive shrink-0"
+                              className="h-6 w-6 hover:text-destructive"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSessionToDelete(session.id);
@@ -333,20 +327,13 @@ export const ChatSessionList = () => {
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <div className="max-w-xs">
-                      <p className="font-medium">{session.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(session.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </>
+                  )}
+                </div>
               ))
             )}
           </div>
