@@ -116,6 +116,36 @@ def run_backtest():
         end_date = params.get('endDate', '2023-12-31')
         capital = params.get('capital', 100000)
 
+        # ========== PREDICTIVE INTERCEPTOR ==========
+        # Check causal memory for known failure patterns
+        try:
+            import subprocess
+            import json as json_lib
+
+            interceptor_task = f"""Check if strategy '{strategy_key}' has historical failures in period {start_date} to {end_date}.
+
+Return JSON: {{"risk_level": "HIGH|MEDIUM|LOW", "mechanism": "why", "evidence": "data"}}
+If no risk: {{"risk_level": "LOW"}}"""
+
+            result_check = subprocess.run(
+                ['python3', 'scripts/deepseek_agent.py', interceptor_task, 'analyst'],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=os.path.dirname(os.path.abspath(__file__))
+            )
+
+            if result_check.returncode == 0:
+                try:
+                    risk = json_lib.loads(result_check.stdout)
+                    if risk.get('risk_level') == 'HIGH':
+                        print(f"⚠️  PREDICTIVE INTERVENTION: High risk for {strategy_key}")
+                        print(f"    Mechanism: {risk.get('mechanism')}")
+                except: pass
+        except Exception as e:
+            print(f"[Interceptor] Check failed: {e}")
+        # ========== END INTERCEPTOR ==========
+
         api = get_api()
         result = api.run_backtest(strategy_key, start_date, end_date, capital)
 
