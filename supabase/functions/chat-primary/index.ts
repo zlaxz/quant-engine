@@ -94,9 +94,9 @@ serve(async (req) => {
     if (queryEmbedding) {
     // Use semantic search via the database function (fetch more than needed for re-ranking)
       // Only active (non-archived) notes with embeddings are returned
-      const { data: semanticResults, error: memoryError } = await supabase.rpc('match_memories', {
+      const { data: semanticResults, error: memoryError } = await supabase.rpc('search_memory_notes', {
         query_embedding: queryEmbedding,
-        match_workspace: workspaceId,
+        match_workspace_id: workspaceId,
         match_threshold: 0.5, // Lower threshold to get more candidates
         match_count: 15, // Get more for re-ranking
       });
