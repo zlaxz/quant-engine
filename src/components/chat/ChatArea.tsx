@@ -580,6 +580,7 @@ const ChatAreaComponent = () => {
   }, [isLoading, toast]);
 
   // Load messages when session changes - also clear memory cache
+  // NOTE: displayContext.resetState is stable (useCallback), so we only need selectedSessionId
   useEffect(() => {
     if (selectedSessionId) {
       loadMessages();
@@ -590,7 +591,8 @@ const ChatAreaComponent = () => {
       setMessages([]);
       setCachedMemoryContext(null);
     }
-  }, [selectedSessionId, loadMessages, displayContext]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSessionId]);
 
   // Auto-scroll to bottom when messages, tool progress, or streaming content change
   useEffect(() => {
