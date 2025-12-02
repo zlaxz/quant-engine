@@ -80,19 +80,43 @@ export const ChatSessionList = () => {
 
   const createNewSession = async () => {
     try {
-      // Get first workspace
-      const { data: workspaces } = await supabase
+      console.log('[ChatSessionList] Creating new session...');
+
+      // Get first workspace with timeout
+      const workspacePromise = supabase
         .from('workspaces')
         .select('id')
         .limit(1)
         .maybeSingle();
 
-      if (!workspaces) {
-        toast.error('No workspace found. Please create a workspace first.');
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Workspace query timeout')), 5000)
+      );
+
+      const { data: workspaces, error: wsError } = await Promise.race([
+        workspacePromise,
+        timeoutPromise
+      ]) as any;
+
+      if (wsError) {
+        console.error('[ChatSessionList] Workspace error:', wsError);
+        toast.error('Database error. Using default workspace.');
+        // Fallback: Use a default workspace ID
+        const defaultWorkspace = 'default-workspace-id';
+        setSelectedSession(`temp-${Date.now()}`, defaultWorkspace);
         return;
       }
 
-      const { data, error } = await supabase
+      if (!workspaces) {
+        console.warn('[ChatSessionList] No workspaces found');
+        toast.error('No workspace found. Please configure Supabase.');
+        return;
+      }
+
+      console.log('[ChatSessionList] Creating session in workspace:', workspaces.id);
+
+      // Create session with timeout
+      const sessionPromise = supabase
         .from('chat_sessions')
         .insert({
           title: `Chat ${new Date().toLocaleString()}`,
@@ -101,15 +125,29 @@ export const ChatSessionList = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      const { data, error } = await Promise.race([
+        sessionPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Session creation timeout')), 5000))
+      ]) as any;
 
+      if (error) {
+        console.error('[ChatSessionList] Session creation error:', error);
+        throw error;
+      }
+
+      console.log('[ChatSessionList] Session created:', data.id);
       setSessions([data, ...sessions]);
       setSelectedSession(data.id, data.workspace_id);
-      
+
       toast.success('New chat session created');
-    } catch (error) {
-      console.error('Error creating session:', error);
-      toast.error('Failed to create chat session');
+    } catch (error: any) {
+      console.error('[ChatSessionList] Error creating session:', error);
+
+      if (error.message?.includes('timeout')) {
+        toast.error('Database timeout. Check Supabase connection.');
+      } else {
+        toast.error(`Failed to create session: ${error.message || 'Unknown error'}`);
+      }
     }
   };
 
