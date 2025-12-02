@@ -776,11 +776,13 @@ export const QUANT_TOOLS: FunctionDeclaration[] = [
         },
         params: {
           type: SchemaType.OBJECT,
-          description: 'Scenario parameters (optional)'
+          description: 'Scenario parameters (optional)',
+          properties: {}
         },
         portfolio: {
           type: SchemaType.OBJECT,
-          description: 'Portfolio positions (optional)'
+          description: 'Portfolio positions (optional)',
+          properties: {}
         }
       },
       required: ['scenario']

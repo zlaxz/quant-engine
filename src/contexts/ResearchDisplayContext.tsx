@@ -199,7 +199,7 @@ export const ResearchDisplayProvider = ({ children }: { children: ReactNode }) =
         console.warn(`[Context] Cannot update chart ${id}: not found`);
         return prev;
       }
-      return { ...prev, [id]: { ...existing, ...updates } };
+      return { ...prev, [id]: { ...existing, ...updates } as ChartData };
     });
   }, []);
 
