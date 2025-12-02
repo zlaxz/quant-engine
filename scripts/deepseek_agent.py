@@ -92,7 +92,7 @@ def call_deepseek(messages: list, max_tokens: int = 4000, tools: list = None) ->
         return {'error': 'DEEPSEEK_API_KEY not set in environment'}
 
     payload_dict = {
-        'model': 'deepseek-chat',
+        'model': 'deepseek-reasoner',  # Use reasoner for better analytical thinking
         'messages': messages,
         'temperature': 0.3,
         'max_tokens': max_tokens
