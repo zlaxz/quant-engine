@@ -107,7 +107,7 @@ interface CodeBlockProps {
   language: string;
   showLineNumbers: boolean;
   highlightLines?: number[];
-  annotations?: CodeData['config']['annotations'];
+  annotations?: { line: number; text: string; type?: 'info' | 'warning' | 'error' | 'success' }[];
 }
 
 function CodeBlock({
@@ -126,7 +126,7 @@ function CodeBlock({
           {lines.map((line, i) => {
             const lineNumber = i + 1;
             const isHighlighted = highlightLines.includes(lineNumber);
-            const annotation = annotations.find(a => a.line === lineNumber);
+            const annotation = annotations.find((a: { line: number }) => a.line === lineNumber);
 
             return (
               <tr

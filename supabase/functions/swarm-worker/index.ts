@@ -219,7 +219,8 @@ async function processTask(
         tokensOutput: result.tokensOutput,
       };
 
-    } catch (error) {
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
       lastError = error;
       console.error(`[Worker] Task ${taskId} attempt ${attempt} failed:`, error.message);
 
@@ -361,7 +362,7 @@ Deno.serve(async (req) => {
 
     // Fetch job details for each unique job_id in the tasks
     // (usually all tasks belong to same job, but be safe)
-    const jobIds = [...new Set(tasks.map((t: any) => t.job_id))];
+    const jobIds: string[] = Array.from(new Set(tasks.map((t: any) => String(t.job_id)))) as string[];
     const jobCache: Record<string, { mode: string; config: any }> = {};
 
     for (const jobId of jobIds) {
@@ -372,12 +373,12 @@ Deno.serve(async (req) => {
         .single();
 
       if (job) {
-        jobCache[jobId] = {
+        jobCache[jobId as string] = {
           mode: job.mode || 'research',
           config: { ...(job.config || {}), sharedContext: job.shared_context },
         };
       } else {
-        jobCache[jobId] = { mode: 'research', config: {} };
+        jobCache[jobId as string] = { mode: 'research', config: {} };
       }
     }
 
@@ -385,7 +386,7 @@ Deno.serve(async (req) => {
     const results: TaskResult[] = [];
     for (const task of tasks) {
       const jobInfo = jobCache[task.job_id] || { mode: 'research', config: {} };
-      const result = await processTask(supabase, task, jobInfo.mode, jobInfo.config);
+      const result = await processTask(supabase as any, task, jobInfo.mode, jobInfo.config);
       results.push(result);
 
       // Rate limit delay between tasks
@@ -395,7 +396,7 @@ Deno.serve(async (req) => {
     }
 
     // Check if there are more pending tasks
-    const nextBatchAvailable = await checkPendingTasks(supabase);
+    const nextBatchAvailable = await checkPendingTasks(supabase as any);
 
     // Summary stats
     const completed = results.filter(r => r.status === 'completed').length;
@@ -420,7 +421,8 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error) {
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
     console.error('[Worker] Error:', error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),

@@ -27,7 +27,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { TableData, TableColumn, TableRow, formatValue } from './types';
+import { TableData, TableColumn, TableRow as TableRowData } from './types';
 
 interface GenericTableProps {
   data: TableData;
@@ -245,7 +245,7 @@ export function GenericTable({ data }: GenericTableProps) {
 // Cell Rendering
 // ============================================================================
 
-function renderCell(row: TableRow, column: TableColumn) {
+function renderCell(row: TableRowData, column: TableColumn) {
   const value = row[column.key];
 
   // Custom render function
@@ -331,7 +331,7 @@ function formatNumber(value: number, format?: string): string {
 // Export Helpers
 // ============================================================================
 
-function generateCSV(columns: TableColumn[], rows: TableRow[]): string {
+function generateCSV(columns: TableColumn[], rows: TableRowData[]): string {
   const headers = columns.map(c => c.label).join(',');
   const dataRows = rows.map(row =>
     columns.map(col => {

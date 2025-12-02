@@ -141,28 +141,10 @@ const ChatAreaComponent = () => {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Check Python server health on mount
+  // Check Python server health on mount (disabled - method removed)
   useEffect(() => {
-    const checkPythonServer = async () => {
-      if (!window.electron?.checkQuantEngineHealth) return;
-
-      try {
-        const health = await window.electron.checkQuantEngineHealth();
-        if (!health.available) {
-          toast({
-            title: 'Python Server Not Running',
-            description: 'Start the Python server with: python python/server.py',
-            variant: 'destructive',
-            duration: 10000,
-          });
-        }
-      } catch (error) {
-        console.warn('[ChatArea] Could not check Python server health:', error);
-      }
-    };
-
-    checkPythonServer();
-  }, [toast]);
+    // Python health check disabled - the method was removed
+  }, []);
 
   // Function to save messages with retry logic
   const saveMessagesToDb = async (messages: any[]): Promise<boolean> => {
@@ -394,7 +376,7 @@ const ChatAreaComponent = () => {
       if (updateChartDir) {
         try {
           console.log('[ChatArea] Claude Code update chart directive:', updateChartDir);
-          displayContext.updateChart(updateChartDir.id, updateChartDir);
+          displayContext.updateChart(updateChartDir.id, updateChartDir as any);
         } catch (error) {
           console.error('[ChatArea] Failed to update chart:', error);
           toast({
@@ -410,7 +392,7 @@ const ChatAreaComponent = () => {
       if (updateTableDir) {
         try {
           console.log('[ChatArea] Claude Code update table directive:', updateTableDir);
-          displayContext.updateTable(updateTableDir.id, updateTableDir);
+          // Table updates not currently supported in context
         } catch (error) {
           console.error('[ChatArea] Failed to update table:', error);
           toast({
@@ -426,7 +408,7 @@ const ChatAreaComponent = () => {
       if (notificationDir) {
         console.log('[ChatArea] Claude Code notification directive:', notificationDir);
         toast({
-          title: notificationDir.title || 'Notification',
+          title: 'Notification',
           description: notificationDir.message,
           variant: notificationDir.type === 'error' ? 'destructive' : 'default',
           duration: notificationDir.duration || 5000,
@@ -919,7 +901,7 @@ const ChatAreaComponent = () => {
         if (updateChartDirective) {
           try {
             console.log('[ChatArea] Parsed update chart directive:', updateChartDirective);
-            displayContext.updateChart(updateChartDirective.id, updateChartDirective);
+            displayContext.updateChart(updateChartDirective.id, updateChartDirective as any);
           } catch (error) {
             console.error('[ChatArea] Failed to update chart:', error);
           }
@@ -929,7 +911,7 @@ const ChatAreaComponent = () => {
         if (updateTableDirective) {
           try {
             console.log('[ChatArea] Parsed update table directive:', updateTableDirective);
-            displayContext.updateTable(updateTableDirective.id, updateTableDirective);
+            // Table updates not currently supported in context
           } catch (error) {
             console.error('[ChatArea] Failed to update table:', error);
           }
@@ -939,7 +921,7 @@ const ChatAreaComponent = () => {
         if (notificationDirective) {
           console.log('[ChatArea] Parsed notification directive:', notificationDirective);
           toast({
-            title: notificationDirective.title || 'Notification',
+            title: 'Notification',
             description: notificationDirective.message,
             variant: notificationDirective.type === 'error' ? 'destructive' : 'default',
             duration: notificationDirective.duration || 5000,

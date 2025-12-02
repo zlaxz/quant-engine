@@ -22,6 +22,4 @@ supabase.from('workspaces').select('id').limit(1).then(({ data, error }) => {
   } else {
     console.log('[Supabase] Connection test SUCCESS, found workspace:', data?.[0]?.id);
   }
-}).catch(err => {
-  console.error('[Supabase] Connection test ERROR:', err);
 });

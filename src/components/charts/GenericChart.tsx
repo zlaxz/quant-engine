@@ -480,7 +480,7 @@ function transformComposedData(series: ComposedChartData['data']['series']) {
 // ============================================================================
 
 function HeatmapRenderer({ data }: { data: HeatmapData }) {
-  const { x, y, values, colorScale = 'blues', showValues = true } = data.data;
+  const { x, y, values, showValues = true } = data.data;
 
   // Find min/max for color scaling
   const flatValues = values.flat();

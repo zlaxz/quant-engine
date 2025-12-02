@@ -11,8 +11,6 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  ArrowUp,
-  ArrowDown,
   DollarSign,
   Percent,
   Activity,

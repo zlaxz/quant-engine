@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import os from 'os';
-import { execSync } from 'child_process';
 import Store from 'electron-store';
 import Database from 'better-sqlite3';
 import { createClient } from '@supabase/supabase-js';
@@ -77,16 +76,6 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-}
-
-// Get the app root directory (works in both dev and production)
-function getAppRoot(): string {
-  // In development, use process.cwd()
-  // In production, use app.getPath('userData')/../..
-  if (process.env.NODE_ENV === 'development') {
-    return process.cwd();
-  }
-  return path.join(app.getPath('userData'), '..', '..', '..');
 }
 
 // Validate Python environment - checks if launchd-managed server is running
