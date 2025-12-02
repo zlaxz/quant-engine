@@ -90,54 +90,59 @@ export const ChatSessionList = () => {
     try {
       console.log('[ChatSessionList] Creating new session...');
 
-      // Use known workspace ID directly (workspace queries hang after initial load)
-      const workspaceId = 'eebd1b2c-db1e-49c8-a99b-a914b24f0327';
+      // First, get or create a workspace
+      let workspaceId: string;
 
-      try {
-        console.log('[ChatSessionList] Creating session in workspace:', workspaceId);
+      // Try to get existing workspace
+      const { data: workspaces, error: wsError } = await supabase
+        .from('workspaces')
+        .select('id')
+        .limit(1);
 
-        // Create session - direct call
-        const { data, error } = await supabase
-          .from('chat_sessions')
-          .insert({
-            title: `Chat ${new Date().toLocaleString()}`,
-            workspace_id: workspaceId,
-          })
+      if (wsError) {
+        console.error('[ChatSessionList] Workspace query error:', wsError);
+        throw wsError;
+      }
+
+      if (workspaces && workspaces.length > 0) {
+        workspaceId = workspaces[0].id;
+        console.log('[ChatSessionList] Using existing workspace:', workspaceId);
+      } else {
+        // Create a new workspace
+        const { data: newWs, error: createWsError } = await supabase
+          .from('workspaces')
+          .insert({ name: 'Default Workspace' })
           .select()
           .single();
 
-        console.log('[ChatSessionList] Session insert result:', { data, error });
-
-        if (error) {
-          console.error('[ChatSessionList] Session creation error:', error);
-          throw error;
+        if (createWsError) {
+          console.error('[ChatSessionList] Workspace creation error:', createWsError);
+          throw createWsError;
         }
 
-        console.log('[ChatSessionList] Session created:', data.id);
-        setSessions([data, ...sessions]);
-        setSelectedSession(data.id, data.workspace_id);
-        toast.success('New chat session created');
-        return;
-
-      } catch (supabaseError: any) {
-        console.warn('[ChatSessionList] Supabase failed, using local session:', supabaseError.message);
-
-        // Fallback: Create a local-only session
-        const localSessionId = `local-${Date.now()}`;
-        const localWorkspaceId = 'local-workspace';
-
-        const localSession = {
-          id: localSessionId,
-          title: `Chat ${new Date().toLocaleString()}`,
-          workspace_id: localWorkspaceId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        setSessions([localSession as any, ...sessions]);
-        setSelectedSession(localSessionId, localWorkspaceId);
-        toast.warning('Using local session (Supabase unavailable)');
+        workspaceId = newWs.id;
+        console.log('[ChatSessionList] Created new workspace:', workspaceId);
       }
+
+      // Create session
+      const { data, error } = await supabase
+        .from('chat_sessions')
+        .insert({
+          title: `Chat ${new Date().toLocaleString()}`,
+          workspace_id: workspaceId,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[ChatSessionList] Session creation error:', error);
+        throw error;
+      }
+
+      console.log('[ChatSessionList] Session created:', data.id);
+      setSessions([data, ...sessions]);
+      setSelectedSession(data.id, data.workspace_id);
+      toast.success('New chat session created');
 
     } catch (error: any) {
       console.error('[ChatSessionList] Error creating session:', error);
