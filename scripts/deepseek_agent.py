@@ -230,35 +230,9 @@ DO NOT make assumptions. READ THE ACTUAL CODE using your tools, then provide ana
     print(f"[DeepSeek Agent] Type: {agent_type}, Model: {model}", file=sys.stderr)
     print(f"[DeepSeek Agent] Task: {task[:100]}...", file=sys.stderr)
 
-    # CRITICAL: Reasoner model does NOT support tools
-    if model == 'deepseek-reasoner':
-        # Pure reasoning mode - NO TOOLS, single call
-        print(f"[DeepSeek Agent] Using {model} (pure logic, no tools)", file=sys.stderr)
-
-        result = call_deepseek(messages, tools=None, model=model)
-
-        if 'error' in result:
-            return f"ERROR: {result['error']}"
-
-        if 'choices' not in result or len(result['choices']) == 0:
-            return f"ERROR: Unexpected response format: {json.dumps(result)}"
-
-        # Extract response
-        choice = result['choices'][0]
-        message = choice.get('message', {})
-        content = message.get('content', '')
-        reasoning = message.get('reasoning_content', '')
-
-        total_tokens = result.get('usage', {}).get('total_tokens', 0)
-        print(f"[DeepSeek Agent] Success! Tokens: {total_tokens}", file=sys.stderr)
-
-        # Return reasoning + conclusion
-        if reasoning:
-            return f"[REASONING]\n{reasoning}\n\n[CONCLUSION]\n{content}"
-        return content
-
-    # AGENTIC LOOP - iterate until agent gives final answer (no more tool calls)
-    # Only used for deepseek-chat with tools
+    # AGENTIC LOOP - Both models support tools in V3.2!
+    # deepseek-chat: Fast tool execution
+    # deepseek-reasoner: Thinking + tools (new V3.2 capability)
     MAX_ITERATIONS = 20  # Increased for thorough audits
     iteration = 0
     total_tokens = 0
