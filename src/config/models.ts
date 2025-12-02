@@ -24,10 +24,10 @@ export interface ModelConfig {
  */
 export const MODELS = {
   // Primary tier - high quality, main conversations, tool use
-  // Using Gemini 2.5 Flash as default - fast and capable
+  // Gemini 3 Pro Preview - Google's latest flagship model
   PRIMARY: {
     provider: (import.meta.env?.VITE_PRIMARY_PROVIDER || 'google') as ProviderName,
-    model: import.meta.env?.VITE_PRIMARY_MODEL || 'gemini-2.5-flash',
+    model: import.meta.env?.VITE_PRIMARY_MODEL || 'gemini-3-pro-preview',
     description: 'Primary model for complex reasoning, code writing, and tool use'
   },
 
@@ -48,7 +48,7 @@ export const MODELS = {
   // Architect tier - complex code mutation and evolutionary strategy design
   ARCHITECT: {
     provider: (import.meta.env?.VITE_ARCHITECT_PROVIDER || 'google') as ProviderName,
-    model: import.meta.env?.VITE_ARCHITECT_MODEL || 'gemini-2.5-flash',
+    model: import.meta.env?.VITE_ARCHITECT_MODEL || 'gemini-3-pro-preview',
     description: 'The Architect - for complex code mutation and evolutionary strategy design'
   },
 
