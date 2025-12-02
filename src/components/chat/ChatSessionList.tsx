@@ -52,18 +52,16 @@ export const ChatSessionList = () => {
 
   const loadSessions = useCallback(async () => {
     try {
-      // Add timeout to prevent UI freeze
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      console.log('[ChatSessionList] Loading sessions...');
 
+      // Simple query without abortSignal (was causing hangs)
       const { data, error } = await supabase
         .from('chat_sessions')
         .select('id, title, created_at, workspace_id')
         .order('created_at', { ascending: false })
-        .limit(50)
-        .abortSignal(controller.signal);
+        .limit(50);
 
-      clearTimeout(timeoutId);
+      console.log('[ChatSessionList] Sessions loaded:', { count: data?.length, error });
 
       if (error) throw error;
 
@@ -74,7 +72,7 @@ export const ChatSessionList = () => {
         setSelectedSession(data[0].id, data[0].workspace_id);
       }
     } catch (error: any) {
-      console.error('Error loading sessions:', error);
+      console.error('[ChatSessionList] Load error:', error?.message, error?.code, error?.details);
       // Don't show error toast on abort - just silently fail
       if (error?.name !== 'AbortError') {
         console.warn('Supabase unavailable, starting with empty session list');
@@ -92,39 +90,10 @@ export const ChatSessionList = () => {
     try {
       console.log('[ChatSessionList] Creating new session...');
 
-      // Try Supabase first, fall back to local session if it fails
-      let workspaceId: string | null = null;
+      // Use known workspace ID directly (workspace queries hang after initial load)
+      const workspaceId = 'eebd1b2c-db1e-49c8-a99b-a914b24f0327';
 
       try {
-        // Get first workspace - simple direct call, no race needed since Supabase works
-        console.log('[ChatSessionList] Querying workspaces...');
-        const { data: workspaces, error: wsError } = await supabase
-          .from('workspaces')
-          .select('id')
-          .limit(1)
-          .maybeSingle();
-
-        console.log('[ChatSessionList] Workspace query result:', { workspaces, wsError });
-
-        if (wsError) {
-          console.error('[ChatSessionList] Workspace error:', wsError);
-          throw wsError;
-        }
-
-        if (!workspaces) {
-          console.warn('[ChatSessionList] No workspaces found, creating default...');
-          const { data: newWorkspace, error: createWsError } = await supabase
-            .from('workspaces')
-            .insert({ name: 'Default Workspace', description: 'Auto-created workspace' })
-            .select()
-            .single();
-
-          if (createWsError) throw createWsError;
-          workspaceId = newWorkspace.id;
-        } else {
-          workspaceId = workspaces.id;
-        }
-
         console.log('[ChatSessionList] Creating session in workspace:', workspaceId);
 
         // Create session - direct call

@@ -1,6 +1,36 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+// Load .env FIRST before any other imports that might use env vars
+import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env from project root
+// In dev: __dirname is src/electron, so go up 2 levels
+// In prod: __dirname is dist-electron, so also go up 2 levels (or 1 if bundled differently)
+const possibleEnvPaths = [
+  path.resolve(__dirname, '../../.env'),      // From src/electron or dist-electron
+  path.resolve(__dirname, '../.env'),         // One level up
+  path.resolve(process.cwd(), '.env'),        // Current working directory
+];
+
+let envLoaded = false;
+for (const envPath of possibleEnvPaths) {
+  const result = dotenv.config({ path: envPath });
+  if (!result.error) {
+    console.log('[Main] Loaded .env from:', envPath);
+    envLoaded = true;
+    break;
+  }
+}
+if (!envLoaded) {
+  console.warn('[Main] Could not find .env file, tried:', possibleEnvPaths);
+}
+console.log('[Main] VITE_SUPABASE_URL:', process.env.VITE_SUPABASE_URL ? 'SET' : 'NOT SET');
+
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import fs from 'fs';
 import os from 'os';
 import Store from 'electron-store';
@@ -27,8 +57,7 @@ import { StaleMemoryInjector } from './memory/staleMemoryInjector';
 import { TriggerRecall } from './memory/triggerRecall';
 import OpenAI from 'openai';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// __filename and __dirname already defined at top of file for dotenv
 
 // Initialize electron-store for persistent settings
 const store = new Store<{
