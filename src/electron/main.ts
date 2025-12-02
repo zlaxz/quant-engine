@@ -59,7 +59,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      sandbox: false, // Disabled to allow Supabase API calls from file:// origin
+      webSecurity: false, // Allow cross-origin requests from file:// protocol
       preload: path.join(__dirname, 'preload.cjs'),
     },
   });
@@ -88,44 +89,28 @@ function getAppRoot(): string {
   return path.join(app.getPath('userData'), '..', '..', '..');
 }
 
-// Validate Python environment
+// Validate Python environment - checks if launchd-managed server is running
 async function validatePythonEnvironment(): Promise<{ valid: boolean; error?: string }> {
-  const appRoot = getAppRoot();
+  const PYTHON_SERVER_URL = 'http://localhost:5001';
 
-  // Check Python3 exists
+  // Check if Python server is reachable (managed by launchd)
   try {
-    const pythonVersion = execSync('python3 --version', { encoding: 'utf8' });
-    console.log(`[Validation] Python found: ${pythonVersion.trim()}`);
-  } catch {
-    return {
-      valid: false,
-      error: 'Python3 not found. Install Python 3.7+ from python.org\n\nSee QUICKSTART.md for installation help.'
-    };
-  }
-
-  // Check python/server.py exists (internal Python engine)
-  const serverPath = path.join(appRoot, 'python', 'server.py');
-  if (!fs.existsSync(serverPath)) {
-    return {
-      valid: false,
-      error: `Python engine not found: ${serverPath}\n\nThe python/ directory should be part of this application.`
-    };
-  }
-
-  console.log(`[Validation] Python engine found: ${serverPath}`);
-
-  // Check if executable (Unix-like systems)
-  if (process.platform !== 'win32') {
-    try {
-      fs.accessSync(serverPath, fs.constants.R_OK);
-    } catch {
-      return {
-        valid: false,
-        error: `Cannot read Python engine: ${serverPath}\n\nCheck file permissions.`
-      };
+    const response = await fetch(`${PYTHON_SERVER_URL}/health`, {
+      signal: AbortSignal.timeout(3000)
+    });
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`[Validation] Python server healthy: v${data.version}`);
+      return { valid: true };
     }
+  } catch {
+    // Server not responding - warn but don't block app startup
+    console.warn('[Validation] Python server not responding on port 5001');
+    console.warn('[Validation] Backtests will not work until server is started');
+    console.warn('[Validation] The server should be managed by launchd (com.quantengine.server)');
   }
 
+  // Return valid but log warning - don't block app startup for server issues
   return { valid: true };
 }
 

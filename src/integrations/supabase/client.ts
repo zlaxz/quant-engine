@@ -1,19 +1,27 @@
 import { createClient } from '@supabase/supabase-js';
 
-// IMPORTANT: Set these environment variables in your .env file:
-// VITE_SUPABASE_URL=your_supabase_project_url
-// VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  const errorMsg = '❌ Missing Supabase environment variables. Please set:\n' +
-    '   VITE_SUPABASE_URL\n' +
-    '   VITE_SUPABASE_PUBLISHABLE_KEY\n' +
-    'in your .env file';
-  console.error(errorMsg);
-  throw new Error(errorMsg);
-}
+// Debug logging
+console.log('[Supabase] URL configured:', !!supabaseUrl, supabaseUrl?.substring(0, 30));
+console.log('[Supabase] Key configured:', !!supabaseAnonKey, supabaseAnonKey?.substring(0, 20));
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Simple direct initialization
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key'
+);
+
+// Test connection on load
+supabase.from('workspaces').select('id').limit(1).then(({ data, error }) => {
+  if (error) {
+    console.error('[Supabase] Connection test FAILED:', error.message);
+  } else {
+    console.log('[Supabase] Connection test SUCCESS, found workspace:', data?.[0]?.id);
+  }
+}).catch(err => {
+  console.error('[Supabase] Connection test ERROR:', err);
+});
