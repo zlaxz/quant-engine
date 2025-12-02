@@ -6,6 +6,8 @@
 import { FunctionDeclaration, SchemaType } from '@google/generative-ai';
 
 // Core file operation tools
+// File write operations removed - Gemini is CIO (read-only)
+// All modifications delegated to Claude Code (CTO) via execute_via_claude_code
 export const FILE_TOOLS: FunctionDeclaration[] = [
   {
     name: 'read_file',
@@ -56,57 +58,9 @@ export const FILE_TOOLS: FunctionDeclaration[] = [
       },
       required: ['pattern']
     }
-  },
-  {
-    name: 'write_file',
-    description: 'Write or overwrite a file in the Python engine codebase',
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        path: {
-          type: SchemaType.STRING,
-          description: 'File path relative to Python engine root'
-        },
-        content: {
-          type: SchemaType.STRING,
-          description: 'File contents to write'
-        }
-      },
-      required: ['path', 'content']
-    }
-  },
-  {
-    name: 'append_file',
-    description: 'Append content to an existing file',
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        path: {
-          type: SchemaType.STRING,
-          description: 'File path relative to Python engine root'
-        },
-        content: {
-          type: SchemaType.STRING,
-          description: 'Content to append'
-        }
-      },
-      required: ['path', 'content']
-    }
-  },
-  {
-    name: 'delete_file',
-    description: 'Delete a file from the Python engine codebase',
-    parameters: {
-      type: SchemaType.OBJECT,
-      properties: {
-        path: {
-          type: SchemaType.STRING,
-          description: 'File path relative to Python engine root'
-        }
-      },
-      required: ['path']
-    }
   }
+  // write_file, append_file, delete_file removed - CIO is read-only
+  // Use execute_via_claude_code to delegate modifications to CTO (Claude Code)
 ];
 
 // Python execution tools

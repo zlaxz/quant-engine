@@ -86,20 +86,21 @@ AGENT_TOOLS = [
     }
 ]
 
-def call_deepseek(messages: list, max_tokens: int = 4000, tools: list = None) -> dict:
+def call_deepseek(messages: list, max_tokens: int = 4000, tools: list = None, model: str = 'deepseek-chat') -> dict:
     """Direct HTTP call to DeepSeek API using curl (avoids SSL issues)"""
     if not DEEPSEEK_API_KEY:
         return {'error': 'DEEPSEEK_API_KEY not set in environment'}
 
     payload_dict = {
-        'model': 'deepseek-reasoner',  # Use reasoner for better analytical thinking
+        'model': model,
         'messages': messages,
         'temperature': 0.3,
         'max_tokens': max_tokens
     }
 
     # Add tools if provided (CRITICAL for file access)
-    if tools:
+    # NOTE: deepseek-reasoner does NOT support tools
+    if tools and model != 'deepseek-reasoner':
         payload_dict['tools'] = tools
         payload_dict['tool_choice'] = 'auto'
 
@@ -185,18 +186,35 @@ def execute_tool(tool_name: str, args: dict) -> str:
         return f"Error executing {tool_name}: {str(e)}"
 
 
-def run_agent(task: str, agent_type: str = 'analyst', context: str = None) -> str:
-    """Run a DeepSeek agent with FULL TOOL ACCESS using agentic loop"""
+def run_agent(task: str, agent_type: str = 'analyst', context: str = None, model: str = 'deepseek-chat') -> str:
+    """Run a DeepSeek agent with model selection
+
+    Args:
+        task: Task description
+        agent_type: Type of agent (analyst, reviewer, researcher, coder)
+        context: Additional context
+        model: Model to use ('deepseek-chat' with tools, 'deepseek-reasoner' for pure logic)
+    """
 
     system_prompt = AGENT_PROMPTS.get(agent_type.lower(), AGENT_PROMPTS['analyst'])
 
-    # CRITICAL: Emphasize tool usage
-    system_prompt += """
+    # Model-specific prompting
+    if model == 'deepseek-reasoner':
+        # Pure reasoning mode - emphasize logical analysis
+        system_prompt += """
+
+IMPORTANT: You are running in PURE REASONING MODE (no tools available).
+Focus on logical analysis, theoretical soundness, and critical thinking.
+Identify assumptions, evaluate tradeoffs, and reason from first principles."""
+    else:
+        # Action mode - emphasize tool usage
+        system_prompt += """
 
 IMPORTANT: You have FULL TOOL ACCESS. Before answering, USE YOUR TOOLS:
 - read_file: Read any file you need to examine
 - list_directory: Explore codebase structure
 - search_code: Find patterns in code
+- query_data: Execute SQL against market data lake
 
 DO NOT make assumptions. READ THE ACTUAL CODE using your tools, then provide analysis based on what you ACTUALLY SAW."""
 
@@ -209,10 +227,38 @@ DO NOT make assumptions. READ THE ACTUAL CODE using your tools, then provide ana
         {'role': 'user', 'content': user_message}
     ]
 
-    print(f"[DeepSeek Agent] Type: {agent_type}", file=sys.stderr)
+    print(f"[DeepSeek Agent] Type: {agent_type}, Model: {model}", file=sys.stderr)
     print(f"[DeepSeek Agent] Task: {task[:100]}...", file=sys.stderr)
 
+    # CRITICAL: Reasoner model does NOT support tools
+    if model == 'deepseek-reasoner':
+        # Pure reasoning mode - NO TOOLS, single call
+        print(f"[DeepSeek Agent] Using {model} (pure logic, no tools)", file=sys.stderr)
+
+        result = call_deepseek(messages, tools=None, model=model)
+
+        if 'error' in result:
+            return f"ERROR: {result['error']}"
+
+        if 'choices' not in result or len(result['choices']) == 0:
+            return f"ERROR: Unexpected response format: {json.dumps(result)}"
+
+        # Extract response
+        choice = result['choices'][0]
+        message = choice.get('message', {})
+        content = message.get('content', '')
+        reasoning = message.get('reasoning_content', '')
+
+        total_tokens = result.get('usage', {}).get('total_tokens', 0)
+        print(f"[DeepSeek Agent] Success! Tokens: {total_tokens}", file=sys.stderr)
+
+        # Return reasoning + conclusion
+        if reasoning:
+            return f"[REASONING]\n{reasoning}\n\n[CONCLUSION]\n{content}"
+        return content
+
     # AGENTIC LOOP - iterate until agent gives final answer (no more tool calls)
+    # Only used for deepseek-chat with tools
     MAX_ITERATIONS = 20  # Increased for thorough audits
     iteration = 0
     total_tokens = 0
@@ -221,7 +267,7 @@ DO NOT make assumptions. READ THE ACTUAL CODE using your tools, then provide ana
         iteration += 1
         print(f"[DeepSeek Agent] Iteration {iteration}/{MAX_ITERATIONS}...", file=sys.stderr)
 
-        result = call_deepseek(messages, tools=AGENT_TOOLS)
+        result = call_deepseek(messages, tools=AGENT_TOOLS, model=model)
 
         if 'error' in result:
             return f"ERROR: {result['error']}"
@@ -272,14 +318,20 @@ DO NOT make assumptions. READ THE ACTUAL CODE using your tools, then provide ana
     return f"[MAX ITERATIONS REACHED after {MAX_ITERATIONS} iterations]\n\nPartial result from last iteration:\n{message.get('content', 'No content')}"
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print("Usage: python deepseek_agent.py 'task' [agent_type] [context]")
-        print("Agent types: analyst, reviewer, researcher, coder")
-        sys.exit(1)
+    import argparse
 
-    task = sys.argv[1]
-    agent_type = sys.argv[2] if len(sys.argv) > 2 else 'analyst'
-    context = sys.argv[3] if len(sys.argv) > 3 else None
+    parser = argparse.ArgumentParser(description='DeepSeek Agent Runner')
+    parser.add_argument('task', help='Task description')
+    parser.add_argument('agent_type', nargs='?', default='analyst',
+                       choices=['analyst', 'reviewer', 'researcher', 'coder'],
+                       help='Agent type (default: analyst)')
+    parser.add_argument('context', nargs='?', default=None,
+                       help='Additional context')
+    parser.add_argument('--model', default='deepseek-chat',
+                       choices=['deepseek-chat', 'deepseek-reasoner'],
+                       help='Model to use: deepseek-chat (tools+action) or deepseek-reasoner (pure logic)')
 
-    result = run_agent(task, agent_type, context)
+    args = parser.parse_args()
+
+    result = run_agent(args.task, args.agent_type, args.context, model=args.model)
     print(result)
