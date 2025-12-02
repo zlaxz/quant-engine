@@ -82,7 +82,7 @@ interface Message {
   role: string;
   content: string;
   created_at: string;
-  model?: string; // Which model generated this: 'gemini' | 'claude' | 'deepseek'
+  model?: string; // Which model generated this: 'gemini' | 'claude' | 'claude-code' | 'deepseek'
 }
 
 const ChatAreaComponent = () => {
@@ -187,18 +187,25 @@ const ChatAreaComponent = () => {
 
   // Define loadMessages BEFORE the useEffect that depends on it (prevents TDZ error)
   const loadMessages = useCallback(async () => {
-    if (!selectedSessionId) return;
+    console.log('[ChatArea] loadMessages called, sessionId:', selectedSessionId);
+    if (!selectedSessionId) {
+      console.log('[ChatArea] No sessionId, returning early');
+      return;
+    }
 
     try {
       setIsFetchingMessages(true);
+      console.log('[ChatArea] Querying messages for session:', selectedSessionId);
       const { data, error } = await supabase
         .from('messages')
         .select('id, role, content, created_at, model, provider')
         .eq('session_id', selectedSessionId)
         .order('created_at', { ascending: true });
 
+      console.log('[ChatArea] Message query result:', { count: data?.length, error: error?.message, sessionId: selectedSessionId });
       if (error) throw error;
       setMessages(data || []);
+      console.log('[ChatArea] Messages set:', data?.length || 0);
 
       // Count backtest commands in message history to initialize runCount
       if (data && selectedWorkspaceId) {
@@ -582,12 +589,15 @@ const ChatAreaComponent = () => {
   // Load messages when session changes - also clear memory cache
   // NOTE: displayContext.resetState is stable (useCallback), so we only need selectedSessionId
   useEffect(() => {
+    console.log('[ChatArea] Session change effect triggered, sessionId:', selectedSessionId);
     if (selectedSessionId) {
+      console.log('[ChatArea] Calling loadMessages for session:', selectedSessionId);
       loadMessages();
       // Reset visualizations when switching sessions (cleanup)
       displayContext.resetState();
       setCachedMemoryContext(null); // Clear memory cache for new session
     } else {
+      console.log('[ChatArea] No sessionId, clearing messages');
       setMessages([]);
       setCachedMemoryContext(null);
     }
@@ -772,9 +782,13 @@ const ChatAreaComponent = () => {
         }
 
         // ============ BUILD LLM MESSAGES (FAST PATH) ============
+        // Add session context for Claude Code delegation
+        const sessionContext = selectedSessionId
+          ? `\n\n## Current Session Context\n**Session ID:** ${selectedSessionId}\nUse this session_id when calling execute_via_claude_code tool.`
+          : '';
         const enrichedSystemPrompt = memoryContext
-          ? `${basePrompt}\n\n${memoryContext}`
-          : basePrompt;
+          ? `${basePrompt}\n\n${memoryContext}${sessionContext}`
+          : `${basePrompt}${sessionContext}`;
 
         // Simple truncation to prevent context overflow
         const MAX_HISTORY_CHARS = 400000;
@@ -1304,9 +1318,12 @@ Each profile is regime-aware and adjusts parameters based on VIX levels and mark
 
               // Regular message rendering
               // Detect model from content markers or metadata
-              const detectModel = (msg: Message): 'gemini' | 'claude' | 'deepseek' | undefined => {
+              const detectModel = (msg: Message): 'gemini' | 'claude' | 'claude-code' | 'deepseek' | undefined => {
+                // Check for explicit model field (from watcher or response)
+                if (msg.model === 'claude-code') return 'claude-code';
                 if (msg.model) return msg.model as any;
-                if (msg.content.includes('[CLAUDE CODE EXECUTION')) return 'claude';
+                // Content-based detection
+                if (msg.content.includes('[CLAUDE CODE EXECUTION') || msg.content.includes('**Task Completed:**')) return 'claude-code';
                 if (msg.content.includes('[DEEPSEEK AGENT') || msg.content.includes('DIRECT DEEPSEEK')) return 'deepseek';
                 // Default to gemini for assistant messages (primary model)
                 if (msg.role === 'assistant') return 'gemini';

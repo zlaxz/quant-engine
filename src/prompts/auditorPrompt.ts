@@ -1,10 +1,10 @@
 /**
  * Strategy Auditor Prompt Template
  *
- * Extends the Chief Quant identity with auditor mode instructions
+ * Extends the CIO identity with auditor mode instructions
  * for deep, structured analysis of individual backtest runs.
  *
- * Updated: 2025-11-24 - Refactored to use shared context with Greeks summary
+ * Updated: 2025-12-02 - Renamed Chief Quant to CIO
  */
 
 import { buildOptionsContext, buildFullStatisticalContext } from './sharedContext';

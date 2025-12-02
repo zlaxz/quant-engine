@@ -195,12 +195,14 @@ def run_agent(task: str, agent_type: str = 'analyst', context: str = None, model
         context: Additional context
         model: Model to use ('deepseek-chat' with tools, 'deepseek-reasoner' for pure logic)
     """
+    # Determine if this is reasoner mode (pure logic, no tools)
+    is_reasoner = 'reasoner' in model.lower()
 
     system_prompt = AGENT_PROMPTS.get(agent_type.lower(), AGENT_PROMPTS['analyst'])
 
     # Model-specific prompting
-    if model == 'deepseek-reasoner':
-        # Pure reasoning mode - emphasize logical analysis
+    if is_reasoner:
+        # Pure reasoning mode - emphasize logical analysis, NO tools
         system_prompt += """
 
 IMPORTANT: You are running in PURE REASONING MODE (no tools available).
@@ -227,12 +229,24 @@ DO NOT make assumptions. READ THE ACTUAL CODE using your tools, then provide ana
         {'role': 'user', 'content': user_message}
     ]
 
-    print(f"[DeepSeek Agent] Type: {agent_type}, Model: {model}", file=sys.stderr)
+    print(f"[DeepSeek Agent] Type: {agent_type}, Model: {model}, Reasoner: {is_reasoner}", file=sys.stderr)
     print(f"[DeepSeek Agent] Task: {task[:100]}...", file=sys.stderr)
 
-    # AGENTIC LOOP - Both models support tools in V3.2!
+    # REASONER MODE: Single call, no tools, pure reasoning
+    if is_reasoner:
+        print(f"[DeepSeek Agent] Using REASONER mode (no tools, single call)...", file=sys.stderr)
+        result = call_deepseek(messages, tools=None, model=model)
+        if 'error' in result:
+            return f"ERROR: {result['error']}"
+        if 'choices' not in result or len(result['choices']) == 0:
+            return f"ERROR: Unexpected response format: {json.dumps(result)}"
+        content = result['choices'][0].get('message', {}).get('content', '')
+        total_tokens = result.get('usage', {}).get('total_tokens', 0)
+        print(f"[DeepSeek Agent] Reasoner complete! Tokens: {total_tokens}", file=sys.stderr)
+        return content
+
+    # ACTION MODE: Agentic loop with tools
     # deepseek-chat: Fast tool execution
-    # deepseek-reasoner: Thinking + tools (new V3.2 capability)
     MAX_ITERATIONS = 20  # Increased for thorough audits
     iteration = 0
     total_tokens = 0

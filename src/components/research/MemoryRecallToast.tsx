@@ -104,7 +104,7 @@ export function MemoryRecallToast({ memories, onClose, className }: MemoryRecall
       )}
 
       <p className="text-xs text-muted-foreground mt-2 italic">
-        Chief Quant is using these past insights to inform the current analysis
+        The CIO is using these past insights to inform the current analysis
       </p>
     </Card>
   );

@@ -1,6 +1,6 @@
 /**
  * Dual Purpose Panel - Displays visualizations (primary) and artifacts (secondary)
- * Automatically transitions between modes based on Chief Quant directives
+ * Automatically transitions between modes based on CIO directives
  */
 
 import { useState, useEffect } from 'react';

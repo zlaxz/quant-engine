@@ -42,7 +42,7 @@ export const RoadmapTracker = () => {
       
       {tasks.length === 0 ? (
         <div className="text-xs text-muted-foreground text-center py-6">
-          No active tasks. Chief Quant will add tasks as work progresses.
+          No active tasks. The CIO will add tasks as work progresses.
         </div>
       ) : (
         <div className="space-y-2">

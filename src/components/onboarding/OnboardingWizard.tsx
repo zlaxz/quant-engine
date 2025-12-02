@@ -42,7 +42,7 @@ const STEPS = [
   {
     id: 'workflow',
     title: 'Research Workflow',
-    description: 'How Chief Quant helps you discover strategies',
+    description: 'How the CIO helps you discover strategies',
     icon: PlayCircle,
   },
   {
@@ -118,7 +118,7 @@ export function OnboardingWizard({ open, onComplete, onSkip }: OnboardingWizardP
               <h3 className="text-2xl font-bold">Welcome to QuantOS</h3>
               <p className="text-muted-foreground max-w-md mx-auto">
                 QuantOS is your visual research IDE for discovering profitable trading strategies. 
-                You'll work alongside Chief Quant, an AI researcher who helps you explore market regimes 
+                You'll work alongside the CIO, an AI strategist who helps you explore market regimes
                 and discover convexity-based strategies.
               </p>
             </div>
@@ -187,10 +187,10 @@ export function OnboardingWizard({ open, onComplete, onSkip }: OnboardingWizardP
             <div className="grid gap-4">
               <Card className="p-4 border-l-4 border-l-blue-500">
                 <div className="space-y-2">
-                  <h4 className="font-semibold text-sm">Left Panel: Chat with Chief Quant</h4>
+                  <h4 className="font-semibold text-sm">Left Panel: Chat with the CIO</h4>
                   <p className="text-xs text-muted-foreground">
                     This is your primary interface. All work happens through natural conversation. 
-                    Just tell Chief Quant what you want to explore, and it handles the analysis.
+                    Just tell the CIO what you want to explore, and it handles the analysis.
                   </p>
                   <div className="text-xs bg-muted/50 rounded p-2 font-mono mt-2">
                     Example: "Classify 2023 regimes and find strategies for Low Vol periods"
@@ -202,7 +202,7 @@ export function OnboardingWizard({ open, onComplete, onSkip }: OnboardingWizardP
                 <div className="space-y-2">
                   <h4 className="font-semibold text-sm">Right Panel (Top): Live Visualizations</h4>
                   <p className="text-xs text-muted-foreground">
-                    As Chief Quant works, visualizations automatically appear here: regime timelines, 
+                    As the CIO works, visualizations automatically appear here: regime timelines,
                     strategy matrices, equity curves, and more. Watch your research unfold visually.
                   </p>
                 </div>
@@ -221,7 +221,7 @@ export function OnboardingWizard({ open, onComplete, onSkip }: OnboardingWizardP
 
             <Card className="p-4 bg-primary/5 border-primary/20">
               <p className="text-xs text-muted-foreground">
-                <strong className="text-primary">Pro Tip:</strong> You're a Research Director, Chief Quant is your analyst. 
+                <strong className="text-primary">Pro Tip:</strong> You're the Research Director. The CIO handles strategy, the CTO handles execution.
                 You don't do the work—you direct it through conversation. Just observe and guide.
               </p>
             </Card>
@@ -294,7 +294,7 @@ export function OnboardingWizard({ open, onComplete, onSkip }: OnboardingWizardP
             <Card className="p-4 bg-primary/5 border-primary/20">
               <p className="text-xs text-muted-foreground">
                 <strong className="text-primary">Key Insight:</strong> This isn't linear—you can jump to any stage 
-                based on what you discover. Chief Quant adapts to your research direction.
+                based on what you discover. The CIO adapts to your research direction.
               </p>
             </Card>
           </div>
@@ -342,7 +342,7 @@ export function OnboardingWizard({ open, onComplete, onSkip }: OnboardingWizardP
                 <ul className="space-y-2 text-sm text-muted-foreground text-left max-w-md mx-auto">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                    <span>You direct, Chief Quant executes</span>
+                    <span>You direct strategy, the AI team delivers</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />

@@ -129,7 +129,7 @@ export function ScenarioSimulator({ data }: ScenarioSimulatorProps) {
         {/* Explanation */}
         <div className="rounded-lg bg-primary/5 border border-primary/20 p-4">
           <p className="text-sm leading-relaxed text-foreground/90">
-            <span className="font-semibold">Chief Quant explains:</span> {data.explanation}
+            <span className="font-semibold">CIO explains:</span> {data.explanation}
           </p>
         </div>
       </CardContent>

@@ -1,6 +1,6 @@
 /**
  * Experiment Director Prompt Template
- * Used to guide the Chief Quant in designing concrete next experiments
+ * Used to guide the CIO in designing concrete next experiments
  */
 
 export function buildExperimentDirectorPrompt(

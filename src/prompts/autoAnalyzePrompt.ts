@@ -1,7 +1,7 @@
 /**
  * Autonomous Research Loop Prompt Template
- * 
- * Used when the Chief Quant synthesizes all agent mode outputs
+ *
+ * Used when the CIO synthesizes all agent mode outputs
  * into a comprehensive research report.
  */
 

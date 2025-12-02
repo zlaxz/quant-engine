@@ -1,7 +1,7 @@
 /**
  * OperationCard - Persistent visual card showing tool execution details
- * 
- * Makes Chief Quant's work visible: what files accessed, what data analyzed, what results returned
+ *
+ * Makes the CIO's work visible: what files accessed, what data analyzed, what results returned
  */
 
 import { FileCode, FolderOpen, Database, Calendar, Clock } from 'lucide-react';

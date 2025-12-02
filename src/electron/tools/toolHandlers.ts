@@ -140,7 +140,8 @@ export async function deleteFile(filePath: string): Promise<ToolResult> {
 
 /**
  * Execute a Python script and return its output
- * CRITICAL: This is what allows Chief Quant to actually RUN code, not just read it
+ * CIO uses this for read-only analysis (backtests, data queries)
+ * Code MODIFICATIONS go through CTO (Claude Code) via execute_via_claude_code
  */
 export async function runPythonScript(
   scriptPath: string,
@@ -2438,7 +2439,8 @@ const claudeCodeCircuitBreaker = {
 export async function executeViaClaudeCode(
   task: string,
   context?: string,
-  parallelHint?: 'none' | 'minor' | 'massive'
+  parallelHint?: 'none' | 'minor' | 'massive',
+  sessionId?: string
 ): Promise<ToolResult> {
   const startTime = Date.now();
 
@@ -2493,10 +2495,11 @@ export async function executeViaClaudeCode(
   }
 
   safeLog('\n' + '🔵'.repeat(30));
-  safeLog('🚀 EXECUTE VIA CLAUDE CODE CLI');
+  safeLog('🚀 EXECUTE VIA CLAUDE CODE CLI (ASYNC)');
   safeLog(`   Task: ${task.slice(0, 100)}${task.length > 100 ? '...' : ''}`);
   safeLog(`   Context provided: ${context ? 'yes' : 'no'}`);
   safeLog(`   Parallel hint: ${parallelHint || 'none'}`);
+  safeLog(`   Session ID: ${sessionId || 'none (results will not be inserted to chat)'}`);
   safeLog(`   Timestamp: ${new Date().toISOString()}`);
   safeLog('🔵'.repeat(30));
 
@@ -2638,6 +2641,44 @@ ${sessionState}
 `;
     }
 
+    // Add result file instructions if session_id is provided
+    if (sessionId) {
+      prompt += `
+## CRITICAL: Result File (MUST DO)
+
+**Session ID:** ${sessionId}
+**Result File Path:** /tmp/claude-code-results/${sessionId}.json
+
+When you complete this task, you MUST write your results to the JSON file above.
+This allows Quant Engine to display your results in the chat UI.
+
+**Write the result file using this exact format:**
+\`\`\`bash
+mkdir -p /tmp/claude-code-results
+cat > /tmp/claude-code-results/${sessionId}.json << 'RESULT_EOF'
+{
+  "session_id": "${sessionId}",
+  "content": "Your detailed response here. Include everything the user needs to know.",
+  "task_summary": "Brief 1-line summary of what you accomplished",
+  "files_created": ["path/to/new/file.py"],
+  "files_modified": ["path/to/modified/file.py"],
+  "display_directives": [],
+  "exit_code": 0
+}
+RESULT_EOF
+\`\`\`
+
+**For display directives (charts/tables), add to the array:**
+\`\`\`json
+"display_directives": [
+  {"type": "line_chart", "data": {"title": "Equity Curve", "series": [...]}},
+  {"type": "metrics_dashboard", "data": {"sharpe": 1.5, "max_dd": -0.12}}
+]
+\`\`\`
+
+`;
+    }
+
     prompt += `
 ## Expected Response Format
 
@@ -2702,8 +2743,19 @@ ${context}
     // Write prompt to file to avoid shell escaping issues
     fs.writeFileSync(promptFile, prompt);
 
-    // Build command that runs in Terminal with visible output
-    const terminalCommand = `cd "${resolved}" && echo "🚀 Claude Code Execution" && echo "Working directory: ${resolved}" && echo "Task: ${task.slice(0, 100)}..." && echo "" && claude --print --output-format text -p "$(cat ${promptFile})" 2>&1 | tee ${outputFile}; EXIT_CODE=$?; echo "__EXIT_CODE__:$EXIT_CODE" >> ${outputFile}; echo ""; echo "✅ Claude Code execution complete (exit: $EXIT_CODE). Press any key to close..."; read -n 1`;
+    // Build command that runs in Terminal with BOTH:
+    // 1. Visible output you can watch
+    // 2. Output captured to file for return to Gemini
+    // 3. Terminal stays open for follow-up interaction
+    // Sanitize task preview: remove newlines and escape special chars for shell
+    const taskPreview = task.slice(0, 100).replace(/[\n\r]/g, ' ').replace(/"/g, '\\"');
+
+    // HYBRID MODE:
+    // - Use --print for initial task (completes and captures output)
+    // - Tee output to both screen AND file
+    // - After completion, drop into interactive bash so user can run more commands
+    // - User can run `claude` again for follow-up interaction
+    const terminalCommand = `cd "${resolved}" && echo "🚀 Claude Code Execution" && echo "Working directory: ${resolved}" && echo "Task: ${taskPreview}..." && echo "" && echo "=====================================" && claude --print --output-format text "$(cat ${promptFile})" 2>&1 | tee ${outputFile}; EXIT_CODE=$?; echo "__EXIT_CODE__:$EXIT_CODE" >> ${outputFile}; echo ""; echo "=====================================" && echo "✅ Task complete (exit: $EXIT_CODE)" && echo "" && echo "💡 Terminal stays open - run 'claude' for follow-up interaction" && echo "=====================================" && exec bash`;
 
     // Try to open Terminal.app with the command (visible for monitoring)
     const appleScript = `
@@ -2726,8 +2778,9 @@ end tell
       safeLog(`⚠️ Terminal launch failed: ${terminalResult.stderr}`);
       safeLog(`   Falling back to background execution (no visible Terminal)`);
 
-      // Fallback: Execute clauded in background without Terminal
-      const bgResult = spawnSync('claude', ['--print', '--output-format', 'text', '-p', prompt], {
+      // Fallback: Execute claude in background without Terminal
+      // Note: -p is --print (not prompt), prompt goes at end as positional arg
+      const bgResult = spawnSync('claude', ['--print', '--output-format', 'text', prompt], {
         encoding: 'utf-8',
         cwd: resolved,
         timeout: 600000, // 10 minutes
@@ -2785,72 +2838,50 @@ end tell
       if (fs.existsSync(promptFile)) fs.unlinkSync(promptFile);
       if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
     } else {
-      safeLog('   Terminal window opened - waiting for completion...');
+      // ASYNC MODE: Terminal opened successfully, return immediately
+      // Results will be picked up by the file watcher and inserted as chat messages
+      safeLog('   ✅ Terminal window opened - returning immediately (async mode)');
+      safeLog(`   Results will be written to: /tmp/claude-code-results/${sessionId || 'no-session'}.json`);
 
-      // Poll for output file (created when claude completes)
-      const maxWaitTime = 600000; // 10 minutes
-      const pollInterval = 1000; // Check every second
-      let waited = 0;
+      const elapsed = Date.now() - startTime;
 
-      while (waited < maxWaitTime) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-        waited += pollInterval;
+      // Record success in circuit breaker (we successfully delegated)
+      claudeCodeCircuitBreaker.recordSuccess();
 
-        // Check if output file exists and has content
-        if (fs.existsSync(outputFile)) {
-          const stats = fs.statSync(outputFile);
-          if (stats.size > 0) {
-            // Wait a bit more to ensure write is complete
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            break;
+      // Return success with delegation message
+      return {
+        success: true,
+        content: JSON.stringify({
+          type: 'claude-code-delegation',
+          status: 'delegated',
+          message: `Task delegated to Claude Code. Running in Terminal window.${sessionId ? ' Results will appear in chat when complete.' : ''}`,
+          sessionId: sessionId || null,
+          resultFile: sessionId ? `/tmp/claude-code-results/${sessionId}.json` : null,
+          timestamp: new Date().toISOString(),
+          duration: elapsed,
+          metadata: {
+            hasContext: !!context,
+            parallelHint: parallelHint || 'none',
+            taskLength: task.length,
+            contextLength: context?.length || 0
           }
+        }, null, 2),
+        metadata: {
+          delegated: true,
+          sessionId: sessionId || null,
+          elapsed
         }
-      }
-
-      // Read result from output file
-      if (fs.existsSync(outputFile)) {
-        const rawOutput = fs.readFileSync(outputFile, 'utf-8');
-
-        // Extract exit code
-        const exitCodeMatch = rawOutput.match(/__EXIT_CODE__:(\d+)/);
-        const exitCode = exitCodeMatch ? parseInt(exitCodeMatch[1]) : 0;
-
-        // Remove exit code marker from output
-        const cleanOutput = rawOutput.replace(/__EXIT_CODE__:\d+\n?/, '');
-
-        result = {
-          stdout: cleanOutput,
-          stderr: '',
-          status: exitCode  // Now captures actual exit code
-        };
-
-        // Cleanup temp files
-        fs.unlinkSync(outputFile);
-        fs.unlinkSync(promptFile);
-      } else {
-        safeLog(`❌ Timeout: No output after ${waited}ms`);
-        // Cleanup prompt file
-        if (fs.existsSync(promptFile)) fs.unlinkSync(promptFile);
-
-        // Record failure in circuit breaker
-        claudeCodeCircuitBreaker.recordFailure();
-
-        return {
-          success: false,
-          content: '',
-          error: `Claude Code timed out after ${Math.floor(waited / 1000)}s. Task may be too complex. Try breaking into smaller steps.`
-        };
-      }
+      };
     }
 
+    // This code only runs for background fallback
     const elapsed = Date.now() - startTime;
 
-    // Check for non-zero exit
+    // Check for non-zero exit (background fallback only)
     if (result.status !== 0) {
       safeLog(`❌ Claude Code exited with code ${result.status}`);
       safeLog(`   stderr: ${result.stderr || 'none'}`);
 
-      // Still return content if available (Claude Code may output before failing)
       return {
         success: false,
         content: result.stdout || '',
@@ -2858,14 +2889,9 @@ end tell
       };
     }
 
-    safeLog(`✅ Claude Code completed in ${elapsed}ms`);
+    safeLog(`✅ Claude Code background execution completed in ${elapsed}ms`);
 
-    // Log stderr for debugging (Claude Code may log status to stderr)
-    if (result.stderr) {
-      safeLog(`   [stderr] ${result.stderr.slice(0, 500)}`);
-    }
-
-    // Return structured JSON for programmatic parsing
+    // Return structured JSON for programmatic parsing (background fallback)
     const structuredResponse = {
       type: 'claude-code-execution',
       status: result.status === 0 ? 'success' : 'failure',
@@ -2878,7 +2904,8 @@ end tell
         hasContext: !!context,
         parallelHint: parallelHint || 'none',
         taskLength: task.length,
-        contextLength: context?.length || 0
+        contextLength: context?.length || 0,
+        mode: 'background-fallback'
       }
     };
 
@@ -3070,7 +3097,7 @@ export async function executeTool(
 
     // Claude Code CLI execution (Gemini → Claude Code bridge)
     case 'execute_via_claude_code':
-      return executeViaClaudeCode(args.task, args.context, args.parallel_hint);
+      return executeViaClaudeCode(args.task, args.context, args.parallel_hint, args.session_id);
 
     default:
       return { success: false, content: '', error: `Unknown tool: ${name}` };

@@ -1,6 +1,6 @@
 /**
  * Memory Curator Prompt Template
- * Used to guide the Chief Quant in reviewing and proposing improvements to the rule set
+ * Used to guide the CIO in reviewing and proposing improvements to the rule set
  */
 
 export function buildMemoryCuratorPrompt(summary: string): string {

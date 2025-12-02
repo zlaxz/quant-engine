@@ -1,12 +1,12 @@
 /**
- * Operational Manual - System Awareness for Chief Quant
+ * Operational Manual - System Awareness for CIO
  *
- * Provides the Chief Quant with knowledge of the local infrastructure:
+ * Provides the CIO with knowledge of the local infrastructure:
  * - Hardware: Mac M4 Pro + 8TB VelocityData external drive
  * - Data: Massive.com Flat Files -> Parquet (Local)
  * - Components: bridge_server.py, data_ingestor.py, research_daemon.py
  *
- * Created: 2025-11-24
+ * Updated: 2025-12-02 - Renamed Chief Quant to CIO
  */
 
 export const OPS_MANUAL = `

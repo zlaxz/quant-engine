@@ -180,7 +180,7 @@ function EmptyState() {
       </div>
       <h3 className="font-semibold mb-2">No findings yet</h3>
       <p className="text-sm text-muted-foreground mb-4 max-w-xs mx-auto">
-        Key discoveries will appear here as you research. Chief Quant will automatically capture important insights.
+        Key discoveries will appear here as you research. The CIO will automatically capture important insights.
       </p>
       <Button variant="outline" size="sm" disabled>
         <Plus className="h-3 w-3 mr-1" />

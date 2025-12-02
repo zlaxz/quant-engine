@@ -192,7 +192,7 @@ export function CommandPalette() {
     {
       id: 'go-chat',
       label: 'Go to Chat',
-      description: 'Return to Chief Quant chat',
+      description: 'Return to CIO chat',
       icon: <Zap className="h-4 w-4" />,
       category: 'navigation',
       action: () => navigate('/'),

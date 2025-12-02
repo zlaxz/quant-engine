@@ -1,7 +1,7 @@
 /**
  * Code-Aware Prompt Template
- * 
- * Used when the Chief Quant needs to analyze rotation-engine source code
+ *
+ * Used when the CIO needs to analyze rotation-engine source code
  * to understand strategy behavior, identify structural implications,
  * and link code to observed performance patterns.
  */

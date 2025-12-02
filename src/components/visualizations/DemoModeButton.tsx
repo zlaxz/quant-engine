@@ -7,15 +7,15 @@ export const DemoModeButton = () => {
   const display = useResearchDisplay();
 
   const runDemo = async () => {
-    toast.info('Demo Mode: Watch Chief Quant analyze a strategy with full transparency', { duration: 8000 });
+    toast.info('Demo Mode: Watch the CIO analyze a strategy with full transparency', { duration: 8000 });
     
     await new Promise(resolve => setTimeout(resolve, 3000));
     
     // Stage 1: Transparency explanation
     display.updateStage('regime_mapping');
-    display.updateProgress(0, 'Chief Quant explaining plan...');
+    display.updateProgress(0, 'CIO explaining plan...');
     
-    toast.info('Chief Quant: "I\'m analyzing Short Put OTM performance in 2023. I\'ll read /strategies/short_put_otm.py, inspect SPX data, backtest 3 profiles, and analyze trade logs."', { duration: 10000 });
+    toast.info('CIO: "I\'m analyzing Short Put OTM performance in 2023. I\'ll read /strategies/short_put_otm.py, inspect SPX data, backtest 3 profiles, and analyze trade logs."', { duration: 10000 });
     
     await new Promise(resolve => setTimeout(resolve, 8000));
     
@@ -40,7 +40,7 @@ export const DemoModeButton = () => {
     display.updateProgress(100, 'Analysis complete');
     display.showVisualization('regime_timeline');
     
-    toast.success('Analysis Complete! Chief Quant found that Profile 2 (45 DTE, 0.30 delta) worked best in low-vol periods.', { duration: 10000 });
+    toast.success('Analysis Complete! CIO found that Profile 2 (45 DTE, 0.30 delta) worked best in low-vol periods.', { duration: 10000 });
     
     await new Promise(resolve => setTimeout(resolve, 8000));
     

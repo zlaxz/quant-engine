@@ -55,6 +55,7 @@ import { WarningSystem } from './analysis/warningSystem';
 import { PatternDetector } from './analysis/patternDetector';
 import { StaleMemoryInjector } from './memory/staleMemoryInjector';
 import { TriggerRecall } from './memory/triggerRecall';
+import { initClaudeCodeResultWatcher } from './ipc-handlers/claudeCodeResultWatcher';
 import OpenAI from 'openai';
 
 // __filename and __dirname already defined at top of file for dotenv
@@ -417,7 +418,11 @@ app.whenReady().then(() => {
   // Start memory daemon and wait for it before creating window
   memoryDaemon.start().then(async () => {
     console.log('[Main] Memory daemon started successfully');
-    
+
+    // Initialize Claude Code result watcher
+    initClaudeCodeResultWatcher();
+    console.log('[Main] Claude Code result watcher initialized');
+
     // Validate Python environment
     const validation = await validatePythonEnvironment();
     if (!validation.valid) {

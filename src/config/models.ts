@@ -24,7 +24,7 @@ export interface ModelConfig {
  */
 export const MODELS = {
   // Primary tier - high quality, main conversations, tool use
-  // Gemini 3 Pro Preview - Google's latest flagship model
+  // Gemini 3 Pro Preview - Google's most intelligent model (Nov 2025)
   PRIMARY: {
     provider: (import.meta.env?.VITE_PRIMARY_PROVIDER || 'google') as ProviderName,
     model: import.meta.env?.VITE_PRIMARY_MODEL || 'gemini-3-pro-preview',

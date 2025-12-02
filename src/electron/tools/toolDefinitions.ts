@@ -643,9 +643,13 @@ AGENT STRATEGY (Claude Code decides based on scale):
         parallel_hint: {
           type: SchemaType.STRING,
           description: 'Hint about parallelization needs. Use "none" for single task, "minor" for few parallel tasks (Claude agents), "massive" for many parallel tasks (DeepSeek for cost efficiency)'
+        },
+        session_id: {
+          type: SchemaType.STRING,
+          description: 'Current chat session UUID. ALWAYS pass this so Claude Code results appear in the chat. Get from conversation context.'
         }
       },
-      required: ['task']
+      required: ['task', 'session_id']
     }
   }
 ];
@@ -656,7 +660,7 @@ AGENT STRATEGY (Claude Code decides based on scale):
 export const AGENT_TOOLS: FunctionDeclaration[] = [
   {
     name: 'spawn_agent',
-    description: 'Spawn a DeepSeek agent via Python script (scripts/deepseek_agent.py). Agent has tools: read_file, write_file, list_directory, search_code, run_command. Requires DEEPSEEK_API_KEY environment variable. Timeout: 10 minutes. Use for complex multi-file analysis. For simple reads, use read_file directly. Returns analysis results from DeepSeek.',
+    description: 'Spawn a DeepSeek agent via Python script (scripts/deepseek_agent.py). Agent has tools: read_file, list_directory, search_code, query_data. No write access - analysis only. Requires DEEPSEEK_API_KEY environment variable. Timeout: 10 minutes. Use for complex multi-file analysis. For simple reads, use read_file directly. Returns analysis results from DeepSeek.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -678,7 +682,7 @@ export const AGENT_TOOLS: FunctionDeclaration[] = [
   },
   {
     name: 'spawn_agents_parallel',
-    description: 'Spawn multiple DeepSeek agents in parallel via Python script (same as spawn_agent but multiple at once). Each agent runs independently with full tool access. All agents complete before results return. Requires DEEPSEEK_API_KEY. 10-minute timeout per agent. Use when analyzing 3+ independent components. Returns array of results with execution time.',
+    description: 'Spawn multiple DeepSeek agents in parallel via Python script (same as spawn_agent but multiple at once). Each agent runs independently with read-only tool access (read_file, search_code, query_data). All agents complete before results return. Requires DEEPSEEK_API_KEY. 10-minute timeout per agent. Use when analyzing 3+ independent components. Returns array of results with execution time.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
