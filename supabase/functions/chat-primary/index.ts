@@ -92,11 +92,11 @@ serve(async (req) => {
     const queryEmbedding = await generateEmbedding(searchQuery);
     
     if (queryEmbedding) {
-      // Use semantic search via the database function (fetch more than needed for re-ranking)
+    // Use semantic search via the database function (fetch more than needed for re-ranking)
       // Only active (non-archived) notes with embeddings are returned
-      const { data: semanticResults, error: memoryError } = await supabase.rpc('search_memory_notes', {
+      const { data: semanticResults, error: memoryError } = await supabase.rpc('match_memories', {
         query_embedding: queryEmbedding,
-        match_workspace_id: workspaceId,
+        match_workspace: workspaceId,
         match_threshold: 0.5, // Lower threshold to get more candidates
         match_count: 15, // Get more for re-ranking
       });
@@ -133,8 +133,8 @@ serve(async (req) => {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       
       const { data: recentNotes, error: memoryError } = await supabase
-        .from('memory_notes')
-        .select('content, source, tags, created_at, memory_type, importance, similarity')
+        .from('memories')
+        .select('content, source, tags, created_at, memory_type, importance_score')
         .eq('workspace_id', workspaceId)
         .eq('archived', false) // Only active notes
         .not('embedding', 'is', null) // Only notes with embeddings

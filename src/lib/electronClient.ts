@@ -399,7 +399,7 @@ export async function chatPrimary(messages: Array<{ role: string; content: strin
   });
   
   if (error) throw new Error(`Chat failed: ${error.message}`);
-  return { content: data.content || data.message, provider: 'google', model: 'gemini-3-pro-preview' };
+  return { content: data.content || data.message, provider: 'google', model: 'gemini-2.5-flash' };
 }
 
 export async function chatSwarm(messages: Array<{ role: string; content: string }>): Promise<{ content: string; provider: string; model: string }> {
