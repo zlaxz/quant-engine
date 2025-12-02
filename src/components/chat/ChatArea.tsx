@@ -758,42 +758,46 @@ const ChatAreaComponent = () => {
 
         {/* Input */}
         <div className="flex items-end gap-2">
-          <Popover open={showCommandMenu} onOpenChange={setShowCommandMenu}>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="icon" className="h-10 w-10 flex-shrink-0">
-                <Command className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80 p-2" align="start">
-              <div className="text-sm font-medium mb-2">Quick Commands</div>
-              <div className="space-y-1">
-                {['/backtest', '/runs', '/compare', '/note', '/help'].map((cmd) => (
-                  <button
-                    key={cmd}
-                    className="w-full text-left px-2 py-1.5 rounded hover:bg-muted text-sm"
-                    onClick={() => {
-                      setInputValue(cmd + ' ');
-                      setShowCommandMenu(false);
-                    }}
-                  >
-                    <code className="font-mono text-primary">{cmd}</code>
-                  </button>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-
           <div className="flex-1 min-w-0 relative">
             <Textarea
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyPress}
               placeholder="Type a message or /command..."
-              className="min-h-[40px] max-h-[200px] resize-none pr-10"
+              className="min-h-[40px] max-h-[200px] resize-none pl-10 pr-10"
               disabled={isLoading || !selectedSessionId}
             />
+            {/* Command menu trigger inside input */}
+            <Popover open={showCommandMenu} onOpenChange={setShowCommandMenu}>
+              <PopoverTrigger asChild>
+                <button 
+                  className="absolute left-2.5 top-2.5 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  title="Quick commands"
+                >
+                  <Slash className="h-4 w-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-2" align="start" sideOffset={8}>
+                <div className="text-xs font-medium text-muted-foreground mb-2">Quick Commands</div>
+                <div className="space-y-0.5">
+                  {['/backtest', '/runs', '/compare', '/note', '/help'].map((cmd) => (
+                    <button
+                      key={cmd}
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-accent text-sm font-mono"
+                      onClick={() => {
+                        setInputValue(cmd + ' ');
+                        setShowCommandMenu(false);
+                      }}
+                    >
+                      {cmd}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+            {/* Status icons */}
             {inputValue.startsWith('/') && (
-              <Slash className="absolute right-3 top-3 h-4 w-4 text-primary" />
+              <Command className="absolute right-3 top-3 h-4 w-4 text-primary" />
             )}
             {inputValue.includes('```') && (
               <Code className="absolute right-3 top-3 h-4 w-4 text-amber-500" />
@@ -803,7 +807,8 @@ const ChatAreaComponent = () => {
           <Button
             onClick={sendMessage}
             disabled={!inputValue.trim() || isLoading || !selectedSessionId}
-            className="h-10 px-4"
+            size="icon"
+            className="h-10 w-10 shrink-0"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -814,13 +819,10 @@ const ChatAreaComponent = () => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-          <span>Enter to send • Shift+Enter for newline • ESC to cancel</span>
-          {selectedSessionId && (
-            <span className="font-mono truncate max-w-[200px]">
-              {selectedSessionId.slice(0, 8)}...
-            </span>
-          )}
+        <div className="flex items-center gap-4 mt-1.5 text-[11px] text-muted-foreground">
+          <span>↵ send</span>
+          <span>⇧↵ newline</span>
+          <span>esc cancel</span>
         </div>
       </div>
 
