@@ -172,24 +172,23 @@ function StageEmptyState({ stage }: { stage: string }) {
   const config = getStageVisualizationConfig(stage as any);
 
   return (
-    <Card className="h-full flex items-center justify-center p-8 bg-card/50 backdrop-blur border-dashed animate-in fade-in duration-500">
-      <div className="text-center space-y-6 max-w-2xl">
-        <div className="text-7xl mb-6 animate-bounce">{config.emptyStateIcon}</div>
-        
-        <div className="space-y-3">
-          <h3 className="text-2xl font-bold">{config.emptyStateTitle}</h3>
-          <p className="text-base text-muted-foreground leading-relaxed">
-            {config.emptyStateMessage}
-          </p>
-        </div>
+    <div className="h-full flex flex-col p-4 overflow-auto">
+      <Card className="flex-1 flex flex-col items-center justify-center p-6 bg-card/50 backdrop-blur border-dashed">
+        {/* Icon and Title */}
+        <div className="text-4xl mb-3">{config.emptyStateIcon}</div>
+        <h3 className="text-lg font-semibold text-center mb-2">{config.emptyStateTitle}</h3>
+        <p className="text-sm text-muted-foreground text-center max-w-md leading-relaxed">
+          {config.emptyStateMessage}
+        </p>
 
+        {/* Educational Context */}
         {config.educationalContext && (
-          <div className="mt-8 p-4 rounded-lg bg-primary/5 border border-primary/20">
-            <div className="flex items-start gap-3">
-              <div className="text-2xl shrink-0">💡</div>
-              <div className="text-left">
-                <p className="text-sm font-medium text-primary mb-1">Learning Moment</p>
-                <p className="text-sm text-muted-foreground leading-relaxed">
+          <div className="mt-4 p-3 rounded-lg bg-primary/5 border border-primary/20 max-w-md w-full">
+            <div className="flex items-start gap-2">
+              <span className="text-base shrink-0">💡</span>
+              <div>
+                <p className="text-xs font-medium text-primary mb-0.5">Learning Moment</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   {config.educationalContext}
                 </p>
               </div>
@@ -197,23 +196,26 @@ function StageEmptyState({ stage }: { stage: string }) {
           </div>
         )}
 
+        {/* Quick Start Prompts */}
         {stage === 'idle' && (
-          <div className="mt-6 pt-6 border-t border-border">
-            <p className="text-xs text-muted-foreground mb-3">Try these prompts to get started:</p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              <Button variant="outline" size="sm" className="text-xs">
+          <div className="mt-4 pt-4 border-t border-border w-full max-w-md">
+            <p className="text-xs text-muted-foreground text-center mb-2">
+              Try these prompts to get started:
+            </p>
+            <div className="flex flex-wrap gap-1.5 justify-center">
+              <Button variant="outline" size="sm" className="text-xs h-7 px-2">
                 Map market regimes from 2020-2024
               </Button>
-              <Button variant="outline" size="sm" className="text-xs">
+              <Button variant="outline" size="sm" className="text-xs h-7 px-2">
                 What should we discover today?
               </Button>
-              <Button variant="outline" size="sm" className="text-xs">
+              <Button variant="outline" size="sm" className="text-xs h-7 px-2">
                 Show me recent findings
               </Button>
             </div>
           </div>
         )}
-      </div>
-    </Card>
+      </Card>
+    </div>
   );
 }
