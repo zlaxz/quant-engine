@@ -66,6 +66,23 @@ AGENT_TOOLS = [
                 "required": ["pattern"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_data",
+            "description": "Execute high-performance SQL against the SPY market data lake. Use this to aggregate price, volume, or volatility data instantly.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sql": {
+                        "type": "string",
+                        "description": "DuckDB SQL query (e.g., 'SELECT avg(close) FROM stock_data WHERE date > 2024-01-01')"
+                    }
+                },
+                "required": ["sql"]
+            }
+        }
     }
 ]
 
@@ -138,6 +155,28 @@ def execute_tool(tool_name: str, args: dict) -> str:
                 timeout=30
             )
             return result.stdout if result.stdout else 'No matches found'
+
+        elif tool_name == 'query_data':
+            # Lazy import to keep startup fast
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
+            try:
+                from engine.data.db_manager import engine
+                sql = args.get('sql', '')
+                if not sql:
+                    return "Error: No SQL query provided"
+
+                print(f"  [DataEngine] Executing: {sql}", file=sys.stderr)
+                results = engine.query(sql)
+
+                # Truncate if result is massive (prevent token explosion)
+                result_str = json.dumps(results, default=str)
+                if len(result_str) > 50000:
+                    return result_str[:50000] + f"... [Truncated. Total rows: {len(results)}]"
+                return result_str
+            except ImportError as e:
+                return f"Error: Could not import engine.data.db_manager: {str(e)}"
+            except Exception as e:
+                return f"Error executing query: {str(e)}"
 
         else:
             return f"Error: Unknown tool {tool_name}"

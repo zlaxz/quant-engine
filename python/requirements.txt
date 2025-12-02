@@ -46,3 +46,8 @@ yfinance>=0.2.0
 # Visualization
 matplotlib>=3.5.0
 seaborn>=0.12.0
+
+# High-performance data engine for M4 Pro
+duckdb>=0.9.0
+fastapi>=0.109.0
+uvicorn>=0.27.0
