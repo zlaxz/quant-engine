@@ -80,7 +80,7 @@ export async function searchCode(query: string, dirPath?: string): Promise<{ res
 
 // ==================== QUANT ENGINE API ====================
 // Python server URL - matches toolHandlers.ts
-const QUANT_ENGINE_URL = 'http://localhost:5000';
+const QUANT_ENGINE_URL = 'http://localhost:5001';
 
 // Type definitions for Quant Engine API
 export interface RegimeData {

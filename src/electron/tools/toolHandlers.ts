@@ -880,7 +880,7 @@ export async function codeStats(statsPath?: string): Promise<ToolResult> {
 // ==================== BACKTEST OPERATIONS ====================
 
 // Python server URL - internal engine running on localhost
-const PYTHON_SERVER_URL = 'http://localhost:5000';
+const PYTHON_SERVER_URL = 'http://localhost:5001';
 
 // Helper function to execute a single backtest via HTTP call to Python server
 async function executeSingleBacktest(
