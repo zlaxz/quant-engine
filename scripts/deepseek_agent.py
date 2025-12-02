@@ -99,8 +99,8 @@ def call_deepseek(messages: list, max_tokens: int = 4000, tools: list = None, mo
     }
 
     # Add tools if provided (CRITICAL for file access)
-    # NOTE: deepseek-reasoner does NOT support tools
-    if tools and model != 'deepseek-reasoner':
+    # NOTE: V3.2 reasoner DOES support tools (new capability!)
+    if tools:
         payload_dict['tools'] = tools
         payload_dict['tool_choice'] = 'auto'
 
