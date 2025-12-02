@@ -379,7 +379,7 @@ export async function runBacktest(params: {
 }
 
 // LLM Operations - all calls route through Electron IPC when available
-export async function chatPrimary(messages: Array<{ role: string; content: string }>): Promise<{ content: string; provider: string; model: string }> {
+export async function chatPrimary(messages: Array<{ role: string; content: string }>, sessionId?: string, workspaceId?: string): Promise<{ content: string; provider: string; model: string }> {
   if (isElectron && window.electron) {
     try {
       return await window.electron.chatPrimary(messages);
@@ -389,8 +389,17 @@ export async function chatPrimary(messages: Array<{ role: string; content: strin
     }
   }
 
-  // Fallback to edge function for web-only deployment (not supported yet)
-  throw new Error('Chat not available in web mode');
+  // Fallback to edge function for web/Lovable deployment
+  if (!sessionId || !workspaceId) {
+    throw new Error('sessionId and workspaceId required for web mode chat');
+  }
+  
+  const { data, error } = await supabase.functions.invoke('chat-primary', {
+    body: { sessionId, workspaceId, content: messages[messages.length - 1]?.content || '' },
+  });
+  
+  if (error) throw new Error(`Chat failed: ${error.message}`);
+  return { content: data.content || data.message, provider: 'google', model: 'gemini-3-pro-preview' };
 }
 
 export async function chatSwarm(messages: Array<{ role: string; content: string }>): Promise<{ content: string; provider: string; model: string }> {

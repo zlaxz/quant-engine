@@ -789,8 +789,8 @@ const ChatAreaComponent = () => {
           { role: 'user', content: messageContent }
         ];
 
-        // Call LLM via Electron IPC
-        const response = await chatPrimary(llmMessages);
+        // Call LLM via Electron IPC or edge function (web mode)
+        const response = await chatPrimary(llmMessages, selectedSessionId, selectedWorkspaceId);
 
         // Parse display directives from response
         const directives = parseDisplayDirectives(response.content);
