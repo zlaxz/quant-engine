@@ -7,7 +7,7 @@
 
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { User, Bot, Terminal, Clock, Brain, Zap, Workflow, HelpCircle } from 'lucide-react';
+import { User, Bot, Terminal, Clock, Brain, Zap, Workflow } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { memo } from 'react';

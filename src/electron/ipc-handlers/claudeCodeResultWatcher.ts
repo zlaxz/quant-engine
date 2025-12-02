@@ -157,7 +157,7 @@ async function processResultFile(filePath: string): Promise<void> {
 
     // Insert into Supabase
     if (supabase) {
-      const { error } = await supabase.from('messages').insert({
+      const messageData = {
         session_id: result.session_id,
         role: 'assistant',
         content: messageContent,
@@ -168,7 +168,8 @@ async function processResultFile(filePath: string): Promise<void> {
           execution_time_ms: result.execution_time_ms,
           exit_code: result.exit_code
         }
-      });
+      };
+      const { error } = await supabase.from('messages').insert(messageData as any);
 
       if (error) {
         console.error('[ClaudeCodeWatcher] Error inserting message:', error);
