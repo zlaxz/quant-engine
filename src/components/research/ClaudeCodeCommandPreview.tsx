@@ -1,11 +1,10 @@
 /**
- * ClaudeCodeCommandPreview - Shows the exact command being sent to Claude Code
+ * ClaudeCodeCommandPreview - Shows what Claude Code did in plain English
  * Provides transparency into prompts, context, and files included
  */
 
-import { Terminal, FileCode, Copy, Check, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { Terminal, FileCode, Copy, Check, ChevronDown, Eye, EyeOff, CheckCircle, XCircle, Clock, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
@@ -27,10 +26,48 @@ interface ClaudeCodeCommandPreviewProps {
   className?: string;
 }
 
+/**
+ * Parse a technical task into plain English summary
+ */
+function parseTaskToPlainEnglish(task: string): string {
+  const taskLower = task.toLowerCase();
+
+  // Detect common task patterns and return friendly summary
+  if (taskLower.includes('spawn') && taskLower.includes('agent')) {
+    return "Spawned AI agents to work on subtasks";
+  }
+  if (taskLower.includes('backtest')) {
+    return "Ran a backtest on a trading strategy";
+  }
+  if (taskLower.includes('analyze') || taskLower.includes('audit')) {
+    return "Analyzed code or data";
+  }
+  if (taskLower.includes('read') && taskLower.includes('file')) {
+    return "Read and examined files";
+  }
+  if (taskLower.includes('write') || taskLower.includes('create')) {
+    return "Created or modified files";
+  }
+  if (taskLower.includes('python') || taskLower.includes('script')) {
+    return "Ran Python scripts";
+  }
+  if (taskLower.includes('test') || taskLower.includes('validate')) {
+    return "Ran tests or validation";
+  }
+  if (taskLower.includes('generate') || taskLower.includes('implement')) {
+    return "Generated new code";
+  }
+  if (taskLower.includes('search') || taskLower.includes('find')) {
+    return "Searched through codebase";
+  }
+  
+  // Default summary
+  return "Executed a technical task";
+}
+
 export function ClaudeCodeCommandPreview({ command, status = 'pending', className }: ClaudeCodeCommandPreviewProps) {
   const [copied, setCopied] = useState(false);
-  const [showFull, setShowFull] = useState(false);
-  const [showContext, setShowContext] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
 
   const copyToClipboard = async () => {
     await navigator.clipboard.writeText(command.task);
@@ -38,135 +75,117 @@ export function ClaudeCodeCommandPreview({ command, status = 'pending', classNam
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const statusColors = {
-    pending: 'border-l-yellow-500 bg-yellow-50/50 dark:bg-yellow-950/20',
-    running: 'border-l-purple-500 bg-purple-50/50 dark:bg-purple-950/20',
-    completed: 'border-l-green-500 bg-green-50/50 dark:bg-green-950/20',
-    failed: 'border-l-red-500 bg-red-50/50 dark:bg-red-950/20'
+  const statusConfig = {
+    pending: { 
+      color: 'border-l-yellow-500 bg-yellow-50/50 dark:bg-yellow-950/20',
+      label: 'Waiting',
+      icon: Clock,
+      iconColor: 'text-yellow-500'
+    },
+    running: { 
+      color: 'border-l-purple-500 bg-purple-50/50 dark:bg-purple-950/20',
+      label: 'Running',
+      icon: Loader2,
+      iconColor: 'text-purple-500'
+    },
+    completed: { 
+      color: 'border-l-green-500 bg-green-50/50 dark:bg-green-950/20',
+      label: 'Done',
+      icon: CheckCircle,
+      iconColor: 'text-green-500'
+    },
+    failed: { 
+      color: 'border-l-red-500 bg-red-50/50 dark:bg-red-950/20',
+      label: 'Failed',
+      icon: XCircle,
+      iconColor: 'text-red-500'
+    }
   };
 
-  const statusLabels = {
-    pending: 'Queued',
-    running: 'Executing',
-    completed: 'Complete',
-    failed: 'Failed'
-  };
-
-  // Truncate task for preview
-  const taskPreview = command.task.length > 150 
-    ? command.task.substring(0, 150) + '...' 
-    : command.task;
+  const config = statusConfig[status];
+  const plainEnglishSummary = parseTaskToPlainEnglish(command.task);
+  const StatusIcon = config.icon;
 
   return (
-    <Card className={cn('border-l-4 shadow-sm', statusColors[status], className)}>
-      <div className="p-3 space-y-3">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded bg-muted">
-              <Terminal className="h-4 w-4 text-muted-foreground" />
+    <Card className={cn('border-l-4 shadow-sm', config.color, className)}>
+      <div className="p-3 space-y-2">
+        {/* Header with plain English */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-2">
+            <StatusIcon className={cn(
+              'h-4 w-4 mt-0.5 flex-shrink-0',
+              config.iconColor,
+              status === 'running' && 'animate-spin'
+            )} />
+            <div className="space-y-0.5">
+              <div className="text-sm font-medium">{plainEnglishSummary}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {new Date(command.timestamp).toLocaleTimeString()} • {config.label}
+              </div>
             </div>
-            <span className="text-xs font-semibold">Claude Code Command</span>
-            <Badge 
-              variant="secondary" 
-              className={cn(
-                'text-[10px] px-1.5 h-5',
-                status === 'running' && 'animate-pulse'
-              )}
-            >
-              {statusLabels[status]}
-            </Badge>
           </div>
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
               className="h-6 w-6"
-              onClick={() => setShowFull(!showFull)}
-              title={showFull ? 'Collapse' : 'Expand'}
+              onClick={() => setShowRaw(!showRaw)}
+              title={showRaw ? 'Hide details' : 'Show details'}
             >
-              {showFull ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+              {showRaw ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
             </Button>
             <Button
               variant="ghost"
               size="icon"
               className="h-6 w-6"
               onClick={copyToClipboard}
-              title="Copy command"
+              title="Copy raw command"
             >
               {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
             </Button>
           </div>
         </div>
 
-        {/* Task/Prompt */}
-        <div className="space-y-1">
-          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-            Task Prompt
-          </div>
-          <div className="bg-background border rounded p-2 font-mono text-xs">
-            {showFull ? (
-              <pre className="whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
-                {command.task}
-              </pre>
-            ) : (
-              <span className="text-muted-foreground">{taskPreview}</span>
+        {/* Files accessed (simplified) */}
+        {command.files && command.files.length > 0 && (
+          <div className="text-[10px] text-muted-foreground">
+            📁 Accessed {command.files.length} file{command.files.length > 1 ? 's' : ''}
+            {command.files.length <= 3 && (
+              <span className="ml-1">
+                ({command.files.map(f => f.split('/').pop()).join(', ')})
+              </span>
             )}
           </div>
-        </div>
+        )}
 
-        {/* Context Files */}
-        {command.files && command.files.length > 0 && (
-          <Collapsible>
-            <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-full">
-              <FileCode className="h-3 w-3" />
-              <span>{command.files.length} context file{command.files.length > 1 ? 's' : ''}</span>
+        {/* Raw task (hidden by default) */}
+        {showRaw && (
+          <Collapsible defaultOpen>
+            <CollapsibleTrigger className="flex items-center gap-2 text-[10px] text-muted-foreground hover:text-foreground w-full">
+              <Terminal className="h-3 w-3" />
+              <span>Technical details</span>
               <ChevronDown className="h-3 w-3 ml-auto" />
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-2">
-              <div className="bg-muted/50 rounded p-2 space-y-1">
-                {command.files.map((file, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-xs">
-                    <FileCode className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                    <code className="font-mono truncate">{file}</code>
-                  </div>
-                ))}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        )}
-
-        {/* Additional Context */}
-        {command.context && (
-          <Collapsible open={showContext} onOpenChange={setShowContext}>
-            <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-full">
-              <span>Additional context included</span>
-              <ChevronDown className={cn('h-3 w-3 ml-auto transition-transform', showContext && 'rotate-180')} />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2">
               <div className="bg-muted/50 rounded p-2 max-h-32 overflow-y-auto">
-                <pre className="text-xs font-mono whitespace-pre-wrap break-words">
-                  {command.context}
+                <pre className="text-[10px] font-mono whitespace-pre-wrap break-words text-muted-foreground">
+                  {command.task}
                 </pre>
               </div>
+              {command.files && command.files.length > 0 && (
+                <div className="mt-2 bg-muted/50 rounded p-2 space-y-1">
+                  <div className="text-[10px] font-medium text-muted-foreground">Files:</div>
+                  {command.files.map((file, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-[10px]">
+                      <FileCode className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      <code className="font-mono truncate text-muted-foreground">{file}</code>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CollapsibleContent>
           </Collapsible>
         )}
-
-        {/* Metadata Footer */}
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-1 border-t">
-          <span className="font-mono">
-            {new Date(command.timestamp).toLocaleTimeString()}
-          </span>
-          {command.model && (
-            <Badge variant="outline" className="text-[10px] h-4 px-1">
-              {command.model}
-            </Badge>
-          )}
-          {command.timeout && (
-            <span>timeout: {command.timeout / 1000}s</span>
-          )}
-        </div>
       </div>
     </Card>
   );
@@ -184,7 +203,7 @@ export function ClaudeCodeHistory({ commands, className }: ClaudeCodeHistoryProp
   if (commands.length === 0) {
     return (
       <div className={cn('text-xs text-muted-foreground text-center py-4', className)}>
-        No Claude Code commands yet this session
+        No Claude Code activity yet
       </div>
     );
   }
@@ -192,7 +211,7 @@ export function ClaudeCodeHistory({ commands, className }: ClaudeCodeHistoryProp
   return (
     <div className={cn('space-y-2', className)}>
       <div className="text-xs font-semibold text-muted-foreground mb-2">
-        Claude Code Command History ({commands.length})
+        What Claude Code Did ({commands.length} task{commands.length > 1 ? 's' : ''})
       </div>
       {commands.map((cmd) => (
         <ClaudeCodeCommandPreview 
