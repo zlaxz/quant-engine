@@ -23,7 +23,7 @@ import { useChatContext } from '@/contexts/ChatContext';
 import { useResearchDisplay } from '@/contexts/ResearchDisplayContext';
 import { executeCommand, parseCommand, getCommandSuggestions, setWriteConfirmationCallback } from '@/lib/slashCommands';
 import { useWriteConfirmation } from '@/hooks/useWriteConfirmation';
-import { useMemoryReinforcement } from '@/hooks/useMemoryReinforcement';
+
 import { chatPrimary } from '@/lib/electronClient';
 import { buildChiefQuantPrompt } from '@/prompts/chiefQuantPrompt';
 import { detectIntent, type DetectedIntent } from '@/lib/intentDetector';
@@ -120,7 +120,7 @@ const ChatAreaComponent = () => {
   };
   
   const { showConfirmation, ConfirmationDialog } = useWriteConfirmation();
-  useMemoryReinforcement();
+  
 
   useEffect(() => {
     setWriteConfirmationCallback(showConfirmation);
