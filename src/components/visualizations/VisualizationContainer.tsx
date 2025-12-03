@@ -1,6 +1,6 @@
 import { useResearchDisplay } from '@/contexts/ResearchDisplayContext';
 import { cn } from '@/lib/utils';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { X, Loader2 } from 'lucide-react';
 import { RegimeTimeline } from './RegimeTimeline';

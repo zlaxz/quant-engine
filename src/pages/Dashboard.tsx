@@ -170,7 +170,7 @@ function useDashboardData() {
           regime: determineCurrentRegime(strategies),
           vix: 0,
           vix9d: 0,
-          termStructure: 'unknown',
+          termStructure: 'flat' as const,
           realizedVol: 0,
           putCallSkew: 0,
           confidence: 0,

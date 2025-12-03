@@ -5,9 +5,10 @@
 
 import { VisualizationType } from '@/types/journey';
 import { ArtifactType } from '@/types/api-contract';
+import { directiveToView, VisualizationView } from '@/contexts/VisualizationContext';
 
 export interface DisplayDirective {
-  type: 'visualization' | 'artifact' | 'stage' | 'progress';
+  type: 'visualization' | 'artifact' | 'stage' | 'progress' | 'view';
   value: string;
   params?: Record<string, string>;
 }
@@ -26,6 +27,8 @@ export interface ArtifactDirective {
  *   [DISPLAY: regime_timeline]
  *   [DISPLAY: strategy_card, id=strat_001]
  *   [DISPLAY_ARTIFACT: annotated_code, title="Strategy Implementation"]
+ *   [DISPLAY: SWARM] - switches right panel to swarm view
+ *   [DISPLAY: MISSION] - switches right panel to mission control
  */
 export function parseDisplayDirectives(message: string): DisplayDirective[] {
   const directives: DisplayDirective[] = [];
@@ -48,14 +51,33 @@ export function parseDisplayDirectives(message: string): DisplayDirective[] {
       }
     }
     
-    directives.push({
-      type: isArtifact ? 'artifact' : 'visualization',
-      value,
-      params,
-    });
+    // Check if this is a view-switching directive
+    const viewMapping = directiveToView(value);
+    if (viewMapping) {
+      directives.push({
+        type: 'view',
+        value: viewMapping,
+        params,
+      });
+    } else {
+      directives.push({
+        type: isArtifact ? 'artifact' : 'visualization',
+        value,
+        params,
+      });
+    }
   }
   
   return directives;
+}
+
+/**
+ * Extract view switch directives
+ */
+export function parseViewDirectives(message: string): VisualizationView | null {
+  const directives = parseDisplayDirectives(message);
+  const viewDirective = directives.find(d => d.type === 'view');
+  return viewDirective ? viewDirective.value as VisualizationView : null;
 }
 
 /**

@@ -13,16 +13,14 @@
  * Created: 2025-12-03
  */
 
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Shield,
-  AlertTriangle,
   CheckCircle2,
-  XCircle,
   RefreshCw,
   Activity,
   Calculator,
@@ -169,7 +167,7 @@ function SystemIntegrityComponent() {
   const [state, setState] = useState<IntegrityState>(defaultState);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [connected, setConnected] = useState<boolean | null>(null);
+  const [_connected, setConnected] = useState<boolean | null>(null);
 
   // Run all integrity checks
   const runIntegrityChecks = useCallback(async () => {
