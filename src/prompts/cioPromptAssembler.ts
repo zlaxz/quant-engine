@@ -31,7 +31,6 @@ import {
   type CIOMode
 } from './cioStateMachine';
 import { OPS_MANUAL } from './opsManual';
-import { DATA_ARCHITECTURE_CONTEXT } from './dataArchitectureContext';
 
 /**
  * Condensed tool reference (not the full verbose docs)

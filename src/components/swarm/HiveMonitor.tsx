@@ -37,8 +37,6 @@ import {
   ChevronRight,
   Loader2,
   CheckCircle,
-  AlertCircle,
-  Clock,
   Zap,
   Users,
   Star,
@@ -389,7 +387,7 @@ function AgentDetailDialog({ agent, onClose }: AgentDetailDialogProps) {
 
 export function HiveMonitor({
   jobId,
-  topic = 'Swarm Analysis',
+  topic: _topic = 'Swarm Analysis',
   onComplete,
   onClose,
   demoMode = false,
@@ -419,6 +417,7 @@ export function HiveMonitor({
         }
       };
     }
+    return undefined;
   }, [demoMode, demoPhase]);
 
   // Real data fetching (placeholder - would connect to your backend)

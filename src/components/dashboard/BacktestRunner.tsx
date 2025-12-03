@@ -12,7 +12,7 @@
  * Created: 2025-11-24
  */
 
-import React, { useState, useCallback, useEffect, memo } from 'react';
+import { useState, useCallback, useEffect, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
