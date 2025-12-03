@@ -6,12 +6,15 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { DualPurposePanel } from '@/components/visualizations/DualPurposePanel';
 import { RoadmapTracker } from '@/components/research/RoadmapTracker';
+import { MissionControl } from '@/components/research/MissionControl';
+import { StatusStripEnhanced } from '@/components/research/StatusStripEnhanced';
 import { HelperChatDialog } from '@/components/chat/HelperChatDialog';
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard';
 import { ResumeTaskDialog, type UnfinishedTask } from '@/components/research';
 import { DemoModeButton } from '@/components/visualizations/DemoModeButton';
 import { Button } from '@/components/ui/button';
-import { HelpCircle, Settings, LayoutDashboard, Command } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { HelpCircle, Settings, LayoutDashboard, Command, ListOrdered, Map } from 'lucide-react';
 import { SystemStatus } from '@/components/dashboard/SystemStatus';
 import { RegimeIndicator } from '@/components/dashboard/RegimeIndicator';
 import { useToast } from '@/hooks/use-toast';
@@ -123,6 +126,9 @@ const Index = () => {
           </div>
         </header>
 
+        {/* Enhanced Status Strip */}
+        <StatusStripEnhanced />
+
         {/* Main Content with Sidebar */}
         <div className="flex-1 flex min-h-0 w-full">
           <ChatSidebar />
@@ -132,14 +138,31 @@ const Index = () => {
               leftPanel={<ChatArea />}
               rightPanel={
                 <>
-                  {/* Top 60% - Dual Purpose Panel (Visualizations / Artifacts) */}
-                  <div className="flex-[3] min-h-0 overflow-hidden">
+                  {/* Top 50% - Dual Purpose Panel (Visualizations / Artifacts) */}
+                  <div className="flex-[2.5] min-h-0 overflow-hidden">
                     <DualPurposePanel />
                   </div>
                   
-                  {/* Bottom 40% - Roadmap Tracker */}
-                  <div className="flex-[2] min-h-0 border-t border-border p-4">
-                    <RoadmapTracker />
+                  {/* Bottom 50% - Tabbed Roadmap & Mission Control */}
+                  <div className="flex-[2.5] min-h-0 border-t border-border">
+                    <Tabs defaultValue="roadmap" className="h-full flex flex-col">
+                      <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-9 px-2">
+                        <TabsTrigger value="roadmap" className="gap-1.5 data-[state=active]:bg-muted">
+                          <Map className="h-3.5 w-3.5" />
+                          Roadmap
+                        </TabsTrigger>
+                        <TabsTrigger value="mission" className="gap-1.5 data-[state=active]:bg-muted">
+                          <ListOrdered className="h-3.5 w-3.5" />
+                          Queue
+                        </TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="roadmap" className="flex-1 overflow-auto p-4 mt-0">
+                        <RoadmapTracker />
+                      </TabsContent>
+                      <TabsContent value="mission" className="flex-1 overflow-hidden mt-0">
+                        <MissionControl className="h-full border-0 rounded-none" />
+                      </TabsContent>
+                    </Tabs>
                   </div>
                 </>
               }
