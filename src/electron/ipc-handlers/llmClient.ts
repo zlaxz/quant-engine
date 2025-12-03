@@ -739,12 +739,6 @@ Let me start with the analysis...
 
             // Send results back to model with proper formatting
             // CRITICAL: Must format as functionResponse for Gemini + preserve thought signatures
-            _event.sender.send('llm-stream', {
-              type: 'thinking',
-              content: `\n\n*Analyzing results...*\n\n`,
-              timestamp: Date.now()
-            });
-
             // CRITICAL: Preserve thought signatures for Gemini 3 thinking mode
             const thoughtSignature = candidate.thoughtSignature || null;
 
@@ -952,12 +946,6 @@ Let me start with the analysis...
         // Send tool results back to the model
         // CRITICAL: Gemini expects functionResponse format, not raw text
         // The conversation flow must be: model outputs functionCalls → we execute → send back functionResponse
-        _event.sender.send('llm-stream', {
-          type: 'thinking',
-          content: `\n\n*Analyzing results...*\n\n`,
-          timestamp: Date.now()
-        });
-
         // CRITICAL: Preserve thought signatures for Gemini 3 thinking mode
         // Gemini 3 requires thoughtSignature fields to be returned in multi-turn function calling
         const thoughtSignature = candidate.thoughtSignature || null;
