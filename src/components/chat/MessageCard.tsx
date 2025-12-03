@@ -301,6 +301,9 @@ function parseRichContent(content: string) {
   return { chart, table, metrics, code, cleanText, autoVisualizations };
 }
 
+// Base text style for terminal-like readability
+const textStyle = "tracking-wide leading-7";
+
 /**
  * Format text with basic markdown-like styling
  */
@@ -311,13 +314,13 @@ function formatText(text: string) {
   return paragraphs.map((paragraph, pIdx) => {
     // Check for headers
     if (paragraph.startsWith('# ')) {
-      return <h2 key={pIdx} className="text-lg font-bold mt-3 mb-2">{paragraph.slice(2)}</h2>;
+      return <h2 key={pIdx} className={`text-lg font-bold mt-4 mb-3 ${textStyle}`}>{paragraph.slice(2)}</h2>;
     }
     if (paragraph.startsWith('## ')) {
-      return <h3 key={pIdx} className="text-base font-semibold mt-3 mb-1.5">{paragraph.slice(3)}</h3>;
+      return <h3 key={pIdx} className={`text-base font-semibold mt-4 mb-2 ${textStyle}`}>{paragraph.slice(3)}</h3>;
     }
     if (paragraph.startsWith('### ')) {
-      return <h4 key={pIdx} className="text-sm font-semibold mt-2 mb-1">{paragraph.slice(4)}</h4>;
+      return <h4 key={pIdx} className={`text-sm font-semibold mt-3 mb-2 ${textStyle}`}>{paragraph.slice(4)}</h4>;
     }
 
     // Check for bullet lists
@@ -326,9 +329,9 @@ function formatText(text: string) {
     
     if (isBulletList && lines.some(l => l.trim())) {
       return (
-        <ul key={pIdx} className="list-disc list-inside space-y-1 my-2 ml-2">
+        <ul key={pIdx} className="list-disc list-inside space-y-2 my-3 ml-3">
           {lines.filter(l => l.trim()).map((line, lIdx) => (
-            <li key={lIdx} className="text-sm">{line.replace(/^[-•]\s*/, '')}</li>
+            <li key={lIdx} className={textStyle}>{line.replace(/^[-•]\s*/, '')}</li>
           ))}
         </ul>
       );
@@ -339,9 +342,9 @@ function formatText(text: string) {
     
     if (isNumberedList && lines.some(l => l.trim())) {
       return (
-        <ol key={pIdx} className="list-decimal list-inside space-y-1 my-2 ml-2">
+        <ol key={pIdx} className="list-decimal list-inside space-y-2 my-3 ml-3">
           {lines.filter(l => l.trim()).map((line, lIdx) => (
-            <li key={lIdx} className="text-sm">{line.replace(/^\d+[.)]\s*/, '')}</li>
+            <li key={lIdx} className={textStyle}>{line.replace(/^\d+[.)]\s*/, '')}</li>
           ))}
         </ol>
       );
@@ -350,11 +353,11 @@ function formatText(text: string) {
     // Regular paragraph with inline code support
     const parts = paragraph.split(/(`[^`]+`)/g);
     return (
-      <p key={pIdx} className="text-sm leading-relaxed mb-2">
+      <p key={pIdx} className={`mb-3 ${textStyle}`}>
         {parts.map((part, partIdx) => {
           if (part.startsWith('`') && part.endsWith('`')) {
             return (
-              <code key={partIdx} className="px-1 py-0.5 bg-muted rounded text-xs font-mono">
+              <code key={partIdx} className="px-1.5 py-0.5 bg-muted rounded text-[13px] font-mono tracking-normal">
                 {part.slice(1, -1)}
               </code>
             );
