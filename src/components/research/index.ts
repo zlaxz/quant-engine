@@ -14,6 +14,8 @@ export { ConversationTimeline } from './ConversationTimeline';
 export { OperationCard } from './OperationCard';
 export { RoadmapTracker } from './RoadmapTracker';
 export { StatusStrip } from './StatusStrip';
+export { StatusStripEnhanced } from './StatusStripEnhanced';
+export { MissionControl } from './MissionControl';
 export { FindingsPanel } from './FindingsPanel';
 export { LearningCenter } from './LearningCenter';
 export { ClaudeCodeErrorCard, createClaudeCodeError } from './ClaudeCodeErrorCard';
