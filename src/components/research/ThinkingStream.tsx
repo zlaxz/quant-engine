@@ -31,7 +31,7 @@ export function ThinkingStream({ content, isActive, className }: ThinkingStreamP
         )}
       </div>
 
-      <ScrollArea className="max-h-48 pr-4">
+      <ScrollArea className="max-h-96 pr-4">
         <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
           {content.split('\n').filter(line => line.trim()).map((line, idx) => (
             <p key={idx} className="opacity-90">
