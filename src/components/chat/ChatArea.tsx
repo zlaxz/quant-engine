@@ -755,7 +755,7 @@ const ChatAreaComponent = () => {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="border-t border-border p-4 pt-6 min-w-0 mt-auto">
+      <div className="border-t border-border px-3 pt-3 pb-1 min-w-0 mt-auto">
         {/* Intent Suggestion */}
         {intentSuggestion && !inputValue.startsWith('/') && (
           <div className="mb-2 flex items-center gap-2 p-2 bg-primary/10 rounded border border-primary/20">
