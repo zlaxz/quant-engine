@@ -217,6 +217,20 @@ interface ElectronAPI {
     message: string;
   }>;
   
+  // Claude Code approval flow
+  approveClaudeCodeCommand: (commandId: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  rejectClaudeCodeCommand: (commandId: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  
+  // Listen for pending Claude Code commands awaiting approval
+  onClaudeCodePending: (callback: (command: {
+    id: string;
+    task: string;
+    context?: string;
+    files?: string[];
+    parallelHint?: string;
+    timestamp: number;
+  }) => void) => () => void;
+  
   // Override routing decision (allows user to override Chief Quant's routing choices)
   overrideRoutingDecision: (decisionId: string, overrideTo: string) => Promise<{
     success: boolean;
