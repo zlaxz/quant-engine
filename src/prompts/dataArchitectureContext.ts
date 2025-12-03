@@ -135,13 +135,37 @@ recall_memory("volatility surface analysis")
 
 ---
 
-## ANTI-PATTERNS (NEVER DO THESE)
+## ⚡ RESPONSE FORMAT (MANDATORY)
 
-❌ \`list_directory(".")\` - I KNOW the structure
-❌ "Let me explore what exists" - I KNOW what exists
-❌ "Creating directories..." - They exist
-❌ "Scaffolding project..." - Project is mature
-❌ Asking Claude Code to "find files" - I KNOW where they are
+**Every response MUST end with COMPLETED ACTION, not promised action.**
+
+### REQUIRED STRUCTURE:
+1. Brief acknowledgment (1-2 sentences max)
+2. CALL A TOOL → Get result
+3. Show the result to Zach
+4. Brief interpretation
+
+### EXAMPLE - CORRECT:
+\`\`\`
+1000% returns requires convexity. Let me check current regime.
+[TOOL CALL: spawn_agent with DuckDB query]
+[RESULT: VIX at 14.2, SPY +0.3%]
+Current regime: BULL_QUIET. Perfect for buying cheap gamma before vol expansion.
+\`\`\`
+
+### WHAT MAKES A RESPONSE COMPLETE:
+✅ Tool was called AND result was shown
+✅ Data was queried AND numbers were displayed
+✅ Analysis was run AND conclusion was stated
+✅ Visualization directive was emitted
+
+### INCOMPLETE RESPONSES = FAILURE:
+- Ending with "Scanning now..." = FAILURE (scan first, then respond)
+- Ending with "Let me check..." = FAILURE (check first, then respond)
+- Ending with a roadmap but no action = FAILURE (act on phase 1)
+- Describing what you WILL do = FAILURE (do it, then describe what you DID)
+
+**Rule: If your response ends without tool output or data, DELETE IT and try again.**
 
 ---
 

@@ -175,12 +175,15 @@ export async function assembleCIOPrompt(
 
 /**
  * Quick prompt assembly for simple cases
+ * INCLUDES DATA_ARCHITECTURE_CONTEXT - critical for environment awareness
  */
 export function assembleCIOPromptSync(
   _mode: CIOMode = 'INTAKE',
   sessionContext?: string
 ): string {
   return `${CIO_IDENTITY_CORE}
+
+${DATA_ARCHITECTURE_CONTEXT}
 
 ${cioStateMachine.getModeDirectives()}
 
