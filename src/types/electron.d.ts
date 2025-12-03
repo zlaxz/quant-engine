@@ -1,6 +1,6 @@
 // Global type declarations for Electron API
 // This ensures all components can see the window.electron types
-// Updated: 2025-11-22 with new chat API signature and API key support
+// Updated: 2025-12-03 with ThetaData Terminal support
 
 interface ElectronAPI {
   // File operations
@@ -267,6 +267,19 @@ interface ElectronAPI {
   startPythonServer: () => Promise<{ success: boolean; pid?: number; error?: string }>;
   stopPythonServer: () => Promise<{ success: boolean; error?: string }>;
   restartPythonServer: () => Promise<{ success: boolean; pid?: number; error?: string }>;
+
+  // ThetaData Terminal Management
+  getThetaTerminalStatus: () => Promise<{
+    status: 'NOT_INSTALLED' | 'STOPPED' | 'STARTING' | 'RUNNING' | 'ERROR';
+    httpPort: number;
+    wsPort: number;
+    v3Port: number;
+    jarExists: boolean;
+    credentialsConfigured: boolean;
+    responding: boolean;
+  }>;
+  startThetaTerminal: () => Promise<boolean>;
+  stopThetaTerminal: () => Promise<void>;
 
   // Daemon log streaming
   onDaemonLog: (callback: (log: string) => void) => () => void;
