@@ -22,8 +22,10 @@ export { EvidenceChain, parseEvidenceTrail } from './EvidenceChain';
 export { WorkingMemoryCheckpoint } from './WorkingMemoryCheckpoint';
 export { ResumeTaskDialog } from './ResumeTaskDialog';
 export { ContextualEducationOverlay } from './ContextualEducationOverlay';
+export { ClaudeCodeCommandPreview, ClaudeCodeHistory } from './ClaudeCodeCommandPreview';
 
 export type { AgentSpawn } from './AgentSpawnMonitor';
+export type { ClaudeCodeCommand } from './ClaudeCodeCommandPreview';
 export type { ToolCall } from './ToolCallTree';
 export type { ErrorDetails } from './ErrorCard';
 export type { Memory } from './MemoryRecallToast';
