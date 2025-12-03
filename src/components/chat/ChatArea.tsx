@@ -47,6 +47,7 @@ import {
   ClaudeCodeResultCard,
   ContextualEducationOverlay,
   ClaudeCodePendingPreview,
+  ThinkingStream,
   type ErrorDetails,
   type Memory,
   type ClaudeCodeError,
@@ -73,6 +74,7 @@ const ChatAreaComponent = () => {
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [intentSuggestion, setIntentSuggestion] = useState<DetectedIntent | null>(null);
   const [streamingContent, setStreamingContent] = useState('');
+  const [thinkingContent, setThinkingContent] = useState('');
   const [activeSwarmJob, setActiveSwarmJob] = useState<{
     jobId: string;
     objective: string;
@@ -156,12 +158,18 @@ const ChatAreaComponent = () => {
     if (!window.electron?.onLLMStream) return;
 
     const unsubscribeStream = window.electron.onLLMStream((data) => {
-      if (data.type === 'chunk' && data.content) {
+      if (data.type === 'thinking' && data.content) {
+        setThinkingContent(prev => prev + data.content);
+      } else if (data.type === 'chunk' && data.content) {
         setStreamingContent(prev => prev + data.content);
       } else if (data.type === 'done') {
-        setTimeout(() => setStreamingContent(''), 100);
+        setTimeout(() => {
+          setStreamingContent('');
+          setThinkingContent('');
+        }, 100);
       } else if (data.type === 'cancelled') {
         setIsLoading(false);
+        setThinkingContent('');
       }
     });
 
@@ -359,6 +367,7 @@ const ChatAreaComponent = () => {
     setInputValue('');
     setCommandSuggestions([]);
     setStreamingContent('');
+    setThinkingContent('');
     setIsLoading(true);
 
     try {
@@ -707,6 +716,15 @@ const ChatAreaComponent = () => {
                   <ErrorCard
                     error={currentError}
                     onRetry={() => setCurrentError(null)}
+                    className="mb-3"
+                  />
+                )}
+
+                {/* Thinking Stream */}
+                {(thinkingContent || isLoading) && (
+                  <ThinkingStream
+                    content={thinkingContent}
+                    isActive={isLoading && !streamingContent}
                     className="mb-3"
                   />
                 )}
