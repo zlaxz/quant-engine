@@ -195,6 +195,52 @@ class SwarmDispatchType(Enum):
     RED_TEAM = 'red_team'       # Audit strategies before promotion
 
 
+class FailureType(Enum):
+    """
+    Standardized Taxonomy of Failure - The "Defense" Ontology.
+    Forces classification of every failure into a specific error code
+    for statistical analysis and actionable intelligence.
+
+    This transforms text logs into queryable data:
+    "Show me the distribution of failure types for Trend Strategies"
+    """
+    OVERFITTING = 'overfitting'             # Great backtest, failed white noise test
+    REGIME_MISMATCH = 'regime_mismatch'     # Bull strategy in Bear market (or vice versa)
+    FEE_EROSION = 'fee_erosion'             # Edge exists but eaten by commissions/slippage
+    LIQUIDITY_DRAG = 'liquidity_drag'       # Spread > Edge, can't execute profitably
+    LOOKAHEAD_BIAS = 'lookahead_bias'       # Code used future data (technical flaw)
+    NOISE_STOPS = 'noise_stops'             # Stop loss too tight, stopped out on noise
+    EXECUTION_LAG = 'execution_lag'         # Signal too slow for price action
+    CORRELATION_BREAK = 'correlation_break' # Assumed relationship broke down
+    TAIL_RISK = 'tail_risk'                 # Black swan event devastated position
+    PARAMETER_FRAGILE = 'parameter_fragile' # Works only with exact parameter values
+    UNKNOWN = 'unknown'                     # Swarm cannot determine cause
+
+    @classmethod
+    def from_string(cls, value: str) -> 'FailureType':
+        """Parse failure type from string, defaulting to UNKNOWN."""
+        try:
+            return cls(value.lower().strip())
+        except (ValueError, AttributeError):
+            return cls.UNKNOWN
+
+
+# Failure Type descriptions for prompt injection
+FAILURE_TYPE_DESCRIPTIONS = {
+    FailureType.OVERFITTING: "Strategy shows profit on historical data but fails white noise/randomized data test - curve-fitted to past, won't generalize",
+    FailureType.REGIME_MISMATCH: "Strategy logic contradicts current market regime (e.g., trend-following in choppy market, mean-reversion in trending market)",
+    FailureType.FEE_EROSION: "Strategy has a small edge but transaction costs (commissions, slippage) exceed the expected profit per trade",
+    FailureType.LIQUIDITY_DRAG: "Bid-ask spread is wider than the strategy's edge - can't execute without losing money",
+    FailureType.LOOKAHEAD_BIAS: "Code logic uses information that wouldn't be available at trade time (future prices, end-of-day values at market open)",
+    FailureType.NOISE_STOPS: "Stop loss is too tight relative to normal price noise - gets stopped out repeatedly on random fluctuations",
+    FailureType.EXECUTION_LAG: "By the time the signal generates and order executes, the opportunity has passed - too slow for the market's speed",
+    FailureType.CORRELATION_BREAK: "Strategy relied on a statistical relationship (e.g., SPY vs QQQ correlation) that broke down",
+    FailureType.TAIL_RISK: "Strategy profitable in normal conditions but suffers catastrophic loss in extreme events (flash crash, gap down)",
+    FailureType.PARAMETER_FRAGILE: "Strategy only works with specific parameter values - small changes destroy performance (sign of overfitting)",
+    FailureType.UNKNOWN: "Cannot determine specific failure mode from available information"
+}
+
+
 @dataclass
 class Mission:
     """Active mission target from Supabase."""
@@ -1958,8 +2004,14 @@ Provide your assessment as a {persona_key} expert. Score 0-100 and list critical
 
             strategy = result.data[0]
 
-            # Build analyst prompt
-            analyst_prompt = f"""Analyze this failed trading strategy and identify the root cause.
+            # Build failure type options for prompt
+            failure_type_options = "\n".join([
+                f"- {ft.value}: {FAILURE_TYPE_DESCRIPTIONS[ft]}"
+                for ft in FailureType
+            ])
+
+            # Build analyst prompt with MANDATORY failure classification
+            analyst_prompt = f"""Analyze this failed trading strategy and classify the failure.
 
 STRATEGY: {strategy['name']}
 FITNESS SCORE: {fitness_score:.3f}
@@ -1976,11 +2028,18 @@ METRICS:
 CODE:
 {strategy.get('code_content', 'No code available')[:2000]}
 
-TASK: Return a JSON object with:
+=== MANDATORY CLASSIFICATION ===
+You MUST classify this failure into EXACTLY ONE of these categories:
+
+{failure_type_options}
+
+=== TASK ===
+Return a JSON object with:
 {{
+    "failure_type": "EXACTLY one of: overfitting, regime_mismatch, fee_erosion, liquidity_drag, lookahead_bias, noise_stops, execution_lag, correlation_break, tail_risk, parameter_fragile, unknown",
     "cause": "1-2 sentence summary of why this strategy failed",
-    "mechanism": "Technical explanation of the failure mechanism (e.g., 'Stop loss of 0.3% is too tight for intraday volatility, causing 80% of trades to stop out on noise')",
-    "constraint": "A rule to prevent this failure in future strategies (e.g., 'Stop losses must be >= 2x average true range')"
+    "mechanism": "Technical explanation linking to the failure_type",
+    "constraint": "A rule to prevent this failure in future strategies"
 }}
 
 Return ONLY the JSON object, no other text."""
@@ -2012,12 +2071,17 @@ Return ONLY the JSON object, no other text."""
             except json.JSONDecodeError:
                 logger.warning(f"[Gatekeeper] Could not parse analysis JSON: {content[:200]}")
                 analysis = {
+                    'failure_type': 'unknown',
                     'cause': failure_reason,
                     'mechanism': content[:500],
                     'constraint': 'Unable to extract constraint'
                 }
 
-            # Store in causal_memories
+            # Parse and validate failure_type
+            raw_failure_type = analysis.get('failure_type', 'unknown')
+            failure_type = FailureType.from_string(raw_failure_type)
+
+            # Store in causal_memories with standardized failure_type
             # Get workspace_id (use default if not set)
             workspace_id = os.environ.get('WORKSPACE_ID', '00000000-0000-0000-0000-000000000001')
 
@@ -2025,10 +2089,12 @@ Return ONLY the JSON object, no other text."""
                 'workspace_id': workspace_id,
                 'event_description': f"Strategy '{strategy['name']}' failed: {analysis.get('cause', failure_reason)}",
                 'mechanism': analysis.get('mechanism', ''),
+                'failure_type': failure_type.value,  # Standardized failure classification
                 'causal_graph': {
                     'strategy_id': strategy_id,
                     'strategy_name': strategy['name'],
-                    'failure_type': failure_reason,
+                    'failure_type_raw': failure_reason,  # Original reason
+                    'failure_type_classified': failure_type.value,  # Standardized
                     'fitness_at_failure': fitness_score,
                     'constraint': analysis.get('constraint', '')
                 },
@@ -2043,12 +2109,14 @@ Return ONLY the JSON object, no other text."""
             insert_result = self.supabase.table('causal_memories').insert(causal_memory).execute()
 
             if insert_result.data:
-                logger.info(f"✅ [Gatekeeper] Post-mortem saved: {analysis.get('cause', 'Unknown cause')[:50]}...")
-                logger.info(f"   Mechanism: {analysis.get('mechanism', '')[:80]}...")
-                logger.info(f"   Constraint: {analysis.get('constraint', '')[:80]}...")
+                logger.info(f"✅ [Gatekeeper] Post-mortem saved [{failure_type.value.upper()}]")
+                logger.info(f"   Cause: {analysis.get('cause', 'Unknown cause')[:60]}...")
+                logger.info(f"   Mechanism: {analysis.get('mechanism', '')[:60]}...")
+                logger.info(f"   Constraint: {analysis.get('constraint', '')[:60]}...")
 
             return {
                 'success': True,
+                'failure_type': failure_type.value,
                 'cause': analysis.get('cause', ''),
                 'mechanism': analysis.get('mechanism', ''),
                 'constraint': analysis.get('constraint', ''),
