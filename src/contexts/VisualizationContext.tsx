@@ -11,7 +11,8 @@ export type VisualizationView =
   | 'swarm'
   | 'graduation'
   | 'backtest'
-  | 'integrity';
+  | 'integrity'
+  | 'insight';
 
 interface VisualizationContextType {
   currentView: VisualizationView;
@@ -69,6 +70,10 @@ export function directiveToView(directive: string): VisualizationView | null {
     case 'INTEGRITY':
     case 'SYSTEM_INTEGRITY':
       return 'integrity';
+    case 'INSIGHT':
+    case 'CIO_INSIGHT':
+    case 'TOOLS':
+      return 'insight';
     case 'DEFAULT':
     case 'FINDINGS':
       return 'default';

@@ -16,10 +16,11 @@ import { GraduationTracker } from '@/components/dashboard/GraduationTracker';
 import { BacktestRunner } from '@/components/dashboard/BacktestRunner';
 import { SystemIntegrity } from '@/components/dashboard/SystemIntegrity';
 import { FindingsPanel } from '@/components/research/FindingsPanel';
+import { CIOInsightPanel } from '@/components/insight';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Target, Bug, TrendingUp, Play, Shield, Star, ExternalLink } from 'lucide-react';
+import { Target, Bug, TrendingUp, Play, Shield, Star, ExternalLink, Eye } from 'lucide-react';
 
 // Tab configuration for pop-out
 const TAB_CONFIG: Record<VisualizationView, { id: string; title: string; icon: typeof Star }> = {
@@ -29,6 +30,7 @@ const TAB_CONFIG: Record<VisualizationView, { id: string; title: string; icon: t
   graduation: { id: 'graduation-pipeline', title: 'Graduation Pipeline', icon: TrendingUp },
   backtest: { id: 'backtest-runner', title: 'Backtest Runner', icon: Play },
   integrity: { id: 'system-integrity', title: 'System Integrity', icon: Shield },
+  insight: { id: 'cio-insight', title: 'CIO Insight', icon: Eye },
 };
 
 export const DualPurposePanel = () => {
@@ -106,7 +108,11 @@ export const DualPurposePanel = () => {
         className="flex-1 flex flex-col min-h-0"
       >
         <div className="flex items-center gap-1 mx-2 mt-2">
-          <TabsList className="grid flex-1 grid-cols-6 h-9 shrink-0">
+          <TabsList className="grid flex-1 grid-cols-7 h-9 shrink-0">
+            <TabsTrigger value="insight" className="text-xs gap-1">
+              <Eye className="h-3 w-3" />
+              <span className="hidden sm:inline">Insight</span>
+            </TabsTrigger>
             <TabsTrigger value="default" className="text-xs gap-1">
               <Star className="h-3 w-3" />
               <span className="hidden sm:inline">Findings</span>
@@ -146,6 +152,10 @@ export const DualPurposePanel = () => {
         </div>
 
         <div className="flex-1 overflow-auto p-2 min-h-0">
+          <TabsContent value="insight" className="h-full mt-0 data-[state=active]:flex data-[state=active]:flex-col">
+            <CIOInsightPanel />
+          </TabsContent>
+
           <TabsContent value="default" className="h-full mt-0 data-[state=active]:flex data-[state=active]:flex-col">
             <FindingsPanel />
           </TabsContent>
