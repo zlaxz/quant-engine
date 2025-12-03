@@ -11,7 +11,6 @@ import { StatusStripEnhanced } from '@/components/research/StatusStripEnhanced';
 import { HelperChatDialog } from '@/components/chat/HelperChatDialog';
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard';
 import { ResumeTaskDialog, type UnfinishedTask } from '@/components/research';
-import { DemoModeButton } from '@/components/visualizations/DemoModeButton';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
@@ -78,7 +77,6 @@ const Index = () => {
 
           {/* Center section - status indicators, hidden on small screens */}
           <div className="hidden md:flex items-center gap-2 flex-1 justify-center min-w-0">
-            <DemoModeButton />
             <RegimeIndicator />
             <SystemStatus />
           </div>
