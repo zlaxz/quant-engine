@@ -72,9 +72,9 @@ function getModelDisplayConfig(model?: string) {
         icon: Brain,
         role: 'CIO',
         model: 'Gemini',
-        badgeColor: 'bg-emerald-500 text-white',
-        borderColor: 'border-l-emerald-500',
-        bgColor: 'bg-emerald-50/50 dark:bg-emerald-950/20',
+        badgeColor: 'bg-primary text-primary-foreground',
+        borderColor: 'border-l-primary',
+        bgColor: 'bg-card',
       };
     case 'claude':
       return {
@@ -83,7 +83,7 @@ function getModelDisplayConfig(model?: string) {
         model: 'Claude',
         badgeColor: 'bg-orange-500 text-white',
         borderColor: 'border-l-orange-500',
-        bgColor: 'bg-orange-50/50 dark:bg-orange-950/20',
+        bgColor: 'bg-card',
       };
     case 'claude-code':
       return {
@@ -92,7 +92,7 @@ function getModelDisplayConfig(model?: string) {
         model: 'Claude Code',
         badgeColor: 'bg-amber-600 text-white',
         borderColor: 'border-l-amber-600',
-        bgColor: 'bg-amber-50/50 dark:bg-amber-950/20',
+        bgColor: 'bg-card',
       };
     case 'deepseek':
       return {
@@ -101,7 +101,7 @@ function getModelDisplayConfig(model?: string) {
         model: 'DeepSeek',
         badgeColor: 'bg-cyan-500 text-white',
         borderColor: 'border-l-cyan-500',
-        bgColor: 'bg-cyan-50/50 dark:bg-cyan-950/20',
+        bgColor: 'bg-card',
       };
     default:
       return null;
@@ -115,33 +115,33 @@ function getRoleConfig(role: string) {
       return {
         icon: User,
         label: 'You',
-        borderColor: 'border-l-blue-500',
-        bgColor: 'bg-blue-50/50 dark:bg-blue-950/20',
-        badgeColor: 'bg-blue-500 text-white',
+        borderColor: 'border-l-muted-foreground',
+        bgColor: 'bg-muted/30',
+        badgeColor: 'bg-muted text-foreground',
       };
     case 'assistant':
       return {
         icon: Bot,
         label: 'Assistant',
-        borderColor: 'border-l-purple-500',
-        bgColor: 'bg-purple-50/50 dark:bg-purple-950/20',
-        badgeColor: 'bg-purple-500 text-white',
+        borderColor: 'border-l-primary',
+        bgColor: 'bg-card',
+        badgeColor: 'bg-primary text-primary-foreground',
       };
     case 'system':
       return {
         icon: Terminal,
         label: 'System',
-        borderColor: 'border-l-gray-500',
-        bgColor: 'bg-gray-50/50 dark:bg-gray-950/20',
-        badgeColor: 'bg-gray-500 text-white',
+        borderColor: 'border-l-muted-foreground',
+        bgColor: 'bg-muted/20',
+        badgeColor: 'bg-muted text-muted-foreground',
       };
     default:
       return {
         icon: Bot,
         label: 'Unknown',
-        borderColor: 'border-l-gray-500',
-        bgColor: 'bg-gray-50/50 dark:bg-gray-950/20',
-        badgeColor: 'bg-gray-500 text-white',
+        borderColor: 'border-l-muted-foreground',
+        bgColor: 'bg-card',
+        badgeColor: 'bg-muted text-muted-foreground',
       };
   }
 }
