@@ -90,7 +90,7 @@ export function ChatSidebar() {
       className="border-r border-border bg-card !top-[calc(52px+32px)] !h-[calc(100svh-52px-32px)]"
       style={{
         '--sidebar-width': '280px',
-        '--sidebar-width-icon': '48px',
+        '--sidebar-width-icon': '0px',
       } as React.CSSProperties}
     >
       <SidebarHeader className="border-b border-border p-3 bg-muted/50 shrink-0">
