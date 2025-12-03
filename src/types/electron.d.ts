@@ -403,6 +403,12 @@ interface ElectronAPI {
   popoutList: () => Promise<string[]>;
   popoutFocus: (id: string) => Promise<{ success: boolean; error?: string }>;
   popoutBroadcast: (type: string, payload: unknown) => Promise<{ success: boolean; count: number }>;
+
+  // Popout window event listeners (for receiving broadcasts in popout windows)
+  onPopoutBroadcast: (callback: (data: { type: string; payload: unknown }) => void) => () => void;
+  onPopoutData: (callback: (data: { id: string; visualizationType: string; data: unknown; title: string }) => void) => () => void;
+  onPopoutDataUpdate: (callback: (data: { id: string; data: unknown }) => void) => () => void;
+  onPopoutClosed: (callback: (data: { id: string }) => void) => () => void;
 }
 
 declare global {

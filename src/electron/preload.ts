@@ -258,6 +258,34 @@ contextBridge.exposeInMainWorld('electron', {
   popoutFocus: (id: string) => ipcRenderer.invoke('popout:focus', id),
   popoutBroadcast: (type: string, payload: unknown) =>
     ipcRenderer.invoke('popout:broadcast', { type, payload }),
+
+  // Listen for popout broadcasts (for syncing state between windows)
+  onPopoutBroadcast: (callback: (data: { type: string; payload: unknown }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('popout:broadcast', handler);
+    return () => ipcRenderer.removeListener('popout:broadcast', handler);
+  },
+
+  // Listen for initial popout data
+  onPopoutData: (callback: (data: { id: string; visualizationType: string; data: unknown; title: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('popout:data', handler);
+    return () => ipcRenderer.removeListener('popout:data', handler);
+  },
+
+  // Listen for popout data updates
+  onPopoutDataUpdate: (callback: (data: { id: string; data: unknown }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('popout:data-update', handler);
+    return () => ipcRenderer.removeListener('popout:data-update', handler);
+  },
+
+  // Listen for popout closed events
+  onPopoutClosed: (callback: (data: { id: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('popout:closed', handler);
+    return () => ipcRenderer.removeListener('popout:closed', handler);
+  },
 });
 
 // The ElectronAPI type is defined in src/types/electron.d.ts as a global type

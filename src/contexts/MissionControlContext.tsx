@@ -50,14 +50,28 @@ interface MissionControlContextValue {
 
 const MissionControlContext = createContext<MissionControlContextValue | null>(null);
 
-export function MissionControlProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<MissionControlState>({
-    pendingApprovals: [],
-    operationQueue: [],
-    currentOperation: null,
-    completedOperations: [],
-    isExpanded: false,
-  });
+interface MissionControlProviderProps {
+  children: ReactNode;
+  initialState?: MissionControlState | null;
+}
+
+const defaultState: MissionControlState = {
+  pendingApprovals: [],
+  operationQueue: [],
+  currentOperation: null,
+  completedOperations: [],
+  isExpanded: false,
+};
+
+export function MissionControlProvider({ children, initialState }: MissionControlProviderProps) {
+  const [state, setState] = useState<MissionControlState>(initialState || defaultState);
+
+  // Sync with initial state when it changes (for popout windows)
+  useEffect(() => {
+    if (initialState) {
+      setState(initialState);
+    }
+  }, [initialState]);
 
   // Listen for IPC events from Electron (pending commands from Claude Code)
   useEffect(() => {
@@ -73,6 +87,94 @@ export function MissionControlProvider({ children }: { children: ReactNode }) {
         ...prev,
         pendingApprovals: [...prev.pendingApprovals, typedCommand],
       }));
+    });
+
+    return cleanup;
+  }, []);
+
+  // Listen for tool execution events to track operations
+  useEffect(() => {
+    if (!window.electron?.onToolExecutionEvent) return;
+
+    const cleanup = window.electron.onToolExecutionEvent((event) => {
+      if (event.type === 'tool-start') {
+        // Add as running operation
+        const operation: ScheduledOperation = {
+          id: `tool-${event.timestamp}`,
+          type: mapToolToOperationType(event.tool),
+          title: formatToolTitle(event.tool),
+          description: event.whyThis || formatToolDescription(event.tool, event.args),
+          priority: 'normal',
+          status: 'running',
+          scheduledAt: event.timestamp,
+          startedAt: event.timestamp,
+          details: {
+            files: event.args?.file ? [event.args.file] : event.args?.files,
+            model: event.args?.model,
+          },
+        };
+        
+        setState(prev => ({
+          ...prev,
+          currentOperation: operation,
+        }));
+      } else if (event.type === 'tool-complete' || event.type === 'tool-error') {
+        setState(prev => {
+          if (!prev.currentOperation) return prev;
+          
+          const completedOp: ScheduledOperation = {
+            ...prev.currentOperation,
+            status: event.type === 'tool-complete' ? 'completed' : 'failed',
+            completedAt: event.timestamp,
+          };
+          
+          return {
+            ...prev,
+            currentOperation: null,
+            completedOperations: [completedOp, ...prev.completedOperations].slice(0, 50),
+          };
+        });
+      }
+    });
+
+    return cleanup;
+  }, []);
+
+  // Listen for Claude Code events
+  useEffect(() => {
+    if (!window.electron?.onClaudeCodeEvent) return;
+
+    const cleanup = window.electron.onClaudeCodeEvent((event) => {
+      if (event.type === 'progress') {
+        const progressData = event.data as { percent?: number; phase?: string };
+        setState(prev => {
+          if (!prev.currentOperation) return prev;
+          return {
+            ...prev,
+            currentOperation: {
+              ...prev.currentOperation,
+              progress: progressData.percent,
+              description: progressData.phase || prev.currentOperation.description,
+            },
+          };
+        });
+      } else if (event.type === 'complete' || event.type === 'error' || event.type === 'cancelled') {
+        setState(prev => {
+          if (!prev.currentOperation) return prev;
+          
+          const completedOp: ScheduledOperation = {
+            ...prev.currentOperation,
+            status: event.type === 'complete' ? 'completed' : event.type === 'cancelled' ? 'cancelled' : 'failed',
+            completedAt: Date.now(),
+          };
+          
+          return {
+            ...prev,
+            currentOperation: null,
+            completedOperations: [completedOp, ...prev.completedOperations].slice(0, 50),
+          };
+        });
+      }
     });
 
     return cleanup;
@@ -211,4 +313,33 @@ export function useMissionControl() {
     throw new Error('useMissionControl must be used within MissionControlProvider');
   }
   return context;
+}
+
+// Helper functions for mapping tool events to operations
+function mapToolToOperationType(tool: string): ScheduledOperation['type'] {
+  if (tool.includes('backtest') || tool.includes('strategy')) return 'backtest';
+  if (tool.includes('python') || tool.includes('script')) return 'python';
+  if (tool.includes('file') || tool.includes('read') || tool.includes('write')) return 'file_op';
+  if (tool.includes('scan') || tool.includes('search')) return 'scan';
+  if (tool.includes('llm') || tool.includes('chat')) return 'llm_call';
+  return 'analysis';
+}
+
+function formatToolTitle(tool: string): string {
+  return tool
+    .replace(/_/g, ' ')
+    .replace(/-/g, ' ')
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function formatToolDescription(tool: string, args: Record<string, unknown>): string {
+  const file = args?.file || args?.path;
+  if (file) return `Operating on ${file}`;
+  
+  const query = args?.query;
+  if (query) return `Searching: ${query}`;
+  
+  return `Executing ${tool}`;
 }

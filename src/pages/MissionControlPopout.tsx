@@ -1,14 +1,16 @@
 /**
  * Mission Control Popout Window
  * Standalone window for multi-monitor command center setup
+ * Syncs state from main window via IPC broadcasts
  */
 
 import { useEffect, useState } from 'react';
-import { MissionControlProvider } from '@/contexts/MissionControlContext';
+import { MissionControlProvider, MissionControlState } from '@/contexts/MissionControlContext';
 import { MissionControl } from '@/components/research/MissionControl';
 
 export default function MissionControlPopout() {
   const [isReady, setIsReady] = useState(false);
+  const [initialState, setInitialState] = useState<MissionControlState | null>(null);
 
   useEffect(() => {
     // Wait for IPC to be ready
@@ -20,6 +22,32 @@ export default function MissionControlPopout() {
       }
     };
     checkReady();
+  }, []);
+
+  // Listen for initial data from main window
+  useEffect(() => {
+    if (!window.electron?.onPopoutData) return;
+
+    const cleanup = window.electron.onPopoutData((data) => {
+      if (data.visualizationType === 'mission-control' && data.data) {
+        setInitialState(data.data as MissionControlState);
+      }
+    });
+
+    return cleanup;
+  }, []);
+
+  // Listen for state broadcasts from main window
+  useEffect(() => {
+    if (!window.electron?.onPopoutBroadcast) return;
+
+    const cleanup = window.electron.onPopoutBroadcast((data) => {
+      if (data.type === 'mission-control-update' && data.payload) {
+        setInitialState(data.payload as MissionControlState);
+      }
+    });
+
+    return cleanup;
   }, []);
 
   if (!isReady) {
@@ -34,7 +62,7 @@ export default function MissionControlPopout() {
   }
 
   return (
-    <MissionControlProvider>
+    <MissionControlProvider initialState={initialState}>
       <div className="h-screen bg-background text-foreground p-4">
         <MissionControl isPopout={true} className="h-full" />
       </div>
