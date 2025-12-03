@@ -601,7 +601,7 @@ const ChatAreaComponent = () => {
       )}
 
       {/* Messages */}
-      <ScrollArea className="flex-1 px-4 overflow-y-auto" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 min-h-0 px-4 overflow-y-auto" ref={scrollAreaRef}>
         {!selectedSessionId ? (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <p>Select or create a chat session to get started</p>
@@ -755,7 +755,7 @@ const ChatAreaComponent = () => {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="border-t border-border px-3 pt-3 pb-0 min-w-0 mt-auto">
+      <div className="border-t border-border px-3 pt-2 pb-1 min-w-0 shrink-0">
         {/* Intent Suggestion */}
         {intentSuggestion && !inputValue.startsWith('/') && (
           <div className="mb-2 flex items-center gap-2 p-2 bg-primary/10 rounded border border-primary/20">
@@ -869,7 +869,7 @@ const ChatAreaComponent = () => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-4 mt-1.5 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-4 mt-1 text-[11px] text-muted-foreground">
           <span>↵ send</span>
           <span>⇧↵ newline</span>
           <span>esc cancel</span>
