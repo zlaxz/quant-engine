@@ -12,7 +12,7 @@ export function ChatSidebar() {
       className="border-r border-border bg-card"
       style={{
         '--sidebar-width': '260px',
-        '--sidebar-width-icon': '0px',
+        '--sidebar-width-icon': '48px',
       } as React.CSSProperties}
     >
       <SidebarContent>
