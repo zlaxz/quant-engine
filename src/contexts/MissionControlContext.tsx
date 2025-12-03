@@ -61,19 +61,21 @@ export function MissionControlProvider({ children }: { children: ReactNode }) {
 
   // Listen for IPC events from Electron (pending commands from Claude Code)
   useEffect(() => {
-    const handlePendingCommand = (_event: Event, command: PendingClaudeCodeCommand) => {
+    if (!window.electron?.onClaudeCodePending) return;
+
+    const cleanup = window.electron.onClaudeCodePending((command) => {
+      // Type cast to handle parallelHint string -> union type
+      const typedCommand: PendingClaudeCodeCommand = {
+        ...command,
+        parallelHint: command.parallelHint as PendingClaudeCodeCommand['parallelHint'],
+      };
       setState(prev => ({
         ...prev,
-        pendingApprovals: [...prev.pendingApprovals, command],
+        pendingApprovals: [...prev.pendingApprovals, typedCommand],
       }));
-    };
+    });
 
-    // @ts-ignore - Electron IPC
-    window.electron?.onClaudeCodePending?.(handlePendingCommand);
-
-    return () => {
-      // Cleanup if needed
-    };
+    return cleanup;
   }, []);
 
   // Broadcast state changes to popout windows
