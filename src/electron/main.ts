@@ -57,6 +57,7 @@ import { PatternDetector } from './analysis/patternDetector';
 import { StaleMemoryInjector } from './memory/staleMemoryInjector';
 import { TriggerRecall } from './memory/triggerRecall';
 import { initClaudeCodeResultWatcher } from './ipc-handlers/claudeCodeResultWatcher';
+import { initializeMemoryScribe, MemoryScribe } from './services/MemoryScribe';
 import OpenAI from 'openai';
 
 // __filename and __dirname already defined at top of file for dotenv
@@ -80,6 +81,7 @@ const store = new Store<{
 
 let mainWindow: BrowserWindow | null = null;
 let memoryDaemon: MemoryDaemon | null = null;
+let memoryScribe: MemoryScribe | null = null;
 let localDb: Database.Database | null = null;
 
 function createWindow() {
@@ -425,6 +427,15 @@ app.whenReady().then(() => {
     initClaudeCodeResultWatcher();
     console.log('[Main] Claude Code result watcher initialized');
 
+    // Initialize Memory Scribe (watches Supabase -> writes to Obsidian)
+    try {
+      memoryScribe = await initializeMemoryScribe();
+      console.log('[Main] Memory Scribe initialized - watching for strategy/mission events');
+    } catch (scribeError) {
+      console.error('[Main] Memory Scribe failed to start:', scribeError);
+      // Non-fatal - app continues without scribe
+    }
+
     // Validate Python environment
     const validation = await validatePythonEnvironment();
     if (!validation.valid) {
@@ -462,6 +473,11 @@ app.on('before-quit', async () => {
 
   // Stop research daemon (Night Shift)
   stopDaemonOnExit();
+
+  // Stop Memory Scribe
+  if (memoryScribe) {
+    await memoryScribe.stopWatching();
+  }
 
   // Stop memory daemon gracefully
   if (memoryDaemon) {

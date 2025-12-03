@@ -1922,6 +1922,201 @@ Provide your assessment as a {persona_key} expert. Score 0-100 and list critical
             logger.error(f"Red Team audit error: {e}")
             return {'passed': False, 'reason': str(e), 'error': True}
 
+    # ========================================================================
+    # THE GATEKEEPER - Learning from Failures
+    # ========================================================================
+
+    async def conduct_post_mortem(
+        self,
+        strategy_id: str,
+        failure_reason: str,
+        fitness_score: float = 0.0
+    ) -> Dict[str, Any]:
+        """
+        Conduct a post-mortem analysis on a failed strategy using an analyst agent.
+        Extracts the causal mechanism of failure and stores it in causal_memories.
+
+        Args:
+            strategy_id: UUID of the failed strategy
+            failure_reason: High-level reason for failure (e.g., "Red Team failed", "fitness < threshold")
+            fitness_score: The fitness score at time of failure
+
+        Returns:
+            Dict with cause, mechanism, and whether it was saved
+        """
+        logger.info(f"🔬 [Gatekeeper] Conducting post-mortem on strategy {strategy_id[:8]}...")
+
+        try:
+            # Fetch strategy details
+            result = self.supabase.table('strategy_genome').select(
+                'id', 'name', 'code_content', 'dna_config', 'sharpe_ratio',
+                'max_drawdown', 'win_rate', 'fitness_score'
+            ).eq('id', strategy_id).execute()
+
+            if not result.data:
+                return {'success': False, 'error': 'Strategy not found'}
+
+            strategy = result.data[0]
+
+            # Build analyst prompt
+            analyst_prompt = f"""Analyze this failed trading strategy and identify the root cause.
+
+STRATEGY: {strategy['name']}
+FITNESS SCORE: {fitness_score:.3f}
+FAILURE REASON: {failure_reason}
+
+CONFIGURATION:
+{json.dumps(strategy.get('dna_config', {}), indent=2)}
+
+METRICS:
+- Sharpe Ratio: {strategy.get('sharpe_ratio', 'N/A')}
+- Max Drawdown: {strategy.get('max_drawdown', 'N/A')}
+- Win Rate: {strategy.get('win_rate', 'N/A')}
+
+CODE:
+{strategy.get('code_content', 'No code available')[:2000]}
+
+TASK: Return a JSON object with:
+{{
+    "cause": "1-2 sentence summary of why this strategy failed",
+    "mechanism": "Technical explanation of the failure mechanism (e.g., 'Stop loss of 0.3% is too tight for intraday volatility, causing 80% of trades to stop out on noise')",
+    "constraint": "A rule to prevent this failure in future strategies (e.g., 'Stop losses must be >= 2x average true range')"
+}}
+
+Return ONLY the JSON object, no other text."""
+
+            # Dispatch single analyst agent
+            analyst_task = [{
+                'id': f'post_mortem_{strategy_id[:8]}',
+                'system': "You are a quantitative trading analyst specializing in strategy failure analysis. Be precise and technical.",
+                'user': analyst_prompt,
+                'model': 'deepseek-chat',  # Fast model for analysis
+                'temperature': 0.2
+            }]
+
+            results = run_swarm_sync(analyst_task, concurrency=1)
+
+            if not results or results[0].get('status') != 'success':
+                logger.error("[Gatekeeper] Post-mortem analysis failed")
+                return {'success': False, 'error': 'Analysis failed'}
+
+            # Parse result
+            content = results[0].get('content', '')
+            try:
+                # Extract JSON from response
+                json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
+                if json_match:
+                    analysis = json.loads(json_match.group())
+                else:
+                    analysis = json.loads(content)
+            except json.JSONDecodeError:
+                logger.warning(f"[Gatekeeper] Could not parse analysis JSON: {content[:200]}")
+                analysis = {
+                    'cause': failure_reason,
+                    'mechanism': content[:500],
+                    'constraint': 'Unable to extract constraint'
+                }
+
+            # Store in causal_memories
+            # Get workspace_id (use default if not set)
+            workspace_id = os.environ.get('WORKSPACE_ID', '00000000-0000-0000-0000-000000000001')
+
+            causal_memory = {
+                'workspace_id': workspace_id,
+                'event_description': f"Strategy '{strategy['name']}' failed: {analysis.get('cause', failure_reason)}",
+                'mechanism': analysis.get('mechanism', ''),
+                'causal_graph': {
+                    'strategy_id': strategy_id,
+                    'strategy_name': strategy['name'],
+                    'failure_type': failure_reason,
+                    'fitness_at_failure': fitness_score,
+                    'constraint': analysis.get('constraint', '')
+                },
+                'statistical_validation': {
+                    'sharpe': strategy.get('sharpe_ratio'),
+                    'max_drawdown': strategy.get('max_drawdown'),
+                    'win_rate': strategy.get('win_rate')
+                },
+                'related_strategies': [strategy_id]
+            }
+
+            insert_result = self.supabase.table('causal_memories').insert(causal_memory).execute()
+
+            if insert_result.data:
+                logger.info(f"✅ [Gatekeeper] Post-mortem saved: {analysis.get('cause', 'Unknown cause')[:50]}...")
+                logger.info(f"   Mechanism: {analysis.get('mechanism', '')[:80]}...")
+                logger.info(f"   Constraint: {analysis.get('constraint', '')[:80]}...")
+
+            return {
+                'success': True,
+                'cause': analysis.get('cause', ''),
+                'mechanism': analysis.get('mechanism', ''),
+                'constraint': analysis.get('constraint', ''),
+                'memory_id': insert_result.data[0]['id'] if insert_result.data else None
+            }
+
+        except Exception as e:
+            logger.error(f"[Gatekeeper] Post-mortem error: {e}")
+            traceback.print_exc()
+            return {'success': False, 'error': str(e)}
+
+    def get_swarm_constraints(self, limit: int = 5) -> str:
+        """
+        Query causal_memories for the most frequent failure mechanisms.
+        Returns formatted constraints string to inject into swarm prompts.
+
+        Args:
+            limit: Maximum number of constraints to return
+
+        Returns:
+            Formatted string of constraints from institutional memory
+        """
+        try:
+            # Query recent causal memories ordered by frequency
+            result = self.supabase.table('causal_memories').select(
+                'mechanism', 'causal_graph', 'event_description'
+            ).order('created_at', desc=True).limit(50).execute()
+
+            if not result.data:
+                return ""
+
+            # Extract and deduplicate constraints
+            constraints = []
+            seen_mechanisms = set()
+
+            for memory in result.data:
+                mechanism = memory.get('mechanism', '')
+                causal_graph = memory.get('causal_graph', {})
+                constraint = causal_graph.get('constraint', '') if isinstance(causal_graph, dict) else ''
+
+                # Deduplicate by mechanism similarity
+                mechanism_key = mechanism[:50].lower() if mechanism else ''
+                if mechanism_key and mechanism_key not in seen_mechanisms:
+                    seen_mechanisms.add(mechanism_key)
+                    if constraint:
+                        constraints.append(constraint)
+                    elif mechanism:
+                        constraints.append(mechanism)
+
+                if len(constraints) >= limit:
+                    break
+
+            if not constraints:
+                return ""
+
+            # Format as numbered list
+            constraint_text = "CONSTRAINTS FROM INSTITUTIONAL MEMORY:\n"
+            constraint_text += "(These are proven failure patterns - DO NOT repeat them)\n\n"
+            for i, constraint in enumerate(constraints, 1):
+                constraint_text += f"{i}. {constraint}\n"
+
+            logger.info(f"[Gatekeeper] Loaded {len(constraints)} constraints from memory")
+            return constraint_text
+
+        except Exception as e:
+            logger.error(f"[Gatekeeper] Failed to get constraints: {e}")
+            return ""
+
     async def dispatch_hunter_swarm(
         self,
         decision: AutonomousDecision,
@@ -2070,6 +2265,14 @@ Provide your assessment as a {persona_key} expert. Score 0-100 and list critical
                             'p_metric_value': strat.get('sharpe_ratio', 0),
                             'p_trigger_type': 'red_team_pass'
                         }).execute()
+                    else:
+                        # GATEKEEPER: Conduct post-mortem on failed strategy
+                        failure_reason = audit_result.get('reason', 'Red Team audit failed')
+                        await self.conduct_post_mortem(
+                            strategy_id=strat['strategy_id'],
+                            failure_reason=f"Red Team: {failure_reason}",
+                            fitness_score=strat.get('fitness_score', 0)
+                        )
 
         # Step 5: Dispatch hunter swarm
         dispatch_result = await self.dispatch_hunter_swarm(decision, mission)
@@ -2126,6 +2329,9 @@ Provide your assessment as a {persona_key} expert. Score 0-100 and list critical
             strategy_names = [s['name'] for s in top_strategies.data]
             strategy_ids = [s['id'] for s in top_strategies.data]
 
+            # GATEKEEPER: Inject constraints from institutional memory
+            constraints = self.get_swarm_constraints(limit=5)
+
             objective = f"""Mutate the top {len(strategy_ids)} performing strategies to find local convexity extrema.
 
 Target strategies for mutation:
@@ -2135,7 +2341,9 @@ Focus on mutations that:
 1. Increase positive convexity (bigger gains in volatile markets)
 2. Reduce drawdown without sacrificing returns
 3. Improve Sharpe and Sortino ratios
-4. Explore novel entry/exit timing"""
+4. Explore novel entry/exit timing
+
+{constraints}"""
 
             # Dispatch swarm via Edge Function
             agents_to_spawn = self.config.min_pool_size - current_count
