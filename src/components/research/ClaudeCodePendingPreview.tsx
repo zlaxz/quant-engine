@@ -1,8 +1,9 @@
 /**
  * ClaudeCodePendingPreview - Shows command preview BEFORE execution with approval flow
+ * Displays in plain English for non-technical users
  */
 
-import { Terminal, FileCode, ChevronDown, Check, X, AlertCircle } from 'lucide-react';
+import { Terminal, ChevronDown, Check, X, AlertCircle, Brain, Zap, Users } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,14 +27,83 @@ interface ClaudeCodePendingPreviewProps {
   className?: string;
 }
 
+/**
+ * Parse a technical task into plain English summary
+ */
+function parseTaskToPlainEnglish(task: string): { summary: string; actions: string[]; risks: string[] } {
+  const actions: string[] = [];
+  const risks: string[] = [];
+  let summary = "Gemini wants Claude Code to help with a task";
+
+  // Detect common task patterns
+  const taskLower = task.toLowerCase();
+
+  // Detect spawning agents
+  if (taskLower.includes('spawn') || taskLower.includes('agent') || taskLower.includes('deepseek')) {
+    actions.push("🤖 Spawn AI agents (like DeepSeek) to work on subtasks");
+    risks.push("Multiple terminal windows may open");
+  }
+
+  // Detect backtesting
+  if (taskLower.includes('backtest') || taskLower.includes('strategy')) {
+    actions.push("📊 Run backtesting or strategy analysis");
+    summary = "Gemini wants to run a backtest or analyze a trading strategy";
+  }
+
+  // Detect file operations
+  if (taskLower.includes('read') || taskLower.includes('file') || taskLower.includes('open')) {
+    actions.push("📁 Read and analyze code files");
+  }
+  if (taskLower.includes('write') || taskLower.includes('create') || taskLower.includes('modify')) {
+    actions.push("✏️ Create or modify files");
+    risks.push("Files on your computer may be changed");
+  }
+
+  // Detect Python execution
+  if (taskLower.includes('python') || taskLower.includes('.py') || taskLower.includes('script')) {
+    actions.push("🐍 Run Python scripts");
+    risks.push("Python code will execute on your computer");
+  }
+
+  // Detect parallel/swarm operations
+  if (taskLower.includes('parallel') || taskLower.includes('swarm') || taskLower.includes('concurrent')) {
+    actions.push("⚡ Run multiple operations at the same time");
+    risks.push("Several processes may run simultaneously");
+  }
+
+  // Detect analysis tasks
+  if (taskLower.includes('analyze') || taskLower.includes('audit') || taskLower.includes('review')) {
+    actions.push("🔍 Analyze and review code or data");
+    summary = "Gemini wants to analyze something in detail";
+  }
+
+  // Detect code generation
+  if (taskLower.includes('generate') || taskLower.includes('implement') || taskLower.includes('build')) {
+    actions.push("🔨 Generate or build new code");
+    summary = "Gemini wants to create or build something";
+  }
+
+  // Detect testing
+  if (taskLower.includes('test') || taskLower.includes('validate') || taskLower.includes('verify')) {
+    actions.push("✅ Run tests or validation checks");
+  }
+
+  // If no specific patterns detected, give generic summary
+  if (actions.length === 0) {
+    actions.push("💻 Execute a complex task that requires terminal access");
+    summary = "Gemini needs Claude Code to help with a technical task";
+  }
+
+  return { summary, actions, risks };
+}
+
 export function ClaudeCodePendingPreview({ 
   command, 
   onApprove, 
   onReject,
   className 
 }: ClaudeCodePendingPreviewProps) {
-  const [showFullTask, setShowFullTask] = useState(false);
-  const [showContext, setShowContext] = useState(false);
+  const [showRawTask, setShowRawTask] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
 
   const handleApprove = () => {
@@ -41,22 +111,30 @@ export function ClaudeCodePendingPreview({
     onApprove(command.id);
   };
 
-  // Truncate task for preview
-  const taskPreview = command.task.length > 200 
-    ? command.task.substring(0, 200) + '...' 
-    : command.task;
+  const parsed = parseTaskToPlainEnglish(command.task);
+  const { summary, actions, risks } = parsed;
 
-  const parallelLabels = {
+  const parallelDescriptions = {
     none: null,
-    minor: { label: 'Minor Parallel', color: 'bg-blue-500/20 text-blue-400' },
-    massive: { label: 'MASSIVE Parallel', color: 'bg-orange-500/20 text-orange-400' }
+    minor: { 
+      label: 'Small Team', 
+      description: 'A few AI helpers will work together',
+      icon: Users,
+      color: 'bg-blue-500/20 text-blue-400' 
+    },
+    massive: { 
+      label: 'Large Team', 
+      description: 'Many AI agents will be spawned (expect multiple terminal windows)',
+      icon: Zap,
+      color: 'bg-orange-500/20 text-orange-400' 
+    }
   };
 
-  const parallelInfo = command.parallelHint ? parallelLabels[command.parallelHint] : null;
+  const parallelInfo = command.parallelHint ? parallelDescriptions[command.parallelHint] : null;
 
   return (
     <Card className={cn(
-      'border-l-4 border-l-yellow-500 bg-yellow-50/50 dark:bg-yellow-950/20 shadow-md animate-pulse-subtle',
+      'border-l-4 border-l-yellow-500 bg-yellow-50/50 dark:bg-yellow-950/20 shadow-md',
       className
     )}>
       <div className="p-4 space-y-4">
@@ -64,139 +142,137 @@ export function ClaudeCodePendingPreview({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-yellow-500/20">
-              <Terminal className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+              <Brain className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-sm">Claude Code Command</span>
+                <span className="font-semibold text-sm">Permission Request</span>
                 <Badge variant="outline" className="text-[10px] px-1.5 h-5 bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-500/30">
-                  Awaiting Approval
+                  Needs Your OK
                 </Badge>
               </div>
-              <span className="text-[10px] text-muted-foreground">
-                Review before execution
+              <span className="text-xs text-muted-foreground">
+                Review what Gemini wants to do
               </span>
             </div>
           </div>
           {parallelInfo && (
-            <Badge className={cn('text-[10px] px-2', parallelInfo.color)}>
+            <Badge className={cn('text-[10px] px-2 gap-1', parallelInfo.color)}>
+              <parallelInfo.icon className="h-3 w-3" />
               {parallelInfo.label}
             </Badge>
           )}
         </div>
 
-        {/* Warning Banner */}
-        <div className="flex items-start gap-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-          <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-yellow-700 dark:text-yellow-300">
-            <strong>Gemini wants to execute via Claude Code.</strong> This will spawn terminal sessions and may run Python scripts.
-            {command.parallelHint === 'massive' && (
-              <span className="block mt-1 text-orange-600 dark:text-orange-400">
-                ⚠️ MASSIVE parallelization requested - multiple DeepSeek agents will be spawned.
-              </span>
-            )}
-          </div>
+        {/* Plain English Summary */}
+        <div className="bg-background border rounded-lg p-3 space-y-3">
+          <div className="text-sm font-medium">{summary}</div>
+          
+          {/* What will happen */}
+          {actions.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">What will happen:</div>
+              <ul className="space-y-1">
+                {actions.map((action, idx) => (
+                  <li key={idx} className="text-xs text-foreground/80 flex items-start gap-2">
+                    <span>{action}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Risks/Warnings */}
+          {risks.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-orange-600 dark:text-orange-400">Heads up:</div>
+              <ul className="space-y-1">
+                {risks.map((risk, idx) => (
+                  <li key={idx} className="text-xs text-orange-600/80 dark:text-orange-400/80 flex items-start gap-2">
+                    <AlertCircle className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                    <span>{risk}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Parallel team info */}
+          {parallelInfo && (
+            <div className="flex items-start gap-2 p-2 rounded bg-muted/50 text-xs">
+              <parallelInfo.icon className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <span>{parallelInfo.description}</span>
+            </div>
+          )}
         </div>
 
-        {/* Task/Prompt */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-              Task to Execute
+        {/* Files that will be accessed */}
+        {command.files && command.files.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">
+              📁 Files that will be accessed ({command.files.length}):
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-5 text-[10px] px-2"
-              onClick={() => setShowFullTask(!showFullTask)}
-            >
-              {showFullTask ? 'Collapse' : 'Expand'}
-            </Button>
+            <div className="bg-muted/50 rounded-lg p-2 space-y-1 max-h-24 overflow-y-auto">
+              {command.files.map((file, idx) => (
+                <div key={idx} className="text-xs text-muted-foreground truncate">
+                  {file.split('/').pop() || file}
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="bg-background border rounded-lg p-3 font-mono text-xs">
-            {showFullTask ? (
-              <pre className="whitespace-pre-wrap break-words max-h-64 overflow-y-auto">
+        )}
+
+        {/* Show raw task toggle */}
+        <Collapsible open={showRawTask} onOpenChange={setShowRawTask}>
+          <CollapsibleTrigger className="flex items-center gap-2 text-[10px] text-muted-foreground hover:text-foreground w-full">
+            <Terminal className="h-3 w-3" />
+            <span>Show technical details</span>
+            <ChevronDown className={cn('h-3 w-3 ml-auto transition-transform', showRawTask && 'rotate-180')} />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <div className="bg-muted/50 rounded-lg p-2 max-h-32 overflow-y-auto">
+              <pre className="text-[10px] font-mono whitespace-pre-wrap break-words text-muted-foreground">
                 {command.task}
               </pre>
-            ) : (
-              <span className="text-muted-foreground">{taskPreview}</span>
-            )}
-          </div>
-        </div>
-
-        {/* Context Files */}
-        {command.files && command.files.length > 0 && (
-          <Collapsible>
-            <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-full">
-              <FileCode className="h-3.5 w-3.5" />
-              <span>{command.files.length} context file{command.files.length > 1 ? 's' : ''} will be accessed</span>
-              <ChevronDown className="h-3 w-3 ml-auto" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2">
-              <div className="bg-muted/50 rounded-lg p-2 space-y-1">
-                {command.files.map((file, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-xs">
-                    <FileCode className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                    <code className="font-mono truncate">{file}</code>
-                  </div>
-                ))}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        )}
-
-        {/* Additional Context */}
-        {command.context && (
-          <Collapsible open={showContext} onOpenChange={setShowContext}>
-            <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-full">
-              <span>Gemini's analysis context included</span>
-              <ChevronDown className={cn('h-3 w-3 ml-auto transition-transform', showContext && 'rotate-180')} />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2">
-              <div className="bg-muted/50 rounded-lg p-2 max-h-32 overflow-y-auto">
-                <pre className="text-xs font-mono whitespace-pre-wrap break-words">
-                  {command.context}
-                </pre>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-2 pt-2 border-t">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onReject(command.id)}
-            className="gap-1.5"
-            disabled={isApproving}
-          >
-            <X className="h-3.5 w-3.5" />
-            Reject
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleApprove}
-            className="gap-1.5 bg-green-600 hover:bg-green-700"
-            disabled={isApproving}
-          >
-            {isApproving ? (
-              <>
-                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Executing...
-              </>
-            ) : (
-              <>
-                <Check className="h-3.5 w-3.5" />
-                Approve & Execute
-              </>
-            )}
-          </Button>
-        </div>
-
-        {/* Timestamp */}
-        <div className="text-[10px] text-muted-foreground text-center">
-          Queued at {new Date(command.timestamp).toLocaleTimeString()}
+        <div className="flex items-center justify-between gap-2 pt-2 border-t">
+          <span className="text-[10px] text-muted-foreground">
+            Requested at {new Date(command.timestamp).toLocaleTimeString()}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onReject(command.id)}
+              className="gap-1.5"
+              disabled={isApproving}
+            >
+              <X className="h-3.5 w-3.5" />
+              No, Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleApprove}
+              className="gap-1.5 bg-green-600 hover:bg-green-700"
+              disabled={isApproving}
+            >
+              {isApproving ? (
+                <>
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Running...
+                </>
+              ) : (
+                <>
+                  <Check className="h-3.5 w-3.5" />
+                  Yes, Do It
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </Card>
