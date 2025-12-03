@@ -382,10 +382,19 @@ export function OnboardingWizard({ open, onComplete, onSkip }: OnboardingWizardP
             </div>
 
             <Card className="p-4 bg-primary/5 border-primary/20">
-              <p className="text-xs text-muted-foreground">
-                <strong className="text-primary">Access Mission Control:</strong> Look for the "Queue" tab in the bottom-right panel,
-                or click the "Mission Control" button in the status strip to open a popout window.
-              </p>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-primary">How to Access Mission Control:</p>
+                <ul className="text-xs text-muted-foreground space-y-1.5 list-none">
+                  <li className="flex items-start gap-2">
+                    <span className="bg-primary/20 text-primary rounded px-1.5 py-0.5 text-[10px] font-mono shrink-0">1</span>
+                    <span><strong>Queue Tab</strong> — In the bottom-right panel, click the "Queue" tab (next to "Roadmap")</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="bg-primary/20 text-primary rounded px-1.5 py-0.5 text-[10px] font-mono shrink-0">2</span>
+                    <span><strong>Status Strip</strong> — When operations are running, a status bar appears below the header with a "Mission Control" popout button</span>
+                  </li>
+                </ul>
+              </div>
             </Card>
           </div>
         );
