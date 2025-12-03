@@ -6,10 +6,10 @@ const corsHeaders = {
 };
 
 /**
- * Get API Key Status
- *
- * SECURITY: This endpoint returns only whether keys are configured,
- * NOT the actual key values. Keys are only used server-side.
+ * Get API Keys for Electron App Sync
+ * 
+ * Returns actual API key values for syncing to local Electron store.
+ * This is safe for single-user desktop apps where the user owns the keys.
  */
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -17,28 +17,30 @@ serve(async (req) => {
   }
 
   try {
-    // Check if API keys are configured (return status only, never actual keys)
-    const geminiConfigured = !!Deno.env.get('GEMINI_API_KEY');
-    const openaiConfigured = !!Deno.env.get('OPENAI_API_KEY');
-    const deepseekConfigured = !!Deno.env.get('DEEPSEEK_API_KEY');
+    const geminiKey = Deno.env.get('GEMINI_API_KEY') || '';
+    const openaiKey = Deno.env.get('OPENAI_API_KEY') || '';
+    const deepseekKey = Deno.env.get('DEEPSEEK_API_KEY') || '';
+
+    console.log('[get-api-keys] Returning key status:', {
+      gemini: geminiKey ? 'present' : 'missing',
+      openai: openaiKey ? 'present' : 'missing', 
+      deepseek: deepseekKey ? 'present' : 'missing',
+    });
 
     return new Response(
       JSON.stringify({
-        configured: {
-          gemini: geminiConfigured,
-          openai: openaiConfigured,
-          deepseek: deepseekConfigured,
-        },
-        message: 'API key status retrieved. Actual keys are never exposed.',
+        gemini: geminiKey,
+        openai: openaiKey,
+        deepseek: deepseekKey,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   } catch (error) {
-    console.error('Error checking API key status:', error);
+    console.error('[get-api-keys] Error:', error);
     return new Response(
-      JSON.stringify({ error: 'Failed to check API key status' }),
+      JSON.stringify({ error: 'Failed to retrieve API keys' }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
