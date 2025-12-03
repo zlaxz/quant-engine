@@ -28,8 +28,6 @@ import { chatPrimary } from '@/lib/electronClient';
 import { buildChiefQuantPrompt } from '@/prompts/chiefQuantPrompt';
 import { detectIntent, type DetectedIntent } from '@/lib/intentDetector';
 import { ActiveExperimentBar } from './ActiveExperimentBar';
-import { getSuggestions, type AppState } from '@/lib/contextualSuggestions';
-import { CommandSuggestions } from './CommandSuggestions';
 import { MessageCard } from './MessageCard';
 import { SwarmStatusBar } from '@/components/swarm';
 import { getJobProgress, type SwarmProgress } from '@/lib/swarmClient';
@@ -74,8 +72,6 @@ const ChatAreaComponent = () => {
   const [commandSuggestions, setCommandSuggestions] = useState<string[]>([]);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [intentSuggestion, setIntentSuggestion] = useState<DetectedIntent | null>(null);
-  const [appState, setAppState] = useState<AppState>({});
-  const [showContextualSuggestions, setShowContextualSuggestions] = useState(true);
   const [streamingContent, setStreamingContent] = useState('');
   const [activeSwarmJob, setActiveSwarmJob] = useState<{
     jobId: string;
@@ -143,10 +139,7 @@ const ChatAreaComponent = () => {
       setMessages(data || []);
 
       if (data && selectedWorkspaceId) {
-        const backtestCount = data.filter(
-          (msg) => msg.role === 'system' && msg.content.includes('Command: /backtest')
-        ).length;
-        setAppState(prev => ({ ...prev, runCount: backtestCount }));
+        // Messages loaded successfully
       }
     } catch (error: any) {
       console.error('Error loading messages:', error);
@@ -394,18 +387,6 @@ const ChatAreaComponent = () => {
         setMessages(prev => [...prev, commandMessage, resultMessage]);
 
         if (result.success && parsed) {
-          const commandName = parsed.command;
-          if (commandName === 'backtest') {
-            const runIdMatch = result.data?.runId || result.message.match(/run ID: (\S+)/i)?.[1];
-            setAppState(prev => ({
-              ...prev,
-              lastAction: 'backtest',
-              lastRunId: runIdMatch,
-              runCount: (prev.runCount || 0) + 1
-            }));
-            setShowContextualSuggestions(true);
-          }
-          
           // Check for swarm job
           if (result.data?.jobId && result.data?.mode) {
             try {
@@ -757,18 +738,6 @@ const ChatAreaComponent = () => {
 
       {/* Input Area */}
       <div className="border-t border-border p-2 min-w-0">
-        {/* Contextual Suggestions */}
-        {showContextualSuggestions && (
-          <CommandSuggestions
-            suggestions={getSuggestions(appState)}
-            onSelect={(command) => {
-              setInputValue(command);
-              setShowContextualSuggestions(false);
-            }}
-            onDismiss={() => setShowContextualSuggestions(false)}
-          />
-        )}
-
         {/* Intent Suggestion */}
         {intentSuggestion && !inputValue.startsWith('/') && (
           <div className="mb-2 flex items-center gap-2 p-2 bg-blue-500/10 rounded border border-blue-500/20">
