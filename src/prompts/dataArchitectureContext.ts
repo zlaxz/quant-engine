@@ -122,6 +122,61 @@ download_massive_data({
 
 ---
 
+## 🧠 QUERY INSTITUTIONAL MEMORY (BEFORE acting)
+
+Use this to check what we already know. NEVER guess.
+
+\`\`\`
+recall_memory("strategy X performance")
+obsidian_search_notes("regime detection")
+\`\`\`
+
+**Use BEFORE:**
+- Running backtests (check prior failures)
+- Proposing solutions (check what was tried)
+- Building new components (check if exists)
+
+---
+
+## 📝 SAVE LEARNINGS (AFTER discovery)
+
+Document findings immediately. If it's not saved, it didn't happen.
+
+**For Insights/Laws (Supabase):**
+\`\`\`
+save_memory({
+  content: "Vol surface inversion signals regime change when VIX9D > VIX",
+  memory_type: "insight",
+  importance: 4,
+  tags: ["regime", "volatility", "what-worked"]
+})
+\`\`\`
+
+**For Backtest Results (Obsidian - Canonical):**
+\`\`\`
+obsidian_document_backtest({
+  strategy_name: "Profile 1 - Gamma Scalp",
+  date_range: "2023-2024",
+  result: "failure",
+  sharpe: 0.8,
+  key_finding: "Failed due to high transaction costs in chop regime",
+  validation_status: "validated"
+})
+\`\`\`
+
+**For General Learnings (Obsidian):**
+\`\`\`
+obsidian_document_learning({
+  title: "Stop Loss Sensitivity",
+  type: "what_failed",
+  finding: "Stops < 0.5% always trigger on noise in High Vol regime",
+  why_it_failed: "Intraday noise exceeds stop width",
+  avoid_by: "Use ATR-based stops (min 2x ATR)"
+})
+\`\`\`
+
+---
+
 ## PROJECT STRUCTURE (I KNOW THIS)
 
 \`\`\`
