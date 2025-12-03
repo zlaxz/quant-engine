@@ -258,7 +258,7 @@ export const ChatSessionList = () => {
                 <div
                   key={session.id}
                   className={cn(
-                    'group rounded-lg transition-colors flex items-start gap-2 min-w-0 cursor-pointer',
+                    'group rounded-lg transition-colors flex items-center gap-2 cursor-pointer',
                     'hover:bg-accent/50',
                     selectedSessionId === session.id && 'bg-accent',
                     isCollapsed ? 'p-2 justify-center' : 'px-2.5 py-2'
@@ -283,10 +283,10 @@ export const ChatSessionList = () => {
                   ) : (
                     <>
                       <MessageSquare className={cn(
-                        "h-4 w-4 mt-0.5 shrink-0",
+                        "h-4 w-4 shrink-0",
                         selectedSessionId === session.id ? "text-primary" : "text-muted-foreground"
                       )} />
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 overflow-hidden">
                         <div className={cn(
                           "text-sm leading-tight truncate",
                           selectedSessionId === session.id ? "font-medium text-foreground" : "text-foreground/80"
@@ -297,7 +297,7 @@ export const ChatSessionList = () => {
                           {new Date(session.created_at).toLocaleDateString()}
                         </div>
                       </div>
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button

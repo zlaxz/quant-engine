@@ -11,8 +11,8 @@ export function ChatSidebar() {
       collapsible="icon" 
       className="border-r border-border bg-card"
       style={{
-        '--sidebar-width': '260px',
-        '--sidebar-width-icon': '48px',
+        '--sidebar-width': '280px',
+        '--sidebar-width-icon': '0px',
       } as React.CSSProperties}
     >
       <SidebarContent>
