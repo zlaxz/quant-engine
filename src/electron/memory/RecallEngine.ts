@@ -21,12 +21,21 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Safe logging to prevent EPIPE crashes when stdout/stderr pipe is broken
+function safeLog(level: 'log' | 'error' | 'warn', ...args: unknown[]): void {
+  try {
+    console[level](...args);
+  } catch {
+    // Silently fail - pipe may be broken (EPIPE)
+  }
+}
+
 // Safe JSON parse utility
 function safeJSONParse<T>(json: string, fallback: T): T {
   try {
     return JSON.parse(json);
   } catch (error) {
-    console.error('[RecallEngine] JSON parse error:', error);
+    safeLog('error', '[RecallEngine] JSON parse error:', error);
     return fallback;
   }
 }
@@ -100,14 +109,14 @@ export class RecallEngine {
       const exists = tableCheck.get();
 
       if (!exists) {
-        console.log('[RecallEngine] Initializing database tables');
+        safeLog('log', '[RecallEngine] Initializing database tables');
         const schemaPath = path.join(__dirname, 'schema.sql');
         const schema = fs.readFileSync(schemaPath, 'utf-8');
         this.localDb.exec(schema);
-        console.log('[RecallEngine] Database tables created');
+        safeLog('log', '[RecallEngine] Database tables created');
       }
     } catch (error) {
-      console.error('[RecallEngine] Database initialization error:', error);
+      safeLog('error', '[RecallEngine] Database initialization error:', error);
       // Continue anyway, MemoryDaemon will initialize on start
     }
   }
@@ -124,15 +133,15 @@ export class RecallEngine {
 
     // Input validation
     if (!query || typeof query !== 'string') {
-      console.error('[RecallEngine] Invalid query: must be non-empty string');
+      safeLog('error', '[RecallEngine] Invalid query: must be non-empty string');
       return { memories: [], totalFound: 0, searchTimeMs: 0, usedCache: false, query: '' };
     }
     if (query.length > 1000) {
-      console.error('[RecallEngine] Query too long: max 1000 characters');
+      safeLog('error', '[RecallEngine] Query too long: max 1000 characters');
       return { memories: [], totalFound: 0, searchTimeMs: 0, usedCache: false, query };
     }
     if (!workspaceId || typeof workspaceId !== 'string') {
-      console.error('[RecallEngine] Invalid workspaceId: must be non-empty string');
+      safeLog('error', '[RecallEngine] Invalid workspaceId: must be non-empty string');
       return { memories: [], totalFound: 0, searchTimeMs: 0, usedCache: false, query };
     }
 
@@ -148,11 +157,11 @@ export class RecallEngine {
 
     // Validate options
     if (typeof limit !== 'number' || limit < 1 || limit > 100) {
-      console.error('[RecallEngine] Invalid limit: must be between 1 and 100');
+      safeLog('error', '[RecallEngine] Invalid limit: must be between 1 and 100');
       return { memories: [], totalFound: 0, searchTimeMs: 0, usedCache: false, query };
     }
     if (typeof minImportance !== 'number' || minImportance < 0 || minImportance > 1) {
-      console.error('[RecallEngine] Invalid minImportance: must be between 0.0 and 1.0');
+      safeLog('error', '[RecallEngine] Invalid minImportance: must be between 0.0 and 1.0');
       return { memories: [], totalFound: 0, searchTimeMs: 0, usedCache: false, query };
     }
 
@@ -191,7 +200,7 @@ export class RecallEngine {
     const memoryIds = results?.map?.((r) => r.id) || [];
     if (memoryIds.length > 0) {
       this.updateAccessMetrics(memoryIds).catch((err) => {
-        console.error('[RecallEngine] Failed to update access metrics:', err);
+        safeLog('error', '[RecallEngine] Failed to update access metrics:', err);
       });
     }
 
@@ -321,7 +330,7 @@ export class RecallEngine {
         };
       });
     } catch (error) {
-      console.error('[RecallEngine] BM25 search error:', error);
+      safeLog('error', '[RecallEngine] BM25 search error:', error);
       return [];
     }
   }
@@ -341,7 +350,7 @@ export class RecallEngine {
       // Generate embedding for query
       const queryEmbedding = await this.generateQueryEmbedding(query);
       if (!queryEmbedding) {
-        console.error('[RecallEngine] Failed to generate query embedding');
+        safeLog('error', '[RecallEngine] Failed to generate query embedding');
         return [];
       }
 
@@ -357,7 +366,7 @@ export class RecallEngine {
       });
 
       if (error) {
-        console.error('[RecallEngine] Vector search error:', error);
+        safeLog('error', '[RecallEngine] Vector search error:', error);
         return [];
       }
 
@@ -389,7 +398,7 @@ export class RecallEngine {
         protection_level: r.protection_level || 2,
       }));
     } catch (error) {
-      console.error('[RecallEngine] Vector search error:', error);
+      safeLog('error', '[RecallEngine] Vector search error:', error);
       return [];
     }
   }
@@ -447,7 +456,7 @@ export class RecallEngine {
    */
   private async generateQueryEmbedding(text: string): Promise<number[] | null> {
     if (!this.openaiClient) {
-      console.error('[RecallEngine] OpenAI client not initialized');
+      safeLog('error', '[RecallEngine] OpenAI client not initialized');
       return null;
     }
 
@@ -464,22 +473,22 @@ export class RecallEngine {
 
       // Safe array access with bounds checking
       if (!response.data || response.data.length === 0) {
-        console.error('[RecallEngine] Invalid embedding response: no data');
+        safeLog('error', '[RecallEngine] Invalid embedding response: no data');
         return null;
       }
 
       const embedding = response.data[0]?.embedding;
       if (!embedding || !Array.isArray(embedding)) {
-        console.error('[RecallEngine] Invalid embedding data structure');
+        safeLog('error', '[RecallEngine] Invalid embedding data structure');
         return null;
       }
 
       return embedding;
     } catch (error) {
       if ((error as any)?.name === 'AbortError') {
-        console.error('[RecallEngine] Embedding generation timeout');
+        safeLog('error', '[RecallEngine] Embedding generation timeout');
       } else {
-        console.error('[RecallEngine] Embedding generation error:', error);
+        safeLog('error', '[RecallEngine] Embedding generation error:', error);
       }
       return null;
     } finally {
@@ -530,7 +539,7 @@ export class RecallEngine {
             .eq('id', id);
         }
       } catch (err) {
-        console.error('[RecallEngine] Failed to update access metrics:', err);
+        safeLog('error', '[RecallEngine] Failed to update access metrics:', err);
       }
     });
   }
@@ -539,11 +548,11 @@ export class RecallEngine {
    * Warm cache with hot memories on session start
    */
   async warmCache(workspaceId: string): Promise<void> {
-    console.log('[RecallEngine] Warming cache for workspace:', workspaceId);
+    safeLog('log', '[RecallEngine] Warming cache for workspace:', workspaceId);
 
     // CRASH FIX #7: Input validation for workspaceId
     if (!workspaceId || typeof workspaceId !== 'string') {
-      console.error('[RecallEngine] Invalid workspaceId for cache warming');
+      safeLog('error', '[RecallEngine] Invalid workspaceId for cache warming');
       return;
     }
 
@@ -559,7 +568,7 @@ export class RecallEngine {
       // CRASH FIX #8: Null/type check on stmt.all result
       const hotMemories = stmt.all(workspaceId);
       if (!Array.isArray(hotMemories)) {
-        console.error('[RecallEngine] stmt.all did not return array');
+        safeLog('error', '[RecallEngine] stmt.all did not return array');
         return;
       }
 
@@ -581,7 +590,7 @@ export class RecallEngine {
 
       console.log(`[RecallEngine] Cache warmed with ${hotMemories.length} hot memories`);
     } catch (error) {
-      console.error('[RecallEngine] Error during cache warming:', error);
+      safeLog('error', '[RecallEngine] Error during cache warming:', error);
     }
   }
 
