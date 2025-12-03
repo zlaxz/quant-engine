@@ -16,7 +16,12 @@ import {
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
-  X
+  X,
+  ListOrdered,
+  AlertCircle,
+  Eye,
+  Rocket,
+  ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -44,6 +49,12 @@ const STEPS = [
     title: 'Research Workflow',
     description: 'How the CIO helps you discover strategies',
     icon: PlayCircle,
+  },
+  {
+    id: 'mission-control',
+    title: 'Mission Control',
+    description: 'Stay informed about AI operations',
+    icon: ListOrdered,
   },
   {
     id: 'ready',
@@ -295,6 +306,85 @@ export function OnboardingWizard({ open, onComplete, onSkip }: OnboardingWizardP
               <p className="text-xs text-muted-foreground">
                 <strong className="text-primary">Key Insight:</strong> This isn't linear—you can jump to any stage 
                 based on what you discover. The CIO adapts to your research direction.
+              </p>
+            </Card>
+          </div>
+        );
+
+      case 'mission-control':
+        return (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
+                <ListOrdered className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-xl font-bold">Mission Control</h3>
+              <p className="text-sm text-muted-foreground">
+                Stay informed about what AI is doing—before, during, and after
+              </p>
+            </div>
+
+            <div className="grid gap-4">
+              <Card className="p-4 border-l-4 border-l-yellow-500">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-yellow-500" />
+                    <h4 className="font-semibold text-sm">Pre-Execution Approval</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    When the AI wants to do something significant (run a backtest, execute code, spawn agents),
+                    you'll see a preview first. Read what it plans to do, then approve or reject.
+                  </p>
+                  <div className="text-xs bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 rounded p-2 mt-2">
+                    "Needs Your OK" badges appear when approval is required
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-4 border-l-4 border-l-blue-500">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Eye className="h-4 w-4 text-blue-500" />
+                    <h4 className="font-semibold text-sm">Live Operation Tracking</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Watch operations as they run—see progress bars, which files are being accessed,
+                    what data is being analyzed. No more "black box" AI.
+                  </p>
+                </div>
+              </Card>
+
+              <Card className="p-4 border-l-4 border-l-emerald-500">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Rocket className="h-4 w-4 text-emerald-500" />
+                    <h4 className="font-semibold text-sm">Operation Queue</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    See what's scheduled to run next. Reorder operations by priority,
+                    cancel ones you don't need, or just watch the plan unfold.
+                  </p>
+                </div>
+              </Card>
+
+              <Card className="p-4 border-l-4 border-l-violet-500">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <ExternalLink className="h-4 w-4 text-violet-500" />
+                    <h4 className="font-semibold text-sm">Multi-Monitor Support</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Pop out Mission Control to a separate window for your second monitor.
+                    Keep the command center visible while you work in chat.
+                  </p>
+                </div>
+              </Card>
+            </div>
+
+            <Card className="p-4 bg-primary/5 border-primary/20">
+              <p className="text-xs text-muted-foreground">
+                <strong className="text-primary">Access Mission Control:</strong> Look for the "Queue" tab in the bottom-right panel,
+                or click the "Mission Control" button in the status strip to open a popout window.
               </p>
             </Card>
           </div>
