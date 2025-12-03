@@ -470,6 +470,146 @@ def ingest_data():
 
 
 # =============================================================================
+# DUAL-ENGINE DATA ARCHITECTURE
+# =============================================================================
+# Engine A (The Map): Massive.com/Polygon - Stock history, OHLCV, discovery
+# Engine B (The Sniper): ThetaData - Live options, real-time Greeks, execution
+
+
+@app.route('/data/market', methods=['POST'])
+def get_market_data():
+    """
+    POST /data/market - Unified market data access with intelligent routing.
+
+    Request body:
+        {
+            "ticker": "SPY",
+            "asset_type": "stock" | "option",
+            "data_type": "historical" | "live",
+            "use_case": "discovery" | "execution",
+            "expiration": "2024-12-20",  // for options
+            "strike": 500,               // for options
+            "right": "C" | "P"           // for options
+        }
+
+    Routing Logic:
+        - asset_type="stock" OR use_case="discovery" → Massive (Engine A)
+        - asset_type="option" AND use_case="execution" → ThetaData (Engine B)
+    """
+    try:
+        from engine.data import get_data_router
+
+        data = request.get_json() or {}
+        ticker = data.get('ticker')
+        asset_type = data.get('asset_type', 'stock')
+        data_type = data.get('data_type', 'historical')
+        use_case = data.get('use_case', 'discovery')
+
+        if not ticker:
+            return jsonify({'success': False, 'error': 'Missing ticker'}), 400
+
+        print(f"[DataRouter] {ticker} | asset={asset_type} data={data_type} use_case={use_case}")
+
+        router = get_data_router()
+        result = router.get_market_data(
+            ticker=ticker,
+            asset_type=asset_type,
+            data_type=data_type,
+            use_case=use_case,
+            expiration=data.get('expiration'),
+            strike=data.get('strike'),
+            right=data.get('right', 'C'),
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            trade_date=data.get('trade_date')
+        )
+
+        # Determine which engine was used
+        engine = 'theta' if (asset_type == 'option' and use_case == 'execution') else 'massive'
+
+        if result is None:
+            return jsonify({
+                'success': True,
+                'engine': engine,
+                'message': 'No data returned (check engine availability)',
+                'data': None
+            })
+
+        # Format response based on engine
+        if engine == 'theta' and hasattr(result, 'delta'):
+            # OptionGreeks object from ThetaData
+            return jsonify({
+                'success': True,
+                'engine': 'theta',
+                'greeks': {
+                    'delta': result.delta,
+                    'gamma': result.gamma,
+                    'theta': result.theta,
+                    'vega': result.vega,
+                    'rho': result.rho,
+                    'vanna': getattr(result, 'vanna', None),
+                    'charm': getattr(result, 'charm', None),
+                    'vomma': getattr(result, 'vomma', None),
+                    'bid': result.bid,
+                    'ask': result.ask,
+                    'mid': result.mid,
+                    'implied_volatility': result.implied_volatility,
+                    'underlying_price': result.underlying_price,
+                    'timestamp': result.timestamp.isoformat() if result.timestamp else None
+                }
+            })
+        else:
+            # DataFrame or other result from Massive
+            if hasattr(result, 'to_dict'):
+                return jsonify({
+                    'success': True,
+                    'engine': 'massive',
+                    'record_count': len(result),
+                    'data': result.to_dict('records') if len(result) < 1000 else None,
+                    'message': f'{len(result)} records retrieved' if len(result) >= 1000 else None
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'engine': engine,
+                    'data': result
+                })
+
+    except Exception as e:
+        print(f"[DataRouter] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/data/engines/status', methods=['GET'])
+def get_data_engines_status():
+    """
+    GET /data/engines/status - Check status of both data engines.
+
+    Response:
+        {
+            "massive": {"available": true, "type": "Polygon Historical Data"},
+            "theta": {"available": true, "status": "RUNNING", "type": "ThetaData Live Terminal"}
+        }
+    """
+    try:
+        from engine.data import get_data_router
+
+        router = get_data_router()
+        status = router.get_engine_status()
+
+        return jsonify(status)
+
+    except Exception as e:
+        print(f"[EngineStatus] Error: {e}")
+        return jsonify({
+            'massive': {'available': False, 'error': str(e)},
+            'theta': {'available': False, 'error': str(e)}
+        })
+
+
+# =============================================================================
 # MAIN
 # =============================================================================
 

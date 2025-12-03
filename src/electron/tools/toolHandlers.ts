@@ -2113,6 +2113,198 @@ export async function downloadMassiveData(
   }
 }
 
+// ==================== DUAL-ENGINE DATA ARCHITECTURE ====================
+// Engine A (The Map): Massive.com/Polygon - Stock history, OHLCV, discovery
+// Engine B (The Sniper): ThetaData - Live options, real-time Greeks, execution
+
+/**
+ * Unified market data access with intelligent dual-engine routing
+ */
+export async function getMarketData(
+  ticker: string,
+  assetType: string = 'stock',
+  dataType: string = 'historical',
+  useCase: string = 'discovery',
+  options: {
+    expiration?: string;
+    strike?: number;
+    right?: string;
+    startDate?: string;
+    endDate?: string;
+    tradeDate?: string;
+  } = {}
+): Promise<ToolResult> {
+  try {
+    safeLog(`[DataRouter] Fetching ${assetType} data for ${ticker} | use_case=${useCase}, data_type=${dataType}`);
+
+    const requestBody = {
+      ticker: ticker.toUpperCase(),
+      asset_type: assetType,
+      data_type: dataType,
+      use_case: useCase,
+      ...options
+    };
+
+    const response = await fetch(`${PYTHON_SERVER_URL}/data/market`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(30000), // 30s timeout for data fetches
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        success: false,
+        content: '',
+        error: `Data request failed (${response.status}): ${errorText}`
+      };
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      return {
+        success: false,
+        content: '',
+        error: result.error || 'Data fetch failed'
+      };
+    }
+
+    // Format response based on data type
+    let content = '';
+    if (result.engine === 'theta' && result.greeks) {
+      // ThetaData Greeks response
+      const g = result.greeks;
+      content = `
+LIVE OPTIONS DATA (ThetaData - Engine B)
+=========================================
+Symbol: ${ticker.toUpperCase()}
+Expiration: ${options.expiration || 'N/A'}
+Strike: ${options.strike || 'N/A'} ${options.right || 'C'}
+
+1ST ORDER GREEKS
+----------------
+Delta: ${g.delta?.toFixed(4) || 'N/A'}
+Gamma: ${g.gamma?.toFixed(6) || 'N/A'}
+Theta: ${g.theta?.toFixed(4) || 'N/A'}
+Vega:  ${g.vega?.toFixed(4) || 'N/A'}
+Rho:   ${g.rho?.toFixed(4) || 'N/A'}
+
+2ND ORDER GREEKS
+----------------
+Vanna: ${g.vanna?.toFixed(6) || 'N/A'}
+Charm: ${g.charm?.toFixed(6) || 'N/A'}
+Vomma: ${g.vomma?.toFixed(6) || 'N/A'}
+
+PRICING
+-------
+Bid: ${g.bid?.toFixed(2) || 'N/A'}
+Ask: ${g.ask?.toFixed(2) || 'N/A'}
+Mid: ${g.mid?.toFixed(2) || 'N/A'}
+IV:  ${(g.implied_volatility * 100)?.toFixed(2) || 'N/A'}%
+`.trim();
+    } else if (result.engine === 'massive') {
+      // Massive/Polygon historical data response
+      content = `
+HISTORICAL DATA (Massive/Polygon - Engine A)
+=============================================
+Symbol: ${ticker.toUpperCase()}
+Records: ${result.record_count || 0}
+Date Range: ${result.start_date || 'N/A'} to ${result.end_date || 'N/A'}
+
+Data ready for discovery/backtesting.
+`.trim();
+    } else {
+      content = JSON.stringify(result.data || result, null, 2);
+    }
+
+    return {
+      success: true,
+      content,
+      metadata: result
+    };
+  } catch (error: any) {
+    if (error.code === 'ECONNREFUSED') {
+      return {
+        success: false,
+        content: '',
+        error: `Python engine not running at ${PYTHON_SERVER_URL}. Start with: cd python && python server.py`
+      };
+    }
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      return { success: false, content: '', error: 'Data request timed out after 30s' };
+    }
+    return { success: false, content: '', error: `Data fetch error: ${error.message}` };
+  }
+}
+
+/**
+ * Check status of both data engines (Massive + ThetaData)
+ */
+export async function checkDataEnginesStatus(): Promise<ToolResult> {
+  try {
+    safeLog(`[DataRouter] Checking dual-engine status...`);
+
+    const response = await fetch(`${PYTHON_SERVER_URL}/data/engines/status`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        content: '',
+        error: `Status check failed (${response.status})`
+      };
+    }
+
+    const result = await response.json();
+    const massive = result.massive || {};
+    const theta = result.theta || {};
+
+    const content = `
+DUAL-ENGINE DATA ARCHITECTURE STATUS
+====================================
+
+ENGINE A: MASSIVE (The Map)
+---------------------------
+Status: ${massive.available ? '✅ ONLINE' : '❌ OFFLINE'}
+Type: ${massive.type || 'Polygon Historical Data'}
+Purpose: Stock history, OHLCV, market-wide scans, DISCOVERY
+
+ENGINE B: THETADATA (The Sniper)
+--------------------------------
+Status: ${theta.available ? '✅ ONLINE' : '❌ OFFLINE'}
+Terminal: ${theta.status || 'Unknown'}
+Type: ${theta.type || 'ThetaData Live Terminal'}
+Purpose: Live options, real-time Greeks (Vanna/Charm), EXECUTION
+
+ROUTING LOGIC
+-------------
+• stock OR discovery → Engine A (Massive)
+• option AND execution → Engine B (ThetaData)
+• live quotes → Engine B (ThetaData)
+`.trim();
+
+    return {
+      success: true,
+      content,
+      metadata: result
+    };
+  } catch (error: any) {
+    if (error.code === 'ECONNREFUSED') {
+      return {
+        success: false,
+        content: '',
+        error: `Python engine not running at ${PYTHON_SERVER_URL}. Start with: cd python && python server.py`
+      };
+    }
+    return { success: false, content: '', error: `Status check error: ${error.message}` };
+  }
+}
+
 // ==================== BACKUP CLEANUP ====================
 
 export async function cleanupBackups(
@@ -4125,6 +4317,19 @@ Warnings: ${greeks.warnings?.join(', ') || 'None'}
       return getTradeLog(args.run_id);
     case 'download_massive_data':
       return downloadMassiveData(args.ticker, args.date, args.asset_type);
+
+    // Dual-Engine Data Architecture
+    case 'get_market_data':
+      return getMarketData(args.ticker, args.asset_type, args.data_type, args.use_case, {
+        expiration: args.expiration,
+        strike: args.strike,
+        right: args.right,
+        startDate: args.start_date,
+        endDate: args.end_date,
+        tradeDate: args.trade_date
+      });
+    case 'check_data_engines_status':
+      return checkDataEnginesStatus();
 
     // Agent spawning
     case 'spawn_agent':

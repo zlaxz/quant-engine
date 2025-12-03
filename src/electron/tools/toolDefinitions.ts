@@ -714,6 +714,80 @@ CONSTRAINTS:
       },
       required: ['ticker', 'date']
     }
+  },
+  {
+    name: 'get_market_data',
+    description: `DUAL-ENGINE DATA ARCHITECTURE - Unified market data access with intelligent routing.
+
+ENGINE A (The Map): Massive.com/Polygon - For DISCOVERY
+  - Stock history, OHLCV, market-wide scans
+  - Historical options data
+  - Use when: Finding targets, backtesting, bulk analysis
+
+ENGINE B (The Sniper): ThetaData - For EXECUTION
+  - Live options quotes, Greeks (all orders)
+  - Real-time Vanna/Charm (2nd order Greeks)
+  - Use when: Executing trades, precision timing, live Greeks
+
+ROUTING LOGIC:
+  - asset_type="stock" OR use_case="discovery" → Massive (Engine A)
+  - asset_type="option" AND use_case="execution" → ThetaData (Engine B)
+
+ThetaData requires Theta Terminal running locally. Check status first if using live data.`,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        ticker: {
+          type: Type.STRING,
+          description: 'Symbol (e.g., "SPY", "AAPL", "NVDA")'
+        },
+        asset_type: {
+          type: Type.STRING,
+          description: '"stock" or "option". Options route to ThetaData for live data.'
+        },
+        data_type: {
+          type: Type.STRING,
+          description: '"historical" or "live". Live requires ThetaData Terminal.'
+        },
+        use_case: {
+          type: Type.STRING,
+          description: '"discovery" (scans, backtests) or "execution" (live Greeks, precise quotes)'
+        },
+        expiration: {
+          type: Type.STRING,
+          description: 'Option expiration in YYYY-MM-DD format (for options)'
+        },
+        strike: {
+          type: Type.NUMBER,
+          description: 'Option strike price (for specific contract)'
+        },
+        right: {
+          type: Type.STRING,
+          description: '"C" for call, "P" for put (for options)'
+        },
+        trade_date: {
+          type: Type.STRING,
+          description: 'Date for historical data in YYYY-MM-DD format'
+        },
+        start_date: {
+          type: Type.STRING,
+          description: 'Start date for date range queries'
+        },
+        end_date: {
+          type: Type.STRING,
+          description: 'End date for date range queries'
+        }
+      },
+      required: ['ticker']
+    }
+  },
+  {
+    name: 'check_data_engines_status',
+    description: 'Check status of both data engines (Massive/Polygon and ThetaData). Use before requesting live data to ensure ThetaData Terminal is running.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {}
+    }
   }
 ];
 

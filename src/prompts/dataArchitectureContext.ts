@@ -82,6 +82,51 @@ recall_memory("volatility surface analysis")
 
 ---
 
+## 🏗️ DUAL-ENGINE DATA ARCHITECTURE
+
+**Two specialized data engines for different purposes:**
+
+### ENGINE A: MASSIVE (The Map) - DISCOVERY
+| Aspect | Detail |
+|--------|--------|
+| **Source** | Massive.com (Polygon.io rebrand) |
+| **Purpose** | Stock history, OHLCV, market-wide scans |
+| **When to Use** | Discovery phase, backtesting, historical analysis |
+| **Tool** | \`get_market_data\` with \`use_case: "discovery"\` |
+
+### ENGINE B: THETADATA (The Sniper) - EXECUTION
+| Aspect | Detail |
+|--------|--------|
+| **Source** | ThetaData Terminal (local Java app) |
+| **Purpose** | Live options, real-time Greeks (including 2nd order!) |
+| **When to Use** | Execution phase, live trading, precision strikes |
+| **Tool** | \`get_market_data\` with \`use_case: "execution"\` |
+| **Greeks Available** | Delta, Gamma, Theta, Vega, Rho + **Vanna, Charm, Vomma, Veta** |
+
+### UNIFIED DATA ACCESS
+\`\`\`
+get_market_data({
+  ticker: "SPY",
+  asset_type: "option",       // "stock" | "option"
+  data_type: "live",          // "historical" | "live"
+  use_case: "execution",      // "discovery" | "execution"
+  expiration: "2024-12-20",   // for options
+  strike: 500,                // for options
+  right: "C"                  // "C" | "P"
+})
+\`\`\`
+
+### ROUTING LOGIC (Automatic)
+- \`asset_type="stock"\` OR \`use_case="discovery"\` → **Engine A (Massive)**
+- \`asset_type="option"\` AND \`use_case="execution"\` → **Engine B (ThetaData)**
+
+### CHECK ENGINE STATUS
+\`\`\`
+check_data_engines_status()  // Shows both engines' availability
+\`\`\`
+
+---
+
 ## DATA SOURCES (All Ready)
 
 | Source | Location | Status |
@@ -90,7 +135,8 @@ recall_memory("volatility surface analysis")
 | **Options Parquet** | \`/Volumes/VelocityData/processed/options_daily/SPY/\` | 2022-2025 |
 | **Stock Parquet** | \`/Volumes/VelocityData/processed/stock_daily/SPY/\` | 2023-2025 |
 | **Minute Data** | \`/Volumes/VelocityData/processed/minute_data/SPY/\` | 502 files |
-| **Massive.com** | \`download_massive_data\` tool | On-demand fetch |
+| **Massive.com** | \`get_market_data\` with discovery use_case | On-demand fetch |
+| **ThetaData** | \`get_market_data\` with execution use_case | Live options/Greeks |
 
 ---
 

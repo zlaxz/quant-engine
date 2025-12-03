@@ -58,6 +58,7 @@ import { StaleMemoryInjector } from './memory/staleMemoryInjector';
 import { TriggerRecall } from './memory/triggerRecall';
 import { initClaudeCodeResultWatcher } from './ipc-handlers/claudeCodeResultWatcher';
 import { initializeMemoryScribe, MemoryScribe } from './services/MemoryScribe';
+import { initializeThetaTerminal, shutdownThetaTerminal } from './services/ThetaTerminalService';
 import OpenAI from 'openai';
 
 // __filename and __dirname already defined at top of file for dotenv
@@ -436,6 +437,16 @@ app.whenReady().then(() => {
       // Non-fatal - app continues without scribe
     }
 
+    // Initialize ThetaData Terminal (Engine B - The Sniper)
+    // Auto-launches if THETADATA_AUTO_LAUNCH=true in .env
+    try {
+      await initializeThetaTerminal();
+      console.log('[Main] ThetaData Terminal service initialized');
+    } catch (thetaError) {
+      console.error('[Main] ThetaData Terminal failed to start:', thetaError);
+      // Non-fatal - app continues without live options data
+    }
+
     // Validate Python environment
     const validation = await validatePythonEnvironment();
     if (!validation.valid) {
@@ -477,6 +488,14 @@ app.on('before-quit', async () => {
   // Stop Memory Scribe
   if (memoryScribe) {
     await memoryScribe.stopWatching();
+  }
+
+  // Stop ThetaData Terminal
+  try {
+    await shutdownThetaTerminal();
+    console.log('[Main] ThetaData Terminal stopped');
+  } catch (thetaError) {
+    console.error('[Main] Error stopping ThetaData Terminal:', thetaError);
   }
 
   // Stop memory daemon gracefully
