@@ -37,10 +37,11 @@ ON session_contexts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_session_contexts_model_created
 ON session_contexts(model, created_at DESC);
 
--- Query pattern: Get all context for active sessions (with time filter)
+-- Query pattern: Get all context for active sessions
+-- Note: Partial indexes with NOW() aren't allowed (non-immutable)
+-- Using regular index instead - filter in application layer
 CREATE INDEX IF NOT EXISTS idx_session_contexts_recent_sessions
-ON session_contexts(session_id, created_at DESC)
-WHERE created_at > NOW() - INTERVAL '7 days';
+ON session_contexts(session_id, created_at DESC);
 
 -- ============================================================================
 -- STEP 3: Add comments for documentation
@@ -49,4 +50,4 @@ WHERE created_at > NOW() - INTERVAL '7 days';
 COMMENT ON INDEX idx_session_contexts_session_role IS 'Optimizes role-based context retrieval within sessions';
 COMMENT ON INDEX idx_session_contexts_created_desc IS 'Optimizes time-based queries and cleanup operations';
 COMMENT ON INDEX idx_session_contexts_model_created IS 'Optimizes model-specific context history queries';
-COMMENT ON INDEX idx_session_contexts_recent_sessions IS 'Partial index for active session queries';
+COMMENT ON INDEX idx_session_contexts_recent_sessions IS 'Index for session-based queries (filter in app layer)';

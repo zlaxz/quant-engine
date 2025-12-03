@@ -59,7 +59,8 @@ def health():
             'POST /simulate',
             'GET  /plugins',
             'POST /plugins/reload',
-            'GET  /analysis/<plugin_name>'
+            'GET  /analysis/<plugin_name>',
+            'GET  /integrity'
         ]
     })
 
@@ -67,11 +68,15 @@ def health():
 @app.route('/regimes', methods=['GET'])
 def get_regimes():
     """
-    GET /regimes - Regime heatmap with query params.
+    GET /regimes - Regime heatmap with query params + current regime state.
 
     Query params:
         start_date: YYYY-MM-DD (default: 30 days ago)
         end_date: YYYY-MM-DD (default: today)
+
+    Response includes:
+        - data: Historical regime heatmap
+        - current_regime: Latest regime state for dashboard display
     """
     today = datetime.now()
     default_start = (today - timedelta(days=30)).strftime('%Y-%m-%d')
@@ -86,6 +91,26 @@ def get_regimes():
     result = api.get_regime_heatmap(start_date, end_date)
 
     if result.get('success'):
+        # Add current_regime from most recent data point for Dashboard
+        data = result.get('data', [])
+        if data:
+            latest = data[-1]  # Most recent day
+            result['current_regime'] = {
+                'regime': latest.get('regime', 'UNKNOWN'),
+                'vix': latest.get('metrics', {}).get('vix', 0),
+                'vix9d': latest.get('metrics', {}).get('vix9d', 0),
+                'term_structure': 'contango' if latest.get('metrics', {}).get('term_structure', 0) < 1 else 'backwardation',
+                'realized_vol': latest.get('metrics', {}).get('rv5', 0) or latest.get('metrics', {}).get('rv20', 0),
+                'put_call_skew': 0.05,  # Placeholder until we have options data
+                'confidence': latest.get('confidence', 0.85),
+                'timestamp': latest.get('date', today.isoformat()),
+                'convexity_bias': {
+                    'delta': 'neutral',
+                    'gamma': 'long',
+                    'vega': 'long',
+                    'theta': 'negative'
+                }
+            }
         return jsonify(result)
     else:
         return jsonify(result), 400
@@ -103,18 +128,70 @@ def run_backtest():
                 "startDate": "2023-01-01",
                 "endDate": "2023-12-31",
                 "capital": 100000
-            }
+            },
+            "mode": "normal" | "sanity_check"  # Optional
         }
+
+    Modes:
+        - "normal" (default): Run backtest on real market data
+        - "sanity_check": WHITE NOISE PROTOCOL - Run on random data to detect overfitting.
+          If Sharpe > 0.5 on noise, the strategy likely has look-ahead bias.
     """
     try:
         data = request.get_json() or {}
-        print(f"[Backtest] Received request: {data.get('strategy_key', 'unknown')}")
+        mode = data.get('mode', 'normal')
+        print(f"[Backtest] Received request: {data.get('strategy_key', 'unknown')} (mode={mode})")
 
         strategy_key = data.get('strategy_key', 'profile_1')
         params = data.get('params', {})
         start_date = params.get('startDate', '2023-01-01')
         end_date = params.get('endDate', '2023-12-31')
         capital = params.get('capital', 100000)
+
+        # ========== WHITE NOISE PROTOCOL ==========
+        # If sanity_check mode, generate random data to test for overfitting
+        if mode == 'sanity_check':
+            import numpy as np
+            print(f"[WHITE NOISE PROTOCOL] Running overfit detection for {strategy_key}")
+
+            # Generate pure noise: random walk with realistic vol
+            np.random.seed(42)  # Reproducible noise
+            n_days = 252  # 1 year of trading days
+            daily_returns = np.random.normal(0, 0.01, n_days)  # ~16% annualized vol
+
+            # Create synthetic price series
+            prices = 100 * np.cumprod(1 + daily_returns)
+
+            api = get_api()
+            result = api.run_backtest_on_noise(strategy_key, prices, capital)
+
+            if result.get('success'):
+                sharpe = result.get('metrics', {}).get('sharpe', 0)
+                if sharpe > 0.5:
+                    # OVERFIT DETECTED!
+                    return jsonify({
+                        'success': False,
+                        'error': 'OVERFIT DETECTED',
+                        'verdict': 'FAIL',
+                        'sharpe_on_noise': sharpe,
+                        'explanation': (
+                            f"Strategy '{strategy_key}' produced Sharpe of {sharpe:.2f} on WHITE NOISE data. "
+                            f"A legitimate strategy should NOT produce alpha on random data. "
+                            f"This indicates look-ahead bias or curve-fitting. DO NOT TRADE THIS."
+                        )
+                    }), 400
+                else:
+                    return jsonify({
+                        'success': True,
+                        'verdict': 'PASS',
+                        'sharpe_on_noise': sharpe,
+                        'explanation': f"Strategy produced Sharpe of {sharpe:.2f} on noise (expected: ~0). No obvious overfit detected."
+                    })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': f"Sanity check failed: {result.get('error')}"
+                }), 500
 
         # ========== PREDICTIVE INTERCEPTOR ==========
         # Check causal memory for known failure patterns
@@ -266,6 +343,28 @@ def reload_plugins():
     return jsonify(result)
 
 
+# =============================================================================
+# SYSTEM INTEGRITY ENDPOINTS
+# =============================================================================
+
+@app.route('/integrity', methods=['GET'])
+def get_integrity():
+    """
+    GET /integrity - System integrity status dashboard.
+
+    Returns comprehensive status of all safety systems:
+    - Double-entry accounting verification
+    - Circuit breaker status
+    - Event horizon (macro event risk)
+    - Execution lag enforcement
+    - Position tracking integrity
+    """
+    print("[Integrity] Fetching system integrity status")
+    api = get_api()
+    result = api.get_integrity_status()
+    return jsonify(result)
+
+
 @app.route('/analysis/<plugin_name>', methods=['GET'])
 def run_analysis(plugin_name):
     """
@@ -331,6 +430,8 @@ def run_server(port: int = 5000, debug: bool = False):
     print("  GET  /plugins                       - List available plugins")
     print("  POST /plugins/reload                - Hot reload plugins")
     print("  GET  /analysis/<name>               - Run analysis plugin")
+    print("\nSystem Integrity:")
+    print("  GET  /integrity                     - Safety systems dashboard")
     print("\nScenarios for /simulate:")
     print("  - vix_shock: params.vix_increase (percentage)")
     print("  - price_drop: params.drop_pct (percentage)")

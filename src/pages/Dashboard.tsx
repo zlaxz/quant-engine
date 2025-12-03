@@ -32,6 +32,15 @@ import { BacktestRunner } from '@/components/dashboard/BacktestRunner';
 import { TokenSpendTracker } from '@/components/dashboard/TokenSpendTracker';
 import { MemoryBrowser } from '@/components/dashboard/MemoryBrowser';
 
+// Guardian Architecture components
+import { MissionControl } from '@/components/dashboard/MissionControl';
+import { GraduationTracker } from '@/components/dashboard/GraduationTracker';
+import { SystemIntegrity } from '@/components/dashboard/SystemIntegrity';
+import { SwarmHiveMonitor } from '@/components/swarm/SwarmHiveMonitor';
+
+// Python API URL
+const PYTHON_API_URL = 'http://localhost:5001';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -132,27 +141,53 @@ function useDashboardData() {
         setBriefings(cards);
       }
 
-      // Simulate regime state from latest market data
-      // In production, this would come from a real-time market data feed
-      setRegimeState({
-        regime: determineCurrentRegime(strategies),
-        vix: 18.5 + Math.random() * 5,
-        vix9d: 17.2 + Math.random() * 4,
-        termStructure: 'contango',
-        realizedVol: 14.3 + Math.random() * 3,
-        putCallSkew: 0.05 + Math.random() * 0.1,
-        confidence: 0.85 + Math.random() * 0.1,
-        timestamp: new Date().toISOString(),
-      });
+      // Fetch regime state from Python API
+      try {
+        const regimeResponse = await fetch(`${PYTHON_API_URL}/regimes`);
+        if (regimeResponse.ok) {
+          const regimeData = await regimeResponse.json();
+          if (regimeData.current_regime) {
+            setRegimeState({
+              regime: regimeData.current_regime.regime || determineCurrentRegime(strategies),
+              vix: regimeData.current_regime.vix || 0,
+              vix9d: regimeData.current_regime.vix9d || 0,
+              termStructure: regimeData.current_regime.term_structure || 'unknown',
+              realizedVol: regimeData.current_regime.realized_vol || 0,
+              putCallSkew: regimeData.current_regime.put_call_skew || 0,
+              confidence: regimeData.current_regime.confidence || 0,
+              timestamp: regimeData.current_regime.timestamp || new Date().toISOString(),
+            });
 
-      // Simulate convexity bias based on active strategies
-      const activeStrategies = strategies.filter((s) => s.status === 'active');
-      setConvexityBias({
-        delta: activeStrategies.length > 2 ? 'short' : 'neutral',
-        gamma: activeStrategies.length > 0 ? 'long' : 'neutral',
-        vega: 'long',
-        theta: 'negative',
-      });
+            if (regimeData.current_regime.convexity_bias) {
+              setConvexityBias(regimeData.current_regime.convexity_bias);
+            }
+          }
+        }
+      } catch (regimeErr) {
+        console.warn('Failed to fetch regime from Python API:', regimeErr);
+        // Fall back to deriving regime from strategy distribution
+        setRegimeState({
+          regime: determineCurrentRegime(strategies),
+          vix: 0,
+          vix9d: 0,
+          termStructure: 'unknown',
+          realizedVol: 0,
+          putCallSkew: 0,
+          confidence: 0,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Derive convexity bias from active strategies if not set from API
+      if (!convexityBias) {
+        const activeStrategies = strategies.filter((s) => s.status === 'active');
+        setConvexityBias({
+          delta: activeStrategies.length > 2 ? 'short' : 'neutral',
+          gamma: activeStrategies.length > 0 ? 'long' : 'neutral',
+          vega: 'long',
+          theta: 'negative',
+        });
+      }
 
       setIsLoading(false);
     } catch (err) {
@@ -334,6 +369,7 @@ export default function Dashboard() {
           <Tabs defaultValue="overview" className="space-y-4">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="guardian">Guardian</TabsTrigger>
               <TabsTrigger value="strategies">Strategies</TabsTrigger>
               <TabsTrigger value="trading">Trading</TabsTrigger>
               <TabsTrigger value="infrastructure">Infrastructure</TabsTrigger>
@@ -367,6 +403,32 @@ export default function Dashboard() {
                     <MorningBriefingViewer />
                   </div>
                 </div>
+              </div>
+            </TabsContent>
+
+            {/* Guardian Tab - Goal-Seeking Architecture */}
+            <TabsContent value="guardian" className="space-y-4">
+              {/* Top Row: Mission Control & System Integrity */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Mission Control - The Input */}
+                <div className="lg:col-span-2 h-[400px]">
+                  <MissionControl />
+                </div>
+
+                {/* System Integrity - The Safety */}
+                <div className="h-[400px]">
+                  <SystemIntegrity />
+                </div>
+              </div>
+
+              {/* Middle Row: Graduation Tracker */}
+              <div className="h-[350px]">
+                <GraduationTracker />
+              </div>
+
+              {/* Bottom Row: Swarm Hive Monitor */}
+              <div className="h-[450px]">
+                <SwarmHiveMonitor />
               </div>
             </TabsContent>
 

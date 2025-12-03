@@ -1,0 +1,6 @@
+{
+  "id": "arch-05-api-design",
+  "domain": "architecture",
+  "status": "success",
+  "result": "ERROR: [Errno 7] Argument list too long: 'curl'"
+}

@@ -372,6 +372,78 @@ export const VALIDATION_TOOLS: FunctionDeclaration[] = [
       },
       required: ['path']
     }
+  },
+  {
+    name: 'audit_strategy_robustness',
+    description: 'THE RED TEAM PROTOCOL. Runs a "Red Team" attack on a strategy to detect overfitting and fragility. Tests against random noise, parameter shifts, and regime flips. MUST BE RUN before risking real capital. If this audit fails, the CIO VETOES the trade.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        strategy_key: {
+          type: Type.STRING,
+          description: 'The strategy ID to attack (e.g., "profile_1", "skew_convexity_v1")'
+        },
+        aggressiveness: {
+          type: Type.STRING,
+          description: 'Attack level: "standard" (default) or "nuclear" (for production readiness)'
+        }
+      },
+      required: ['strategy_key']
+    }
+  },
+  // ============================================================
+  // LIFELINE: Mobile Alerts via Pushover
+  // ============================================================
+  {
+    name: 'send_mobile_alert',
+    description: 'THE LIFELINE. Sends a push notification to Zach\'s phone via Pushover. Use for CRITICAL alerts: drawdown warnings, stop-loss triggers, strategy failures, or anything requiring immediate human attention. This is the "WAKE UP ZACH" button.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        title: {
+          type: Type.STRING,
+          description: 'Alert title (e.g., "DRAWDOWN WARNING", "STRATEGY FAILURE")'
+        },
+        message: {
+          type: Type.STRING,
+          description: 'Alert message with key details'
+        },
+        priority: {
+          type: Type.STRING,
+          description: '"emergency" (loud alarm, requires ack), "high" (bypass quiet hours), "normal" (default), "low" (no sound)'
+        },
+        sound: {
+          type: Type.STRING,
+          description: 'Sound name: "siren", "cashregister", "spacealarm", "tugboat", etc. Default: "pushover"'
+        }
+      },
+      required: ['title', 'message']
+    }
+  },
+  // ============================================================
+  // GRADUATION GATEKEEPER: Paper → Shadow → Live
+  // ============================================================
+  {
+    name: 'live_trading_gateway',
+    description: 'THE GRADUATION GATEKEEPER. Controls access to live trading. Strategies MUST graduate through stages: PAPER (backtest), SHADOW (paper trading with real data), LIVE (real money). This tool checks the strategy\'s graduation status before allowing any live trades. If the strategy hasn\'t passed Shadow stage, the CIO BLOCKS the trade.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        strategy_key: {
+          type: Type.STRING,
+          description: 'The strategy ID to check graduation status'
+        },
+        action: {
+          type: Type.STRING,
+          description: '"check_status" (see current stage), "promote" (request graduation to next stage), "demote" (force back to paper after failure)'
+        },
+        reason: {
+          type: Type.STRING,
+          description: 'Required for promote/demote - justification for the action'
+        }
+      },
+      required: ['strategy_key', 'action']
+    }
   }
 ];
 
@@ -762,7 +834,7 @@ export const QUANT_TOOLS: FunctionDeclaration[] = [
   },
   {
     name: 'get_portfolio_greeks',
-    description: 'Get current portfolio Greeks exposure. Returns net delta, gamma, theta, and vega across all active positions, plus any exposure warnings. Use this before recommending new trades to understand existing risk.',
+    description: 'Get LIVE portfolio Greeks exposure from the active engine. Returns actual net delta, gamma, theta, and vega across all active positions. Returns error if engine is offline. DO NOT HALLUCINATE VALUES - if data returns zeros or empty, that is the truth.',
     parameters: {
       type: Type.OBJECT,
       properties: {}
@@ -824,10 +896,11 @@ export const MAINTENANCE_TOOLS: FunctionDeclaration[] = [
 ];
 
 // Response tool - allows model to respond directly without using other tools
+// IMPORTANT: Description discourages using this to avoid real work
 export const RESPONSE_TOOLS: FunctionDeclaration[] = [
   {
     name: 'respond_directly',
-    description: 'USE THIS for most interactions: conversations, explanations, questions, greetings, advice, opinions, follow-ups. This is the DEFAULT choice. Only use other tools when you specifically need to read/write files or run commands.',
+    description: 'Use ONLY for final text answers or pure conversation. If you need to perform ANY action (read files, search obsidian, query data, check regime), USE THE SPECIFIC TOOL INSTEAD. Do NOT use this to describe what you will do - just use the tool and show the result.',
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -1116,24 +1189,35 @@ export const MEMORY_TOOLS: FunctionDeclaration[] = [
   }
 ];
 
-// All tools combined - respond_directly FIRST so it's preferred
+// All tools combined (fallback when context is ambiguous)
+// NOTE: RESPONSE_TOOLS removed - with AUTO mode, model can respond naturally
 // CLAUDE_TOOLS high priority - enables multi-model architecture
+// ALL_TOOLS - REORDERED for "Action First" priority
+// LLMs are biased by tool order - research tools FIRST, talk tools LAST
 export const ALL_TOOLS: FunctionDeclaration[] = [
-  ...RESPONSE_TOOLS,
-  ...CLAUDE_TOOLS,  // Multi-model execution via Claude Code CLI
+  // 1. Research & Memory (Prioritized - check knowledge FIRST)
   ...OBSIDIAN_TOOLS,  // Knowledge base access
-  ...KNOWLEDGE_GRAPH_TOOLS,  // Entity relationships
   ...MEMORY_TOOLS,  // Supabase memory save/recall
+  ...KNOWLEDGE_GRAPH_TOOLS,  // Entity relationships
+
+  // 2. Data & Quant (The Core Job)
   ...QUANT_TOOLS,   // High-level quant tools for regime/strategy analysis
-  ...FILE_TOOLS,
+  ...DATA_TOOLS,
   ...PYTHON_TOOLS,
+  ...BACKTEST_TOOLS,
+
+  // 3. Execution & Agents
+  ...CLAUDE_TOOLS,  // Multi-model execution via Claude Code CLI
+  ...AGENT_TOOLS,
+
+  // 4. Utility (Lower priority)
+  ...FILE_TOOLS,
   ...GIT_TOOLS,
   ...VALIDATION_TOOLS,
   ...ANALYSIS_TOOLS,
-  ...BACKTEST_TOOLS,
-  ...DATA_TOOLS,
-  ...AGENT_TOOLS,
   ...MAINTENANCE_TOOLS
+
+  // NOTE: RESPONSE_TOOLS removed - with AUTO mode, model responds naturally
 ];
 
 // Tool names by category for filtering

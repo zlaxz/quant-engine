@@ -146,9 +146,10 @@ export async function assembleCIOPrompt(
     // 1. Identity Core (~200 lines, ~800 tokens)
     CIO_IDENTITY_CORE,
 
-    // 2. Data Architecture - WHERE EVERYTHING IS (~50 lines)
-    // This prevents unnecessary exploration/Claude Code calls
-    DATA_ARCHITECTURE_CONTEXT,
+    // 2. OPS_MANUAL - CRITICAL: Always include Data Atlas & Schema
+    // This fixes "disorientation" - Gemini must KNOW the environment
+    // Replaced DATA_ARCHITECTURE_CONTEXT with full OPS_MANUAL
+    OPS_MANUAL,
 
     // 3. Mode-specific directives (~30 lines)
     cioStateMachine.getModeDirectives(),
@@ -165,10 +166,7 @@ export async function assembleCIOPrompt(
     TOOL_REFERENCE
   ].filter(Boolean); // Remove empty strings
 
-  // 6. Ops manual only when explicitly requested (adds ~200 lines)
-  if (options.includeOpsManual) {
-    parts.push(OPS_MANUAL);
-  }
+  // OPS_MANUAL now included by default above - no conditional needed
 
   return parts.join('\n');
 }
@@ -181,9 +179,11 @@ export function assembleCIOPromptSync(
   _mode: CIOMode = 'INTAKE',
   sessionContext?: string
 ): string {
-  return `${CIO_IDENTITY_CORE}
+  // CRITICAL: OPS_MANUAL FIRST - Gemini must KNOW the environment
+  // Contains Data Atlas, Schema, and operational context
+  return `${OPS_MANUAL}
 
-${DATA_ARCHITECTURE_CONTEXT}
+${CIO_IDENTITY_CORE}
 
 ${cioStateMachine.getModeDirectives()}
 

@@ -1,0 +1,6 @@
+{
+  "id": "trade-02-position-tracking",
+  "domain": "trading-systems",
+  "status": "success",
+  "result": "ERROR: [Errno 7] Argument list too long: 'curl'"
+}

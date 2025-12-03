@@ -22,6 +22,7 @@ let memoryDaemon: MemoryDaemon | null = null;
 let recallEngine: RecallEngine | null = null;
 let extractionListener: ((data: { count: number; sessionId: string }) => void) | null = null;
 let errorListener: ((error: Error) => void) | null = null;
+let handlersRegistered = false;
 
 export function setMemoryServices(daemon: MemoryDaemon, recall: RecallEngine): void {
   memoryDaemon = daemon;
@@ -29,6 +30,12 @@ export function setMemoryServices(daemon: MemoryDaemon, recall: RecallEngine): v
 }
 
 export function registerMemoryHandlers(): void {
+  // Prevent duplicate registration
+  if (handlersRegistered) {
+    console.warn('[MemoryHandlers] Handlers already registered, skipping');
+    return;
+  }
+
   // Memory recall - the KEY handler for automatic injection
   ipcMain.handle(
     'memory:recall',
@@ -157,6 +164,9 @@ export function registerMemoryHandlers(): void {
     memoryDaemon.on('memories-extracted', extractionListener);
     memoryDaemon.on('error', errorListener);
   }
+
+  // Mark handlers as registered
+  handlersRegistered = true;
 
   // Analysis and warning handlers (require separate initialization)
   // These will be registered after analysis modules are initialized in main.ts
@@ -302,4 +312,47 @@ export function registerAnalysisHandlers(
       return { success: false, error: error.message };
     }
   });
+}
+
+/**
+ * Clean up all IPC handlers and event listeners
+ * Call this when the app is shutting down or when handlers need to be refreshed
+ */
+export function cleanupMemoryHandlers(): void {
+  // Remove all ipcMain handlers registered by this module
+  ipcMain.removeHandler('memory:recall');
+  ipcMain.removeHandler('memory:formatForPrompt');
+  ipcMain.removeHandler('memory:warmCache');
+  ipcMain.removeHandler('memory:daemon:start');
+  ipcMain.removeHandler('memory:daemon:stop');
+  ipcMain.removeHandler('memory:daemon:status');
+
+  // Remove analysis handlers if they were registered
+  ipcMain.removeHandler('analysis:check-overfitting');
+  ipcMain.removeHandler('analysis:get-warnings');
+  ipcMain.removeHandler('memory:get-stale');
+  ipcMain.removeHandler('memory:check-triggers');
+  ipcMain.removeHandler('analysis:detect-patterns');
+  ipcMain.removeHandler('analysis:tag-regime');
+  ipcMain.removeHandler('memory:mark-recalled');
+
+  // Clean up MemoryDaemon event listeners
+  if (memoryDaemon && extractionListener) {
+    memoryDaemon.off('memories-extracted', extractionListener);
+    extractionListener = null;
+  }
+
+  if (memoryDaemon && errorListener) {
+    memoryDaemon.off('error', errorListener);
+    errorListener = null;
+  }
+
+  // Reset service references
+  memoryDaemon = null;
+  recallEngine = null;
+
+  // Reset registration flag
+  handlersRegistered = false;
+
+  console.log('[MemoryHandlers] Cleaned up all handlers and listeners');
 }

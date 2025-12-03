@@ -48,6 +48,15 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from supabase import create_client, Client
+from enum import Enum
+
+# Red Team Swarm imports (for strategy auditing)
+try:
+    from scripts.red_team_swarm import PERSONAS as RED_TEAM_PERSONAS
+    from engine.swarm import run_swarm_sync
+    RED_TEAM_AVAILABLE = True
+except ImportError:
+    RED_TEAM_AVAILABLE = False
 
 # Shadow Trader imports
 try:
@@ -112,6 +121,45 @@ class DaemonConfig:
             logger.warning(f"DATA_DIR {self.data_dir} does not exist - will create")
             self.data_dir.mkdir(parents=True, exist_ok=True)
         return True
+
+
+# ============================================================================
+# GOAL-SEEKING ARCHITECTURE
+# ============================================================================
+
+class SwarmDispatchType(Enum):
+    """Types of swarm dispatches for autonomous decision engine."""
+    AGGRESSIVE = 'aggressive'   # High exploration, seeking alpha (low returns situation)
+    RISK = 'risk'               # Focus on drawdown reduction (high drawdown situation)
+    NOVELTY = 'novelty'         # Explore new strategy types (idle situation)
+    REFINEMENT = 'refinement'   # Fine-tune parameters on promising strategies
+    RED_TEAM = 'red_team'       # Audit strategies before promotion
+
+
+@dataclass
+class Mission:
+    """Active mission target from Supabase."""
+    id: str
+    name: str
+    objective: str
+    target_metric: str          # 'sharpe', 'daily_return', 'sortino', 'cagr'
+    target_value: float         # The number to hit
+    target_operator: str        # 'gte', 'lte', 'eq'
+    max_drawdown: float         # Maximum acceptable drawdown
+    current_best_value: float   # Best achieved so far
+    current_best_strategy_id: Optional[str]
+    gap_to_target: float        # How far we are from the goal
+    priority: int
+
+
+@dataclass
+class AutonomousDecision:
+    """Decision made by the autonomous decision engine."""
+    dispatch_type: SwarmDispatchType
+    agent_count: int
+    objective: str
+    reasoning: str
+    context: Dict[str, Any]
 
 
 # ============================================================================
@@ -1374,10 +1422,589 @@ class ResearchDirector:
         logger.info(f"   Parallel workers: {config.parallel_workers}")
         logger.info(f"   Fitness threshold: {config.fitness_threshold}")
         logger.info(f"   Shadow Trading: {'ENABLED' if self.shadow_trader else 'DISABLED'}")
+        logger.info(f"   Red Team Audits: {'ENABLED' if RED_TEAM_AVAILABLE else 'DISABLED'}")
         logger.info("=" * 60)
 
+        # Mission tracking
+        self._current_mission: Optional[Mission] = None
+        self._last_mission_check = datetime.min
+        self._mission_check_interval = 60  # Check mission every 60 seconds
+
     # ========================================================================
-    # 1. THE RECRUITER - Replenish Strategy Pool
+    # 0. GOAL-SEEKING ARCHITECTURE - The Hunter's Brain
+    # ========================================================================
+
+    async def get_active_mission(self) -> Optional[Mission]:
+        """
+        Fetch the highest-priority active mission from Supabase.
+        Uses the get_active_mission() RPC function from the migrations.
+
+        Returns:
+            Mission object if one exists, None otherwise
+        """
+        try:
+            result = self.supabase.rpc('get_active_mission').execute()
+
+            if not result.data or len(result.data) == 0:
+                logger.debug("No active missions found")
+                return None
+
+            row = result.data[0]
+            mission = Mission(
+                id=row['mission_id'],
+                name=row['name'],
+                objective=row.get('objective', f"Achieve {row['target_metric']} {row['target_operator']} {row['target_value']}"),
+                target_metric=row['target_metric'],
+                target_value=row['target_value'],
+                target_operator=row['target_operator'],
+                max_drawdown=row['max_drawdown'],
+                current_best_value=row['current_best_value'] or 0.0,
+                current_best_strategy_id=row.get('current_best_strategy_id'),
+                gap_to_target=row['gap_to_target'] or row['target_value'],
+                priority=row['priority']
+            )
+
+            logger.info(f"🎯 Active Mission: {mission.name}")
+            logger.info(f"   Target: {mission.target_metric} {mission.target_operator} {mission.target_value}")
+            logger.info(f"   Current Best: {mission.current_best_value:.4f}")
+            logger.info(f"   Gap to Target: {mission.gap_to_target:.4f}")
+
+            self._current_mission = mission
+            return mission
+
+        except Exception as e:
+            logger.error(f"Failed to fetch active mission: {e}")
+            return None
+
+    async def evaluate_mission_progress(self, mission: Mission) -> Dict[str, Any]:
+        """
+        Evaluate current progress towards the mission target.
+        Compares best Shadow Strategy performance against mission goals.
+
+        Returns:
+            Dict with progress metrics and recommended action
+        """
+        logger.info(f"📊 Evaluating mission progress: {mission.name}")
+
+        # Get the best performing shadow strategy
+        try:
+            # Fetch top strategy by the mission's target metric
+            metric_column = {
+                'sharpe': 'sharpe_ratio',
+                'daily_return': 'avg_daily_return',
+                'sortino': 'sortino_ratio',
+                'cagr': 'cagr',
+                'win_rate': 'win_rate'
+            }.get(mission.target_metric, 'sharpe_ratio')
+
+            result = self.supabase.table('strategy_genome').select(
+                'id', 'name', 'sharpe_ratio', 'avg_daily_return', 'sortino_ratio',
+                'cagr', 'win_rate', 'max_drawdown', 'fitness_score'
+            ).in_(
+                'status', ['active', 'shadow']
+            ).order(
+                metric_column, desc=True
+            ).limit(1).execute()
+
+            if not result.data:
+                return {
+                    'status': 'no_strategies',
+                    'gap': mission.target_value,
+                    'action': 'bootstrap',
+                    'reason': 'No active/shadow strategies exist'
+                }
+
+            best_strategy = result.data[0]
+            current_value = best_strategy.get(metric_column, 0.0) or 0.0
+            current_drawdown = best_strategy.get('max_drawdown', 0.0) or 0.0
+
+            # Calculate gap
+            if mission.target_operator == 'gte':
+                gap = mission.target_value - current_value
+                target_met = current_value >= mission.target_value
+            elif mission.target_operator == 'lte':
+                gap = current_value - mission.target_value
+                target_met = current_value <= mission.target_value
+            else:  # eq
+                gap = abs(mission.target_value - current_value)
+                target_met = gap < 0.01
+
+            # Check drawdown constraint
+            drawdown_ok = current_drawdown >= mission.max_drawdown  # Drawdowns are negative
+
+            progress = {
+                'status': 'complete' if target_met and drawdown_ok else 'hunting',
+                'target_met': target_met,
+                'drawdown_ok': drawdown_ok,
+                'current_value': current_value,
+                'target_value': mission.target_value,
+                'gap': gap,
+                'current_drawdown': current_drawdown,
+                'max_drawdown_allowed': mission.max_drawdown,
+                'best_strategy_id': best_strategy['id'],
+                'best_strategy_name': best_strategy['name']
+            }
+
+            if target_met and drawdown_ok:
+                # Update mission as complete
+                await self._complete_mission(mission, best_strategy['id'], current_value)
+                progress['action'] = 'complete'
+                progress['reason'] = 'Mission target achieved!'
+                logger.info(f"🎉 MISSION COMPLETE: {mission.name}")
+            else:
+                progress['action'] = 'continue_hunting'
+                if not target_met:
+                    progress['reason'] = f"Gap of {gap:.4f} to target"
+                else:
+                    progress['reason'] = f"Drawdown {current_drawdown:.2%} exceeds limit {mission.max_drawdown:.2%}"
+
+            return progress
+
+        except Exception as e:
+            logger.error(f"Error evaluating mission progress: {e}")
+            return {
+                'status': 'error',
+                'error': str(e),
+                'action': 'retry'
+            }
+
+    async def _complete_mission(
+        self,
+        mission: Mission,
+        strategy_id: str,
+        final_value: float
+    ) -> None:
+        """Mark a mission as complete in the database."""
+        try:
+            self.supabase.table('missions').update({
+                'status': 'completed',
+                'current_best_strategy_id': strategy_id,
+                'current_best_value': final_value,
+                'completed_at': datetime.utcnow().isoformat()
+            }).eq('id', mission.id).execute()
+
+            logger.info(f"✅ Mission {mission.name} marked as complete")
+
+        except Exception as e:
+            logger.error(f"Failed to mark mission complete: {e}")
+
+    def autonomous_decision_engine(
+        self,
+        mission: Mission,
+        progress: Dict[str, Any]
+    ) -> AutonomousDecision:
+        """
+        The Brain: Decide what type of swarm to dispatch based on current state.
+
+        Decision Matrix:
+        - Low returns → AGGRESSIVE (seek alpha)
+        - High drawdown → RISK (reduce exposure)
+        - Idle/stagnant → NOVELTY (explore new strategies)
+        - Close to target → REFINEMENT (fine-tune parameters)
+        - Strategies ready → RED_TEAM (audit before promotion)
+
+        Args:
+            mission: Current mission target
+            progress: Progress evaluation from evaluate_mission_progress()
+
+        Returns:
+            AutonomousDecision with dispatch type and parameters
+        """
+        gap = progress.get('gap', float('inf'))
+        current_value = progress.get('current_value', 0.0)
+        current_drawdown = progress.get('current_drawdown', 0.0)
+        target_value = mission.target_value
+
+        # Calculate normalized gap (0 = at target, 1 = very far)
+        gap_ratio = abs(gap) / max(abs(target_value), 0.001)
+
+        context = {
+            'gap': gap,
+            'gap_ratio': gap_ratio,
+            'current_value': current_value,
+            'target_value': target_value,
+            'current_drawdown': current_drawdown,
+            'max_drawdown_allowed': mission.max_drawdown,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+
+        # Decision logic
+        # Note: drawdowns are negative values, so "exceeded" means MORE negative
+        # If current_drawdown (-25%) < max_drawdown (-20%), constraint is violated
+        if current_drawdown < mission.max_drawdown:
+            # Drawdown exceeded - focus on risk reduction
+            return AutonomousDecision(
+                dispatch_type=SwarmDispatchType.RISK,
+                agent_count=15,
+                objective=f"""CRITICAL: Current drawdown ({current_drawdown:.2%}) exceeds limit ({mission.max_drawdown:.2%}).
+Focus on strategies with:
+- Tighter stop losses
+- Smaller position sizes
+- More defensive entry criteria
+- Volatility filters to avoid high-risk periods
+Target: Reduce drawdown while maintaining {mission.target_metric} near {current_value:.4f}""",
+                reasoning="Drawdown constraint violated - pivoting to risk reduction",
+                context=context
+            )
+
+        if gap_ratio > 0.5:
+            # Far from target - be aggressive
+            return AutonomousDecision(
+                dispatch_type=SwarmDispatchType.AGGRESSIVE,
+                agent_count=20,
+                objective=f"""HUNT AGGRESSIVELY: Target {mission.target_metric} is {target_value}, current is {current_value:.4f}.
+Gap: {gap:.4f} ({gap_ratio:.1%} away from target)
+Explore:
+- Higher leverage strategies
+- More volatile instruments
+- Momentum breakout systems
+- Gamma/convexity plays
+- Novel entry signals
+Maximum drawdown allowed: {mission.max_drawdown:.2%}""",
+                reasoning=f"Large gap ({gap_ratio:.1%}) to target requires aggressive exploration",
+                context=context
+            )
+
+        if gap_ratio > 0.1:
+            # Moderate gap - balanced exploration
+            return AutonomousDecision(
+                dispatch_type=SwarmDispatchType.NOVELTY,
+                agent_count=15,
+                objective=f"""EXPLORE NOVELTY: Need to improve {mission.target_metric} from {current_value:.4f} to {target_value}.
+Gap: {gap:.4f}
+Try:
+- Alternative indicators (RSI, MACD, Bollinger variations)
+- Different timeframes
+- Regime-specific strategies
+- Cross-asset signals
+- Machine learning entries
+Keep drawdown under {mission.max_drawdown:.2%}""",
+                reasoning=f"Moderate gap ({gap_ratio:.1%}) - exploring novel approaches",
+                context=context
+            )
+
+        # Close to target - refine existing winners
+        return AutonomousDecision(
+            dispatch_type=SwarmDispatchType.REFINEMENT,
+            agent_count=10,
+            objective=f"""REFINE: Close to target! Current {mission.target_metric}: {current_value:.4f}, target: {target_value}
+Gap: {gap:.4f} ({gap_ratio:.1%})
+Focus on:
+- Parameter optimization of top strategies
+- Fine-tuning entry/exit timing
+- Position sizing adjustments
+- Transaction cost reduction
+Maintain drawdown under {mission.max_drawdown:.2%}""",
+            reasoning=f"Close to target ({gap_ratio:.1%}) - refining existing strategies",
+            context=context
+        )
+
+    async def run_red_team_audit(
+        self,
+        strategy_id: str,
+        mission_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Run Red Team audit on a strategy before promotion.
+        Uses the red_team_swarm.py personas to stress-test the strategy.
+
+        Args:
+            strategy_id: UUID of strategy to audit
+            mission_id: Optional mission this audit is for
+
+        Returns:
+            Audit results with pass/fail and scores
+        """
+        if not RED_TEAM_AVAILABLE:
+            logger.warning("Red Team audit unavailable - skipping")
+            return {'passed': True, 'reason': 'Red Team not available'}
+
+        logger.info(f"🔴 Running Red Team audit on strategy {strategy_id[:8]}...")
+        start_time = datetime.utcnow()
+
+        try:
+            # Fetch strategy details
+            result = self.supabase.table('strategy_genome').select(
+                'id', 'name', 'code_content', 'sharpe_ratio', 'max_drawdown',
+                'win_rate', 'fitness_score'
+            ).eq('id', strategy_id).execute()
+
+            if not result.data:
+                return {'passed': False, 'reason': 'Strategy not found'}
+
+            strategy = result.data[0]
+
+            # Build Red Team tasks for each persona
+            red_team_tasks = []
+            for persona_key, persona in RED_TEAM_PERSONAS.items():
+                task = {
+                    'id': f'red_team_{persona_key}',
+                    'system': persona.get('prompt', persona.get('system', '')),
+                    'user': f"""Audit this trading strategy:
+
+**Strategy Name:** {strategy['name']}
+**Sharpe Ratio:** {strategy.get('sharpe_ratio', 'N/A')}
+**Max Drawdown:** {strategy.get('max_drawdown', 'N/A')}
+**Win Rate:** {strategy.get('win_rate', 'N/A')}
+
+**Code:**
+```python
+{strategy['code_content'][:3000]}
+```
+
+Provide your assessment as a {persona_key} expert. Score 0-100 and list critical issues.""",
+                    'model': 'deepseek-chat',
+                    'temperature': 0.3
+                }
+                red_team_tasks.append(task)
+
+            # Run Red Team swarm
+            results = run_swarm_sync(red_team_tasks, concurrency=6)
+
+            # Parse results
+            scores = {}
+            critical_issues = []
+            warnings = []
+            full_reports = []
+
+            for r in results:
+                if r['status'] == 'success':
+                    persona_key = r['id'].replace('red_team_', '')
+                    content = r['content']
+                    full_reports.append(f"## {persona_key.upper()}\n{content}")
+
+                    # Extract score (look for patterns like "Score: 75" or "75/100")
+                    score_match = re.search(r'(?:score[:\s]*)?(\d+)(?:\s*/\s*100)?', content.lower())
+                    if score_match:
+                        scores[persona_key] = float(score_match.group(1))
+                    else:
+                        scores[persona_key] = 50.0  # Default if no score found
+
+                    # Extract critical issues
+                    if 'critical' in content.lower() or 'fail' in content.lower():
+                        # Find sentences with "critical" or "fail"
+                        for line in content.split('\n'):
+                            if 'critical' in line.lower() or 'fail' in line.lower():
+                                critical_issues.append(f"[{persona_key}] {line.strip()}")
+
+                    # Extract warnings
+                    if 'warning' in content.lower() or 'concern' in content.lower():
+                        for line in content.split('\n'):
+                            if 'warning' in line.lower() or 'concern' in line.lower():
+                                warnings.append(f"[{persona_key}] {line.strip()}")
+
+            # Calculate overall score
+            if scores:
+                overall_score = sum(scores.values()) / len(scores)
+            else:
+                overall_score = 0.0
+
+            # Determine pass/fail (threshold: 60/100, no critical issues)
+            passed = overall_score >= 60.0 and len(critical_issues) == 0
+
+            duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+
+            # Record audit in database
+            audit_result = {
+                'strategy_id': strategy_id,
+                'mission_id': mission_id,
+                'passed': passed,
+                'overall_score': overall_score,
+                'scores': scores,
+                'critical_issues': critical_issues[:10],  # Limit to 10
+                'warnings': warnings[:10],
+                'full_report': '\n\n'.join(full_reports),
+                'duration_ms': duration_ms
+            }
+
+            # Save to database via RPC
+            self.supabase.rpc('record_red_team_audit', {
+                'p_strategy_id': strategy_id,
+                'p_mission_id': mission_id,
+                'p_passed': passed,
+                'p_overall_score': overall_score,
+                'p_scores': scores,
+                'p_issues': critical_issues[:10],
+                'p_warnings': warnings[:10],
+                'p_full_report': '\n\n'.join(full_reports),
+                'p_duration_ms': duration_ms
+            }).execute()
+
+            if passed:
+                logger.info(f"✅ Red Team PASSED: {strategy['name']} (Score: {overall_score:.1f})")
+            else:
+                logger.warning(f"❌ Red Team FAILED: {strategy['name']} (Score: {overall_score:.1f})")
+                if critical_issues:
+                    logger.warning(f"   Critical issues: {critical_issues[:3]}")
+
+            return audit_result
+
+        except Exception as e:
+            logger.error(f"Red Team audit error: {e}")
+            return {'passed': False, 'reason': str(e), 'error': True}
+
+    async def dispatch_hunter_swarm(
+        self,
+        decision: AutonomousDecision,
+        mission: Mission
+    ) -> Dict[str, Any]:
+        """
+        Dispatch a swarm based on the autonomous decision engine's choice.
+
+        Args:
+            decision: The AutonomousDecision from the decision engine
+            mission: Current mission for context
+
+        Returns:
+            Dispatch result with job ID and status
+        """
+        logger.info(f"🐝 Dispatching {decision.dispatch_type.value.upper()} swarm")
+        logger.info(f"   Agents: {decision.agent_count}")
+        logger.info(f"   Reasoning: {decision.reasoning}")
+
+        try:
+            # Record the dispatch decision
+            dispatch_record = {
+                'mission_id': mission.id,
+                'dispatch_type': decision.dispatch_type.value,
+                'agent_count': decision.agent_count,
+                'decision_context': decision.context,
+                'status': 'dispatched'
+            }
+
+            dispatch_result = self.supabase.table('mission_dispatches').insert(
+                dispatch_record
+            ).execute()
+
+            dispatch_id = dispatch_result.data[0]['id'] if dispatch_result.data else None
+
+            # Build swarm payload
+            dispatch_payload = {
+                'objective': decision.objective,
+                'agentCount': decision.agent_count,
+                'mode': decision.dispatch_type.value,
+                'config': {
+                    'missionId': mission.id,
+                    'dispatchId': dispatch_id,
+                    'targetMetric': mission.target_metric,
+                    'targetValue': mission.target_value,
+                    'maxDrawdown': mission.max_drawdown,
+                    'dispatchType': decision.dispatch_type.value
+                }
+            }
+
+            # Call swarm-dispatch edge function
+            response = self.supabase.functions.invoke(
+                'swarm-dispatch',
+                invoke_options={'body': dispatch_payload}
+            )
+
+            if response.get('error'):
+                raise Exception(f"Swarm dispatch failed: {response.get('error')}")
+
+            result_data = response.get('data', {})
+            job_id = result_data.get('jobId')
+
+            # Update dispatch record with job ID
+            if dispatch_id:
+                self.supabase.table('mission_dispatches').update({
+                    'swarm_job_id': job_id
+                }).eq('id', dispatch_id).execute()
+
+            logger.info(f"✅ Hunter swarm dispatched: Job {job_id}")
+
+            return {
+                'action': 'dispatched',
+                'dispatch_type': decision.dispatch_type.value,
+                'job_id': job_id,
+                'dispatch_id': dispatch_id,
+                'agents_spawned': decision.agent_count,
+                'reasoning': decision.reasoning
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to dispatch hunter swarm: {e}")
+            self.stats['errors'] += 1
+            return {'action': 'error', 'error': str(e)}
+
+    async def run_mission_loop(self) -> Dict[str, Any]:
+        """
+        The main mission-driven loop. Replaces the old pool-maintenance logic.
+
+        1. Check for active mission
+        2. Evaluate progress towards target
+        3. Make autonomous decision on what to do
+        4. Dispatch appropriate swarm
+        5. Run Red Team on candidates
+
+        Returns:
+            Status dict with actions taken
+        """
+        logger.info("🎯 [Mission Control] Starting mission loop...")
+
+        # Step 1: Get active mission
+        mission = await self.get_active_mission()
+        if not mission:
+            logger.info("   No active missions - falling back to pool maintenance")
+            return await self.replenish_pool()
+
+        # Step 2: Evaluate progress
+        progress = await self.evaluate_mission_progress(mission)
+
+        if progress.get('status') == 'complete':
+            logger.info(f"🎉 Mission {mission.name} is COMPLETE!")
+            return {
+                'action': 'mission_complete',
+                'mission': mission.name,
+                'final_value': progress.get('current_value')
+            }
+
+        if progress.get('status') == 'error':
+            logger.error(f"Mission evaluation error: {progress.get('error')}")
+            return {'action': 'error', 'error': progress.get('error')}
+
+        # Step 3: Make autonomous decision
+        decision = self.autonomous_decision_engine(mission, progress)
+        logger.info(f"   Decision: {decision.dispatch_type.value} ({decision.reasoning})")
+
+        # Step 4: Check if we should run Red Team first
+        if decision.dispatch_type != SwarmDispatchType.RED_TEAM:
+            # Check for strategies pending audit
+            pending_audit = self.supabase.rpc(
+                'get_strategies_pending_audit',
+                {'p_limit': 5}
+            ).execute()
+
+            if pending_audit.data and len(pending_audit.data) > 0:
+                logger.info(f"   Found {len(pending_audit.data)} strategies pending Red Team audit")
+                # Run Red Team on pending strategies
+                for strat in pending_audit.data:
+                    audit_result = await self.run_red_team_audit(
+                        strat['strategy_id'],
+                        mission.id
+                    )
+                    if audit_result.get('passed'):
+                        # Update mission progress if this is a new best
+                        self.supabase.rpc('update_mission_progress', {
+                            'p_mission_id': mission.id,
+                            'p_strategy_id': strat['strategy_id'],
+                            'p_metric_value': strat.get('sharpe_ratio', 0),
+                            'p_trigger_type': 'red_team_pass'
+                        }).execute()
+
+        # Step 5: Dispatch hunter swarm
+        dispatch_result = await self.dispatch_hunter_swarm(decision, mission)
+
+        return {
+            'action': 'mission_loop_complete',
+            'mission': mission.name,
+            'progress': progress,
+            'decision': decision.dispatch_type.value,
+            'dispatch': dispatch_result
+        }
+
+    # ========================================================================
+    # 1. THE RECRUITER - Replenish Strategy Pool (Legacy - now uses missions)
     # ========================================================================
 
     async def replenish_pool(self) -> Dict[str, Any]:
@@ -1781,9 +2408,16 @@ class Strategy:
 
             for result in results:
                 if result.success and result.fitness_score >= self.config.fitness_threshold:
-                    # Promote to active - strategy contributes to the Symphony!
+                    # Strategy passed backtests - queue for Red Team audit
+                    # Note: Actual promotion to 'active' happens via run_red_team_audit()
+                    # when the strategy passes adversarial assessment
+                    new_status = 'incubating'  # Keep incubating until Red Team passes
+                    if not RED_TEAM_AVAILABLE:
+                        # If Red Team not available, promote directly
+                        new_status = 'active'
+
                     self.supabase.table('strategy_genome').update({
-                        'status': 'active',
+                        'status': new_status,
                         'fitness_score': result.fitness_score,
                         'sharpe_ratio': result.sharpe_ratio,
                         'sortino_ratio': result.sortino_ratio,
@@ -1792,7 +2426,7 @@ class Strategy:
                         'profit_factor': result.profit_factor,
                         'cagr': result.cagr,
                         'tested_at': datetime.utcnow().isoformat(),
-                        'promoted_at': datetime.utcnow().isoformat(),
+                        'promoted_at': datetime.utcnow().isoformat() if new_status == 'active' else None,
                         'metadata': {
                             'convexity_score': result.convexity_score,
                             'total_trades': result.total_trades,
@@ -1801,11 +2435,19 @@ class Strategy:
                             'portfolio_contribution': result.portfolio_contribution,
                             'target_regime': result.target_regime,
                             'regime_performance': result.regime_performance,
-                            'daily_returns': result.daily_returns  # Store for future correlation
+                            'daily_returns': result.daily_returns,  # Store for future correlation
+                            # Red Team tracking
+                            'backtest_passed': True,
+                            'red_team_pending': RED_TEAM_AVAILABLE,
+                            'queued_for_red_team_at': datetime.utcnow().isoformat() if RED_TEAM_AVAILABLE else None
                         }
                     }).eq('id', result.strategy_id).execute()
                     promoted += 1
-                    logger.info(f"   🎵 Promoted to Symphony: {result.strategy_id[:8]} (Target: {result.target_regime})")
+
+                    if RED_TEAM_AVAILABLE:
+                        logger.info(f"   🔴 Queued for Red Team: {result.strategy_id[:8]} (Fitness: {result.fitness_score:.4f})")
+                    else:
+                        logger.info(f"   🎵 Promoted to Symphony: {result.strategy_id[:8]} (Target: {result.target_regime})")
                 else:
                     # Mark as failed
                     failure_reason = result.error
@@ -2002,9 +2644,9 @@ Convexity Score: {metadata.get('convexity_score', 'N/A')}
             try:
                 now = datetime.now()
 
-                # 1. Recruiter - check every recruit_interval
+                # 1. Mission Control - check every recruit_interval (goal-seeking loop)
                 if (now - self.last_recruit_time).total_seconds() >= self.config.recruit_interval:
-                    await self.replenish_pool()
+                    await self.run_mission_loop()
                     self.last_recruit_time = now
 
                 # 2. Harvester - check every harvest_interval
@@ -2025,7 +2667,10 @@ Convexity Score: {metadata.get('convexity_score', 'N/A')}
                 # 5. Check for graduations (updated during shadow trading)
                 if self.shadow_trader:
                     shadow_stats = self.shadow_trader.get_stats()
-                    self.stats['graduations'] = shadow_stats.get('graduations', 0)
+                    # Use += to accumulate graduations, not overwrite
+                    new_graduations = shadow_stats.get('graduations', 0)
+                    if new_graduations > self.stats['graduations']:
+                        self.stats['graduations'] = new_graduations
 
                 # Log stats periodically
                 if now.minute == 0 and now.second < 30:

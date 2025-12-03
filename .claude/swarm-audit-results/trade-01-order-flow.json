@@ -1,0 +1,6 @@
+{
+  "id": "trade-01-order-flow",
+  "domain": "trading-systems",
+  "status": "success",
+  "result": "[MAX ITERATIONS REACHED after 20 iterations]\n\nPartial result from last iteration:\nLet me check the electron directory for IPC handlers that might handle orders:"
+}

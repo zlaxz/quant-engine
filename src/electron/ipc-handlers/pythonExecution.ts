@@ -1,13 +1,28 @@
 import { ipcMain } from 'electron';
-import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
 import { createClient } from '@supabase/supabase-js';
 import { validateIPC, BacktestParamsSchema } from '../validation/schemas';
 
-// Supabase public credentials (anon key is safe for local app)
-const SUPABASE_URL = 'https://ynaqtawyynqikfyranda.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluYXF0YXd5eW5xaWtmeXJhbmRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM1NzM5NjMsImV4cCI6MjA3OTE0OTk2M30.VegcJvLluy8toSYqnR7Ufc5jx5XAl1-XeDRl8KbsIIw';
+// ============================================================
+// UNIFIED BRAIN: API-First Architecture
+// ============================================================
+// ALL Python execution goes through the Flask API server.
+// This eliminates the "split brain" problem where spawn() and
+// API calls could give different results.
+//
+// The Python server at localhost:5001 is the SINGLE SOURCE OF TRUTH.
+// ============================================================
+
+const PYTHON_SERVER_URL = 'http://localhost:5001';
+
+// Supabase credentials from environment variables (never hardcode)
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.warn('[PythonExecution] Supabase credentials not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in .env');
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -27,55 +42,38 @@ export function registerPythonExecutionHandlers() {
       const params = validateIPC(BacktestParamsSchema, paramsRaw, 'backtest parameters');
 
       const ROTATION_ENGINE_ROOT = getRotationEngineRoot();
-      
-      // Build Python command using cli_wrapper.py
-      const cmd = [
-        'python3',
-        'server.py',  // Python Flask API server
-        '--profile', params.strategyKey,
-        '--start', params.startDate,
-        '--end', params.endDate,
-        '--capital', params.capital.toString(),
-      ];
 
-      if (params.profileConfig) {
-        cmd.push('--config', JSON.stringify(params.profileConfig));
-      }
+      // ============================================================
+      // API-FIRST: Call Python server instead of spawning process
+      // ============================================================
+      console.log(`[Backtest] Calling Python API: ${PYTHON_SERVER_URL}/api/backtest`);
 
-      // Execute Python process
-      const pythonProcess = spawn(cmd[0], cmd.slice(1), {
-        cwd: ROTATION_ENGINE_ROOT,
-        timeout: 300000, // 5 minute timeout
+      const response = await fetch(`${PYTHON_SERVER_URL}/api/backtest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          strategy_key: params.strategyKey,
+          start_date: params.startDate,
+          end_date: params.endDate,
+          capital: params.capital,
+          profile_config: params.profileConfig || null,
+        }),
+        signal: AbortSignal.timeout(300000), // 5 minute timeout
       });
 
-      let stdout = '';
-      let stderr = '';
-
-      pythonProcess.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      pythonProcess.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      // Wait for process to complete
-      const exitCode = await new Promise<number>((resolve, reject) => {
-        pythonProcess.on('close', resolve);
-        pythonProcess.on('error', reject);
-      });
-
-      if (exitCode !== 0) {
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Backtest] API error:', response.status, errorText);
         return {
           success: false,
-          error: stderr || 'Backtest process failed',
+          error: `Backtest API error (${response.status}): ${errorText}`,
         };
       }
 
-      // Parse results from stdout with error handling
+      // Parse results from API response
       let results;
       try {
-        results = JSON.parse(stdout);
+        results = await response.json();
       } catch (parseError) {
         return {
           success: false,
@@ -138,12 +136,21 @@ export function registerPythonExecutionHandlers() {
         rawResultsPath: resultsPath,
       };
     } catch (error) {
-      const errorDetails = error instanceof Error 
+      const errorDetails = error instanceof Error
         ? `${error.message}\n\nStack:\n${error.stack}`
         : String(error);
-      
+
       console.error('[Backtest] Error:', errorDetails);
-      
+
+      // Handle connection refused specifically - Python server not running
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        return {
+          success: false,
+          error: `Python server not running at ${PYTHON_SERVER_URL}. Start with: cd python && python server.py`,
+          errorDetails: 'CONNECTION REFUSED: The Python API server is offline. All backtests route through the unified API.'
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',

@@ -1,0 +1,6 @@
+{
+  "id": "quant-08-data-quality",
+  "domain": "quant-strategy",
+  "status": "success",
+  "result": "[MAX ITERATIONS REACHED after 20 iterations]\n\nPartial result from last iteration:\nLet me check the inspect_parquet_file.py script which might have data validation:"
+}

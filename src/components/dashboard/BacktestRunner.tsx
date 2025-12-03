@@ -12,7 +12,7 @@
  * Created: 2025-11-24
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -83,7 +83,7 @@ const SLIPPAGE_OPTIONS = [
   { value: 'conservative', label: 'Conservative', description: '1-2% worst case' },
 ];
 
-export function BacktestRunner() {
+function BacktestRunnerComponent() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [config, setConfig] = useState<BacktestConfig>({
     strategyId: '',
@@ -200,14 +200,14 @@ export function BacktestRunner() {
     setProgressMessage('Stopped');
   }, []);
 
-  const toggleRegime = (regime: string) => {
+  const toggleRegime = useCallback((regime: string) => {
     setConfig((prev) => ({
       ...prev,
       regimeFilter: prev.regimeFilter.includes(regime)
         ? prev.regimeFilter.filter((r) => r !== regime)
         : [...prev.regimeFilter, regime],
     }));
-  };
+  }, []);
 
   return (
     <Card className="h-full flex flex-col">
@@ -494,3 +494,6 @@ export function BacktestRunner() {
     </Card>
   );
 }
+
+// Memoize to prevent unnecessary re-renders
+export const BacktestRunner = memo(BacktestRunnerComponent);

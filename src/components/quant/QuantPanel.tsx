@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,7 @@ interface QuantPanelProps {
   selectedRunIdFromMemory?: string | null;
 }
 
-export const QuantPanel = ({ selectedRunIdFromMemory }: QuantPanelProps) => {
+const QuantPanelComponent = ({ selectedRunIdFromMemory }: QuantPanelProps) => {
   const { selectedSessionId, selectedWorkspaceId } = useChatContext();
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState<string>('');
@@ -278,16 +278,16 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
     }
   };
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = useCallback((value: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value);
-  };
+  }, []);
 
-  const handleToggleComparison = (runId: string) => {
+  const handleToggleComparison = useCallback((runId: string) => {
     setSelectedRunsForComparison(prev => {
       if (prev.includes(runId)) {
         return prev.filter(id => id !== runId);
@@ -299,11 +299,16 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
         return [...prev, runId];
       }
     });
-  };
+  }, []);
 
-  const handleClearComparisonSelection = () => {
+  const handleClearComparisonSelection = useCallback(() => {
     setSelectedRunsForComparison([]);
-  };
+  }, []);
+
+  // Memoize selected strategy description
+  const selectedStrategyDescription = useMemo(() => {
+    return strategies.find(s => s.key === selectedStrategy)?.description;
+  }, [strategies, selectedStrategy]);
 
   return (
     <div className="space-y-4">
@@ -353,9 +358,9 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
             ))}
           </SelectContent>
         </Select>
-        {selectedStrategy && (
+        {selectedStrategy && selectedStrategyDescription && (
           <p className="text-xs text-muted-foreground">
-            {strategies.find(s => s.key === selectedStrategy)?.description}
+            {selectedStrategyDescription}
           </p>
         )}
       </div>
@@ -647,3 +652,6 @@ Final Equity: $${currentRun.equity_curve[currentRun.equity_curve.length - 1].val
     </div>
   );
 };
+
+// Memoize to prevent unnecessary re-renders
+export const QuantPanel = memo(QuantPanelComponent);

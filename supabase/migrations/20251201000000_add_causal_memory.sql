@@ -1,4 +1,11 @@
 -- Causal Memory: Storing the physics of why strategies work
+
+-- Ensure pgvector extension is enabled (Supabase has this available)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Add extensions to search_path so vector type is visible
+SET search_path TO public, extensions;
+
 CREATE TABLE IF NOT EXISTS causal_memories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL REFERENCES workspaces(id),
@@ -19,11 +26,18 @@ CREATE INDEX IF NOT EXISTS causal_memories_embedding_idx ON causal_memories USIN
 ALTER TABLE causal_memories ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only access their workspace's causal memories
-CREATE POLICY IF NOT EXISTS "Users can access workspace causal memories"
-ON causal_memories FOR ALL
-USING (workspace_id IN (
-  SELECT id FROM workspaces WHERE id = workspace_id
-));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE policyname = 'Users can access workspace causal memories'
+  ) THEN
+    CREATE POLICY "Users can access workspace causal memories"
+    ON causal_memories FOR ALL
+    USING (workspace_id IN (
+      SELECT id FROM workspaces WHERE id = workspace_id
+    ));
+  END IF;
+END $$;
 
 -- Grant access
 GRANT ALL ON causal_memories TO authenticated;

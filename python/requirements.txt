@@ -7,8 +7,8 @@ botocore>=1.34.0
 
 # Data processing
 polars>=0.20.0
-pandas>=2.0.0
-numpy>=1.24.0
+pandas>=2.2.0
+numpy>=2.0.0
 
 # Compression
 zstandard>=0.22.0
@@ -34,11 +34,11 @@ schwab-py
 python-dotenv
 
 # Added by Chief Quant on 2025-11-29
-scipy>=1.0.0
+scipy>=1.14.0
 
 # ML/Data Science - Added 2025-11-30
-xgboost>=0.90
-scikit-learn>=1.0.0
+xgboost>=2.1.0
+scikit-learn>=1.6.0
 
 # Data acquisition
 yfinance>=0.2.0

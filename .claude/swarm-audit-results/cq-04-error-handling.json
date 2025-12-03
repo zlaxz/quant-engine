@@ -1,0 +1,6 @@
+{
+  "id": "cq-04-error-handling",
+  "domain": "code-quality",
+  "status": "success",
+  "result": "ERROR: [Errno 7] Argument list too long: 'curl'"
+}

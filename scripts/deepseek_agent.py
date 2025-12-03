@@ -134,9 +134,9 @@ def execute_tool(tool_name: str, args: dict) -> str:
                 return f"Error: File not found: {path}"
             with open(path, 'r') as f:
                 content = f.read()
-                # Truncate very long files
-                if len(content) > 50000:
-                    return content[:50000] + f"\n\n[Truncated - file is {len(content)} bytes]"
+                # More aggressive truncation to avoid token limits
+                if len(content) > 20000:
+                    return content[:20000] + f"\n\n[Truncated - file is {len(content)} bytes. Request specific sections if needed.]"
                 return content
 
         elif tool_name == 'list_directory':
@@ -150,12 +150,17 @@ def execute_tool(tool_name: str, args: dict) -> str:
             pattern = args.get('pattern', '')
             search_path = args.get('path', '.')
             result = subprocess.run(
-                ['grep', '-r', '-n', pattern, search_path],
+                ['grep', '-r', '-n', '-l', pattern, search_path],  # -l for file names only first
                 capture_output=True,
                 text=True,
                 timeout=30
             )
-            return result.stdout if result.stdout else 'No matches found'
+            output = result.stdout if result.stdout else 'No matches found'
+            # Limit output to prevent token explosion
+            if len(output) > 10000:
+                lines = output.split('\n')[:100]
+                return '\n'.join(lines) + f"\n\n[Truncated - {len(output)} bytes total. Showing first 100 matches.]"
+            return output
 
         elif tool_name == 'query_data':
             # Lazy import to keep startup fast
@@ -193,23 +198,29 @@ def run_agent(task: str, agent_type: str = 'analyst', context: str = None, model
         task: Task description
         agent_type: Type of agent (analyst, reviewer, researcher, coder)
         context: Additional context
-        model: Model to use ('deepseek-chat' with tools, 'deepseek-reasoner' for pure logic)
+        model: Model to use ('deepseek-chat' or 'deepseek-reasoner' - both support tools)
     """
-    # Determine if this is reasoner mode (pure logic, no tools)
     is_reasoner = 'reasoner' in model.lower()
 
     system_prompt = AGENT_PROMPTS.get(agent_type.lower(), AGENT_PROMPTS['analyst'])
 
-    # Model-specific prompting
+    # Both chat and reasoner now support tools - emphasize both reasoning AND tool usage
     if is_reasoner:
-        # Pure reasoning mode - emphasize logical analysis, NO tools
         system_prompt += """
 
-IMPORTANT: You are running in PURE REASONING MODE (no tools available).
-Focus on logical analysis, theoretical soundness, and critical thinking.
-Identify assumptions, evaluate tradeoffs, and reason from first principles."""
+IMPORTANT: You are using DeepSeek Reasoner with FULL TOOL ACCESS.
+You have superior reasoning capabilities AND can use tools.
+FIRST: Use your tools to read actual code and gather evidence.
+THEN: Apply deep logical analysis, identify assumptions, and reason from first principles.
+
+Tools available:
+- read_file: Read any file you need to examine
+- list_directory: Explore codebase structure
+- search_code: Find patterns in code
+- query_data: Execute SQL against market data lake
+
+Combine tool evidence with rigorous reasoning for the best analysis."""
     else:
-        # Action mode - emphasize tool usage
         system_prompt += """
 
 IMPORTANT: You have FULL TOOL ACCESS. Before answering, USE YOUR TOOLS:
@@ -232,20 +243,7 @@ DO NOT make assumptions. READ THE ACTUAL CODE using your tools, then provide ana
     print(f"[DeepSeek Agent] Type: {agent_type}, Model: {model}, Reasoner: {is_reasoner}", file=sys.stderr)
     print(f"[DeepSeek Agent] Task: {task[:100]}...", file=sys.stderr)
 
-    # REASONER MODE: Single call, no tools, pure reasoning
-    if is_reasoner:
-        print(f"[DeepSeek Agent] Using REASONER mode (no tools, single call)...", file=sys.stderr)
-        result = call_deepseek(messages, tools=None, model=model)
-        if 'error' in result:
-            return f"ERROR: {result['error']}"
-        if 'choices' not in result or len(result['choices']) == 0:
-            return f"ERROR: Unexpected response format: {json.dumps(result)}"
-        content = result['choices'][0].get('message', {}).get('content', '')
-        total_tokens = result.get('usage', {}).get('total_tokens', 0)
-        print(f"[DeepSeek Agent] Reasoner complete! Tokens: {total_tokens}", file=sys.stderr)
-        return content
-
-    # ACTION MODE: Agentic loop with tools
+    # UNIFIED AGENTIC LOOP - Both chat and reasoner use tools
     # deepseek-chat: Fast tool execution
     MAX_ITERATIONS = 20  # Increased for thorough audits
     iteration = 0

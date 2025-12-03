@@ -71,6 +71,73 @@ class MassiveIngestor:
 
         self.dctx = zstd.ZstdDecompressor()
 
+        # Dirty Water Filter statistics
+        self.poison_data_rejected = 0
+        self.dirty_data_cleaned = 0
+
+    # ============================================================
+    # DIRTY WATER FILTER - Data Sanitation Gate
+    # ============================================================
+    # THE THREAT: Corrupted S3 files, stock splits, price glitches ($0.01)
+    # If we ingest poisoned data, our signals will be wrong forever.
+
+    def _validate_chunk(self, df: pl.DataFrame, symbol: str) -> Optional[pl.DataFrame]:
+        """
+        Sanity checks before saving data to disk.
+        Returns cleaned DataFrame or None if data is poisoned.
+        """
+        if df.is_empty():
+            return None
+
+        original_rows = len(df)
+
+        # 1. Check for negative or zero prices (POISON - reject entire chunk)
+        price_col = 'price' if 'price' in df.columns else 'trade_price' if 'trade_price' in df.columns else None
+        if price_col:
+            poison_rows = df.filter(pl.col(price_col) <= 0).height
+            if poison_rows > 0:
+                poison_pct = poison_rows / original_rows * 100
+                if poison_pct > 1:  # More than 1% bad = poisoned file
+                    logger.error(f"POISON DATA: {poison_pct:.1f}% negative/zero prices for {symbol}. REJECTING.")
+                    self.poison_data_rejected += 1
+                    return None
+                # Less than 1% - clean it
+                df = df.filter(pl.col(price_col) > 0)
+                self.dirty_data_cleaned += poison_rows
+                logger.warning(f"DIRTY DATA: Filtered {poison_rows} bad prices for {symbol}")
+
+        # 2. Check for flash crash (tick-to-tick drops > 50%)
+        if price_col and len(df) > 1:
+            prices = df[price_col].to_numpy()
+            returns = prices[1:] / prices[:-1] - 1
+            flash_crashes = sum(abs(returns) > 0.5)
+            if flash_crashes > 5:  # More than 5 flash crashes = suspect data
+                logger.warning(f"SUSPECT DATA: {flash_crashes} tick-to-tick moves >50% for {symbol}")
+                # Don't reject but flag it
+
+        # 3. Check for zeros in critical fields (DIRTY - clean)
+        size_col = 'size' if 'size' in df.columns else 'trade_size' if 'trade_size' in df.columns else None
+        if size_col:
+            zero_size = df.filter(pl.col(size_col) == 0).height
+            if zero_size > 0:
+                df = df.filter(pl.col(size_col) > 0)
+                self.dirty_data_cleaned += zero_size
+                logger.warning(f"DIRTY DATA: Filtered {zero_size} zero-size trades for {symbol}")
+
+        # 4. Check for reasonable price range (for stocks, not pennies unless OTC)
+        if price_col and symbol in ['SPY', 'QQQ', 'IWM', 'AAPL', 'MSFT', 'NVDA']:
+            # These should never be below $10 or above $10000
+            bad_range = df.filter((pl.col(price_col) < 10) | (pl.col(price_col) > 10000)).height
+            if bad_range > 0:
+                logger.warning(f"SUSPECT DATA: {bad_range} out-of-range prices for {symbol}")
+
+        if df.is_empty():
+            logger.warning(f"Data for {symbol} completely filtered out")
+            return None
+
+        logger.info(f"CLEAN DATA: {symbol} validated ({len(df)}/{original_rows} rows kept)")
+        return df
+
     def _get_s3_key(self, date: datetime, data_type: str) -> str:
         prefix = DATA_TYPE_PREFIXES.get(data_type)
         date_str = date.strftime('%Y/%m/%d')
@@ -88,6 +155,14 @@ class MassiveIngestor:
             df = df.filter(pl.col(symbol_col) == symbol)
 
         if df.is_empty():
+            return None, 0
+
+        # ============================================================
+        # DIRTY WATER FILTER - Validate before saving to disk
+        # ============================================================
+        df = self._validate_chunk(df, symbol)
+        if df is None:
+            logger.warning(f"Data for {symbol} rejected by Dirty Water Filter")
             return None, 0
 
         output_path = self._get_output_path(symbol, date, data_type)

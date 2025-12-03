@@ -36,7 +36,13 @@ let mcpInitialized = false;
 async function ensureMCPInitialized(): Promise<void> {
   if (!mcpInitialized) {
     try {
-      await initializeMCP('/Users/zstoc/ObsidianVault');
+      // Use environment variable or safe fallback - don't hardcode absolute user path
+      // This allows the system to work on different machines or setups
+      const vaultPath = process.env.OBSIDIAN_VAULT_PATH ||
+                        path.join(app.getPath('home'), 'ObsidianVault');
+
+      console.log(`[MCP] Initializing with vault at: ${vaultPath}`);
+      await initializeMCP(vaultPath);
       mcpInitialized = true;
       console.log('[MCP] Initialized successfully');
     } catch (error) {
@@ -802,6 +808,260 @@ export async function typeCheck(filePath: string): Promise<ToolResult> {
     return { success: true, content: stdout || 'Type checking passed' };
   } catch (error: any) {
     return { success: false, content: error.stdout || '', error: error.stderr || error.message };
+  }
+}
+
+/**
+ * THE RED TEAM PROTOCOL
+ * Runs overfitting detection and robustness checks on a strategy.
+ * If this audit fails, the CIO VETOES the trade.
+ */
+export async function auditStrategyRobustness(strategyKey: string, aggressiveness: string = 'standard'): Promise<ToolResult> {
+  try {
+    const root = getEngineRoot();
+    const scriptPath = path.join(root, 'python', 'scripts', 'overfitting_red_team.py');
+
+    if (!fs.existsSync(scriptPath)) {
+      return {
+        success: false,
+        content: '',
+        error: `Red Team script not found at ${scriptPath}. Cannot validate strategy.`
+      };
+    }
+
+    safeLog(`[RED TEAM] Attacking strategy '${strategyKey}' with aggressiveness='${aggressiveness}'...`);
+
+    const command = `python "${scriptPath}" --strategy "${strategyKey}" --mode "${aggressiveness}"`;
+    const { stdout, stderr } = await execWithTimeout(command, {
+      cwd: root,
+      timeout: 300000 // 5 minute timeout for thorough analysis
+    });
+
+    // Parse output to determine pass/fail
+    const output = stdout + (stderr ? `\n${stderr}` : '');
+    const passed = output.toLowerCase().includes('pass') && !output.toLowerCase().includes('fail');
+
+    return {
+      success: passed,
+      content: `🔴 RED TEAM AUDIT RESULTS\nStrategy: ${strategyKey}\nAggressiveness: ${aggressiveness}\n\n${output}`,
+      metadata: { strategyKey, aggressiveness, passed }
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      content: error.stdout || '',
+      error: `Red Team audit failed: ${error.stderr || error.message}`
+    };
+  }
+}
+
+/**
+ * THE LIFELINE
+ * Sends push notifications to Zach's phone via Pushover.
+ * For CRITICAL alerts: drawdown warnings, stop-loss triggers, strategy failures.
+ */
+export async function sendMobileAlert(
+  title: string,
+  message: string,
+  priority: string = 'normal',
+  sound: string = 'pushover'
+): Promise<ToolResult> {
+  try {
+    // Pushover API credentials - from environment
+    const PUSHOVER_USER = process.env.PUSHOVER_USER_KEY;
+    const PUSHOVER_TOKEN = process.env.PUSHOVER_API_TOKEN;
+
+    if (!PUSHOVER_USER || !PUSHOVER_TOKEN) {
+      return {
+        success: false,
+        content: '',
+        error: 'LIFELINE OFFLINE: Pushover credentials not configured. Set PUSHOVER_USER_KEY and PUSHOVER_API_TOKEN in .env'
+      };
+    }
+
+    // Map priority string to Pushover priority number
+    const priorityMap: Record<string, number> = {
+      'low': -1,      // No sound/vibration
+      'normal': 0,    // Normal
+      'high': 1,      // Bypass quiet hours
+      'emergency': 2  // Repeat until acknowledged
+    };
+
+    const priorityValue = priorityMap[priority.toLowerCase()] ?? 0;
+
+    const payload: Record<string, unknown> = {
+      token: PUSHOVER_TOKEN,
+      user: PUSHOVER_USER,
+      title: `🚨 ${title}`,
+      message: message,
+      priority: priorityValue,
+      sound: sound,
+      timestamp: Math.floor(Date.now() / 1000)
+    };
+
+    // For emergency priority, must specify retry and expire
+    if (priorityValue === 2) {
+      payload.retry = 60;   // Retry every 60 seconds
+      payload.expire = 3600; // Stop after 1 hour
+    }
+
+    safeLog(`[LIFELINE] Sending alert: "${title}" (priority: ${priority})`);
+
+    const response = await fetch('https://api.pushover.net/1/messages.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || result.status !== 1) {
+      return {
+        success: false,
+        content: JSON.stringify(result),
+        error: `Pushover API error: ${result.errors?.join(', ') || 'Unknown error'}`
+      };
+    }
+
+    safeLog(`[LIFELINE] Alert sent successfully: ${result.request}`);
+    return {
+      success: true,
+      content: `📱 ALERT SENT TO ZACH'S PHONE\nTitle: ${title}\nPriority: ${priority}\nRequest ID: ${result.request}`,
+      metadata: { requestId: result.request, priority }
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      content: '',
+      error: `Lifeline failed: ${error.message}`
+    };
+  }
+}
+
+/**
+ * THE GRADUATION GATEKEEPER
+ * Controls access to live trading. Strategies must graduate:
+ * PAPER (backtest) → SHADOW (paper trading with real data) → LIVE (real money)
+ */
+export async function liveTradingGateway(
+  strategyKey: string,
+  action: string,
+  reason?: string
+): Promise<ToolResult> {
+  try {
+    const root = getEngineRoot();
+    const graduationFile = path.join(root, 'data', 'graduation_registry.json');
+
+    // Load or create graduation registry
+    let registry: Record<string, { stage: string; history: Array<{ action: string; reason: string; timestamp: string }> }> = {};
+
+    if (fs.existsSync(graduationFile)) {
+      try {
+        registry = JSON.parse(fs.readFileSync(graduationFile, 'utf-8'));
+      } catch {
+        registry = {};
+      }
+    }
+
+    // Get current status for this strategy
+    const current = registry[strategyKey] || {
+      stage: 'PAPER',
+      history: []
+    };
+
+    const stages = ['PAPER', 'SHADOW', 'LIVE'];
+
+    switch (action.toLowerCase()) {
+      case 'check_status':
+        return {
+          success: true,
+          content: `📊 GRADUATION STATUS for ${strategyKey}\n\nCurrent Stage: ${current.stage}\nStages: PAPER → SHADOW → LIVE\n\n${
+            current.stage === 'LIVE'
+              ? '✅ CLEARED FOR LIVE TRADING'
+              : current.stage === 'SHADOW'
+                ? '⏳ In shadow mode - needs validation before live'
+                : '🚫 BLOCKED - Must pass PAPER and SHADOW stages first'
+          }\n\nHistory:\n${current.history.map(h => `- ${h.timestamp}: ${h.action} - ${h.reason}`).join('\n') || 'No history'}`
+        };
+
+      case 'promote': {
+        if (!reason) {
+          return {
+            success: false,
+            content: '',
+            error: 'PROMOTION DENIED: Must provide a reason for graduation. What metrics justify this promotion?'
+          };
+        }
+
+        const currentIndex = stages.indexOf(current.stage);
+        if (currentIndex >= stages.length - 1) {
+          return {
+            success: false,
+            content: '',
+            error: `Strategy ${strategyKey} is already at LIVE stage. Cannot promote further.`
+          };
+        }
+
+        const newStage = stages[currentIndex + 1];
+        current.stage = newStage;
+        current.history.push({
+          action: `PROMOTED to ${newStage}`,
+          reason,
+          timestamp: new Date().toISOString()
+        });
+
+        registry[strategyKey] = current;
+        fs.mkdirSync(path.dirname(graduationFile), { recursive: true });
+        fs.writeFileSync(graduationFile, JSON.stringify(registry, null, 2));
+
+        return {
+          success: true,
+          content: `✅ STRATEGY PROMOTED\n${strategyKey}: ${stages[currentIndex]} → ${newStage}\nReason: ${reason}\n\n${
+            newStage === 'LIVE' ? '⚠️ WARNING: Strategy is now cleared for LIVE TRADING with real money!' : ''
+          }`
+        };
+      }
+
+      case 'demote': {
+        if (!reason) {
+          return {
+            success: false,
+            content: '',
+            error: 'DEMOTION REQUIRES REASON: Why is this strategy being demoted?'
+          };
+        }
+
+        const previousStage = current.stage;
+        current.stage = 'PAPER';
+        current.history.push({
+          action: `DEMOTED from ${previousStage} to PAPER`,
+          reason,
+          timestamp: new Date().toISOString()
+        });
+
+        registry[strategyKey] = current;
+        fs.mkdirSync(path.dirname(graduationFile), { recursive: true });
+        fs.writeFileSync(graduationFile, JSON.stringify(registry, null, 2));
+
+        return {
+          success: true,
+          content: `🔴 STRATEGY DEMOTED\n${strategyKey}: ${previousStage} → PAPER\nReason: ${reason}\n\nStrategy must re-qualify through all stages before live trading.`
+        };
+      }
+
+      default:
+        return {
+          success: false,
+          content: '',
+          error: `Unknown action: ${action}. Use "check_status", "promote", or "demote".`
+        };
+    }
+  } catch (error: any) {
+    return {
+      success: false,
+      content: '',
+      error: `Graduation gateway error: ${error.message}`
+    };
   }
 }
 
@@ -3730,6 +3990,18 @@ export async function executeTool(
     case 'type_check':
       return typeCheck(args.path);
 
+    case 'audit_strategy_robustness':
+      // THE RED TEAM PROTOCOL - Run overfitting detection on a strategy
+      return auditStrategyRobustness(args.strategy_key, args.aggressiveness || 'standard');
+
+    case 'send_mobile_alert':
+      // THE LIFELINE - Push notification via Pushover
+      return sendMobileAlert(args.title, args.message, args.priority || 'normal', args.sound || 'pushover');
+
+    case 'live_trading_gateway':
+      // THE GRADUATION GATEKEEPER - Paper → Shadow → Live
+      return liveTradingGateway(args.strategy_key, args.action, args.reason);
+
     // Analysis
     case 'find_function':
       return findFunction(args.name, args.path);
@@ -3756,20 +4028,48 @@ export async function executeTool(
     case 'get_strategy_details':
       return getStrategyDetails(args.strategy_id);
     case 'get_portfolio_greeks':
-      // Return placeholder Greeks - actual implementation would query positions
-      return {
-        success: true,
-        content: JSON.stringify({
-          portfolio_greeks: {
-            net_delta: 0,
-            net_gamma: 0,
-            net_theta: 0,
-            net_vega: 0,
-            warnings: [],
-            message: 'No active positions. Portfolio Greeks endpoint ready.'
-          }
-        })
-      };
+      // REAL DATA: Query Python engine for live portfolio Greeks
+      try {
+        safeLog(`[Greeks] Fetching real portfolio risk from ${PYTHON_SERVER_URL}...`);
+        const greeksResponse = await fetch(`${PYTHON_SERVER_URL}/portfolio/greeks`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (!greeksResponse.ok) {
+          return {
+            success: false,
+            content: '',
+            error: `Python Engine Error (${greeksResponse.status}): Could not fetch live Greeks. Ensure server.py is running.`
+          };
+        }
+
+        const greeksResult = await greeksResponse.json();
+        const greeks = greeksResult.portfolio_greeks || {};
+        const formatted = `
+PORTFOLIO GREEKS (LIVE)
+-----------------------
+Net Delta: ${greeks.net_delta?.toFixed(2) || 0}
+Net Gamma: ${greeks.net_gamma?.toFixed(4) || 0}
+Net Theta: ${greeks.net_theta?.toFixed(2) || 0}
+Net Vega:  ${greeks.net_vega?.toFixed(2) || 0}
+
+Active Positions: ${greeksResult.position_count || 0}
+Warnings: ${greeks.warnings?.join(', ') || 'None'}
+`.trim();
+
+        return { success: true, content: formatted, metadata: greeksResult };
+      } catch (greeksError: any) {
+        if (greeksError.code === 'ECONNREFUSED') {
+          return {
+            success: false,
+            content: '',
+            error: `CONNECTION REFUSED: Python engine is offline at ${PYTHON_SERVER_URL}. Start it with 'python server.py'.`
+          };
+        }
+        return { success: false, content: '', error: `Greeks fetch failed: ${greeksError.message}` };
+      }
     case 'run_simulation':
       return runScenarioSimulation(args.scenario, args.params, args.portfolio);
     case 'quant_engine_health':

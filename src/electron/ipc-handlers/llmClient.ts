@@ -424,7 +424,16 @@ You are running in an Electron app with FULL tool access. Tools execute IMMEDIAT
 **THE RULE:** Use tools FIRST, explain after.
 `;
 
-      const fullSystemInstruction = cioPrompt + toolEnforcement;
+      // MISSION CONTEXT: Inject capital preservation awareness into every request
+      // This ensures the model never forgets the stakes
+      const missionContext = `
+## MISSION STATUS: ACTIVE
+CAPITAL PRESERVATION: PRIORITY ALPHA
+TARGET: ASYMMETRIC UPSIDE
+RISK OF RUIN: VETO ANY TRADE WHERE P(RUIN) > 0
+`;
+
+      const fullSystemInstruction = cioPrompt + missionContext + toolEnforcement;
 
       // Detect task context from user message (reuse lastUserMessage from routing)
       const taskContext = detectTaskContext(lastUserMessage);
@@ -433,17 +442,25 @@ You are running in an Electron app with FULL tool access. Tools execute IMMEDIAT
       safeLog(`[LLM] Task context: ${taskContext}, providing ${contextualTools.length} tools`);
 
       // NEW SDK (@google/genai) uses direct generateContentStream calls
-      // ANY mode encourages aggressive tool usage - Gemini should call tools when user asks
-      // This is CRITICAL - without ANY mode, Gemini will avoid using tools and apologize
+      // AUTO mode lets model decide when to use tools
       // See: https://ai.google.dev/gemini-api/docs/function-calling#function-calling-modes
       const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
+
+      // SYSTEM NUDGE: Inject a "Voice of God" reminder at the end of user messages
+      // This forces the model to snap out of "chat mode" and into "work mode"
+      if (lastMessage && lastMessage.role === 'user' && typeof lastMessage.content === 'string') {
+        lastMessage.content += `\n\n(SYSTEM: Do not lecture. If you need data, use 'spawn_agent' or 'obsidian_search_notes' IMMEDIATELY. Do not explain what you will do. Just do it.)`;
+      }
 
       // Build config for new SDK - all options go in config object
       const geminiConfig = {
         tools: [{ functionDeclarations: contextualTools }],
         toolConfig: {
           functionCallingConfig: {
-            mode: FunctionCallingConfigMode.ANY, // Forces tool use - prevents "I can't" responses
+            // AUTO mode lets model decide whether to use tools based on context
+            // ANY mode was FORCING tool-first behavior, causing exploration/scaffolding
+            // See: https://ai.google.dev/gemini-api/docs/function-calling#function-calling-modes
+            mode: FunctionCallingConfigMode.AUTO,
           }
         },
         systemInstruction: fullSystemInstruction,
@@ -647,10 +664,42 @@ You are running in an Electron app with FULL tool access. Tools execute IMMEDIAT
           safeLog(`[Tool] Calling: ${toolName}`, toolArgs);
 
           // SPECIAL CASE: respond_directly is the model's way of giving a text response
-          // Return immediately without going through tool loop
+          // BUG FIX: Don't return immediately if there are other tools to execute!
+          // The model might call respond_directly + scan_data in the same turn
           if (toolName === 'respond_directly') {
             const directResponse = toolArgs.response || '';
-            safeLog('[LLM] Model chose respond_directly - returning text response');
+
+            // Check if there are OTHER tools in this batch (not just respond_directly)
+            const hasOtherTools = functionCalls.some(
+              (p: any) => p.functionCall?.name && p.functionCall.name !== 'respond_directly'
+            );
+
+            if (hasOtherTools) {
+              // Stream the response but CONTINUE processing other tools
+              safeLog('[LLM] Model chose respond_directly WITH other tools - streaming but continuing');
+
+              _event.sender.send('llm-stream', {
+                type: 'chunk',
+                content: directResponse,
+                timestamp: Date.now()
+              });
+
+              // Add to accumulated text for context
+              accumulatedText += directResponse;
+
+              // Push a success result so the model knows we displayed it
+              toolResults.push({
+                functionResponse: {
+                  name: toolName,
+                  response: { content: "Response displayed to user." }
+                }
+              });
+
+              continue; // Process the other tools!
+            }
+
+            // Only respond_directly in batch - this is the final response
+            safeLog('[LLM] Model chose respond_directly only - returning text response');
 
             // Stream the response (use 'chunk' type to match ChatArea handler)
             _event.sender.send('llm-stream', {

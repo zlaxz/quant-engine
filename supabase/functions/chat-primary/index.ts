@@ -66,19 +66,26 @@ serve(async (req) => {
     }
 
     // 2. Load previous messages for this session
+    // CRITICAL FIX: Limit history to prevent "Disorientation" (Context Window Pollution)
+    // We only take the last 30 messages. The "Identity Core" is re-injected every time
+    // so we don't need the full history, just the recent context.
     console.log('[Chat API - PRIMARY] Loading previous messages for session:', sessionId);
-    const { data: previousMessages, error: messagesError } = await supabase
+    const { data: recentMessagesRaw, error: messagesError } = await supabase
       .from('messages')
       .select('role, content, created_at')
       .eq('session_id', sessionId)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: false }) // Get newest first
+      .limit(30); // Hard limit to keep Model IQ high
 
     if (messagesError) {
       console.error('[Chat API - PRIMARY] Messages fetch error:', messagesError);
       throw new Error(`Failed to fetch messages: ${messagesError.message}`);
     }
 
-    console.log('[Chat API - PRIMARY] Loaded', previousMessages?.length || 0, 'previous messages');
+    // Reverse back to chronological order for the LLM
+    const previousMessages = (recentMessagesRaw || []).reverse();
+
+    console.log('[Chat API - PRIMARY] Loaded', previousMessages?.length || 0, 'recent messages (Context Window Optimized)');
 
     // 2.5. Use semantic memory retrieval for chat context with prioritization
     console.log('[Chat API - PRIMARY] Loading memory notes for workspace:', workspaceId);

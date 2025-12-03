@@ -238,6 +238,13 @@ export function ActivityFeed() {
     loadInitialLogs();
   }, []);
 
+  // Cleanup processed logs on unmount to prevent memory accumulation
+  useEffect(() => {
+    return () => {
+      processedLogs.current.clear();
+    };
+  }, []);
+
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
