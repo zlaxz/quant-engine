@@ -1,7 +1,8 @@
 /**
- * MissionControl.tsx - The Autopilot Interface
+ * MissionControl.tsx - Read-Only Mission Monitor
  *
- * Goal-seeking dashboard where you set financial targets and the daemon hunts.
+ * Displays active mission progress and status.
+ * Missions are started via chat with CIO - this is observation only.
  * NO MOCK DATA - Real Supabase connection.
  *
  * Created: 2025-12-03
@@ -10,22 +11,18 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Slider } from '@/components/ui/slider';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Target,
-  Rocket,
   Pause,
   Play,
   AlertTriangle,
   CheckCircle2,
   TrendingUp,
   Activity,
-  Zap,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
@@ -53,14 +50,6 @@ interface Mission {
   completed_at: string | null;
 }
 
-interface MissionConfig {
-  name: string;
-  targetDailyReturn: number;
-  maxDrawdown: number;
-  minWinRate: number;
-  minTrades: number;
-}
-
 function MissionControlComponent() {
   // Connection state
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -69,16 +58,6 @@ function MissionControlComponent() {
   // Active mission state
   const [activeMission, setActiveMission] = useState<Mission | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // New mission config
-  const [config, setConfig] = useState<MissionConfig>({
-    name: '',
-    targetDailyReturn: 2.0,
-    maxDrawdown: 15,
-    minWinRate: 50,
-    minTrades: 50,
-  });
-  const [launching, setLaunching] = useState(false);
 
   // Check connection on mount
   useEffect(() => {
@@ -174,71 +153,6 @@ function MissionControlComponent() {
       clearInterval(interval);
     };
   }, [connected, fetchActiveMission]);
-
-  // Launch new mission
-  const launchMission = useCallback(async () => {
-    if (!connected || launching) return;
-
-    setLaunching(true);
-    setError(null);
-
-    try {
-      // Convert daily return % to Sharpe approximation
-      // Rough formula: Sharpe ≈ (annual return) / volatility
-      // Daily 2% ≈ ~500% annual, with 20% vol ≈ Sharpe of 25 (unrealistic, but for target)
-      // More realistic: daily 0.5% target → Sharpe ~2
-      const targetSharpe = config.targetDailyReturn / 0.25; // Rough conversion
-
-      const missionData = {
-        name: config.name || `Alpha Hunt ${new Date().toLocaleDateString()}`,
-        objective: `Find strategy with ${config.targetDailyReturn}% daily return, max ${config.maxDrawdown}% drawdown`,
-        target_metric: 'sharpe',
-        target_value: targetSharpe,
-        target_operator: 'gte',
-        max_drawdown: -(config.maxDrawdown / 100), // Store as negative decimal
-        min_win_rate: config.minWinRate / 100,
-        min_trades: config.minTrades,
-        status: 'active',
-        priority: 10,
-        current_best_value: 0,
-        attempts: 0,
-        strategies_evaluated: 0,
-        strategies_passed: 0,
-      };
-
-      // Pause any existing active missions first
-      await supabase
-        .from('missions')
-        .update({ status: 'paused' })
-        .eq('status', 'active');
-
-      // Insert new mission
-      const { data, error: insertError } = await supabase
-        .from('missions')
-        .insert(missionData)
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      console.log('[MissionControl] Mission launched:', data);
-      setActiveMission(data);
-
-      // Reset form
-      setConfig({
-        name: '',
-        targetDailyReturn: 2.0,
-        maxDrawdown: 15,
-        minWinRate: 50,
-        minTrades: 50,
-      });
-    } catch (err) {
-      console.error('[MissionControl] Launch failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to launch mission');
-    } finally {
-      setLaunching(false);
-    }
-  }, [connected, launching, config]);
 
   // Pause/Resume mission
   const toggleMission = useCallback(async () => {
@@ -492,116 +406,23 @@ function MissionControlComponent() {
             </div>
           </div>
         ) : (
-          /* New Mission Form */
+          /* No Active Mission - Prompt to use chat */
           <div className="space-y-4">
-            <div className="text-center p-4 rounded-lg bg-gray-800/30 border border-dashed border-gray-600">
-              <Zap className="h-8 w-8 mx-auto mb-2 text-green-500/50" />
-              <p className="text-sm text-muted-foreground">No active mission</p>
-              <p className="text-xs text-muted-foreground">Configure and launch below</p>
-            </div>
-
-            {/* Mission Name */}
-            <div className="space-y-2">
-              <Label className="text-green-400 text-xs">MISSION NAME</Label>
-              <Input
-                placeholder="Alpha Hunter v1"
-                value={config.name}
-                onChange={(e) => setConfig({ ...config, name: e.target.value })}
-                className="bg-gray-800/50 border-gray-600"
-              />
-            </div>
-
-            {/* Target Daily Return */}
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <Label className="text-green-400 text-xs">TARGET DAILY RETURN</Label>
-                <span className="text-sm font-mono text-green-400">
-                  {config.targetDailyReturn.toFixed(1)}%
-                </span>
-              </div>
-              <Slider
-                value={[config.targetDailyReturn]}
-                onValueChange={([v]) => setConfig({ ...config, targetDailyReturn: v })}
-                min={0.1}
-                max={5.0}
-                step={0.1}
-                className="py-2"
-              />
-              <p className="text-xs text-muted-foreground">
-                Higher targets = longer hunt time
+            <div className="text-center p-6 rounded-lg bg-gray-800/30 border border-dashed border-gray-600">
+              <MessageSquare className="h-10 w-10 mx-auto mb-3 text-green-500/50" />
+              <p className="text-sm font-medium text-foreground mb-2">No active mission</p>
+              <p className="text-xs text-muted-foreground mb-4">
+                Ask CIO in chat to start a mission
               </p>
-            </div>
-
-            {/* Max Drawdown */}
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <Label className="text-red-400 text-xs">MAX DRAWDOWN</Label>
-                <span className="text-sm font-mono text-red-400">
-                  {config.maxDrawdown.toFixed(0)}%
-                </span>
+              <div className="p-3 rounded bg-gray-800/50 text-left">
+                <p className="text-xs text-muted-foreground mb-2">Example prompts:</p>
+                <ul className="text-xs space-y-1 text-green-400/80 font-mono">
+                  <li>"Start a mission targeting 2.0 Sharpe"</li>
+                  <li>"Hunt for strategies with max 15% drawdown"</li>
+                  <li>"Launch alpha hunt for high win rate strategies"</li>
+                </ul>
               </div>
-              <Slider
-                value={[config.maxDrawdown]}
-                onValueChange={([v]) => setConfig({ ...config, maxDrawdown: v })}
-                min={5}
-                max={30}
-                step={1}
-                className="py-2"
-              />
             </div>
-
-            {/* Min Win Rate */}
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <Label className="text-blue-400 text-xs">MIN WIN RATE</Label>
-                <span className="text-sm font-mono text-blue-400">
-                  {config.minWinRate.toFixed(0)}%
-                </span>
-              </div>
-              <Slider
-                value={[config.minWinRate]}
-                onValueChange={([v]) => setConfig({ ...config, minWinRate: v })}
-                min={30}
-                max={70}
-                step={5}
-                className="py-2"
-              />
-            </div>
-
-            {/* Min Trades */}
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <Label className="text-purple-400 text-xs">MIN TRADES (Statistical Validity)</Label>
-                <span className="text-sm font-mono text-purple-400">{config.minTrades}</span>
-              </div>
-              <Slider
-                value={[config.minTrades]}
-                onValueChange={([v]) => setConfig({ ...config, minTrades: v })}
-                min={20}
-                max={200}
-                step={10}
-                className="py-2"
-              />
-            </div>
-
-            {/* Launch Button */}
-            <Button
-              className="w-full h-12 bg-green-600 hover:bg-green-700 text-black font-bold"
-              onClick={launchMission}
-              disabled={launching}
-            >
-              {launching ? (
-                <>
-                  <Activity className="h-5 w-5 mr-2 animate-spin" />
-                  LAUNCHING...
-                </>
-              ) : (
-                <>
-                  <Rocket className="h-5 w-5 mr-2" />
-                  LAUNCH MISSION
-                </>
-              )}
-            </Button>
           </div>
         )}
       </CardContent>
