@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, MessageSquare, Pencil, Trash2 } from 'lucide-react';
+import { MessageSquare, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useChatContext } from '@/contexts/ChatContext';
@@ -86,70 +86,6 @@ export const ChatSessionList = () => {
     loadSessions();
   }, [loadSessions]);
 
-  const createNewSession = async () => {
-    try {
-      console.log('[ChatSessionList] Creating new session...');
-
-      // First, get or create a workspace
-      let workspaceId: string;
-
-      // Try to get existing workspace
-      const { data: workspaces, error: wsError } = await supabase
-        .from('workspaces')
-        .select('id')
-        .limit(1);
-
-      if (wsError) {
-        console.error('[ChatSessionList] Workspace query error:', wsError);
-        throw wsError;
-      }
-
-      if (workspaces && workspaces.length > 0) {
-        workspaceId = workspaces[0].id;
-        console.log('[ChatSessionList] Using existing workspace:', workspaceId);
-      } else {
-        // Create a new workspace
-        const { data: newWs, error: createWsError } = await supabase
-          .from('workspaces')
-          .insert({ name: 'Default Workspace' })
-          .select()
-          .single();
-
-        if (createWsError) {
-          console.error('[ChatSessionList] Workspace creation error:', createWsError);
-          throw createWsError;
-        }
-
-        workspaceId = newWs.id;
-        console.log('[ChatSessionList] Created new workspace:', workspaceId);
-      }
-
-      // Create session
-      const { data, error } = await supabase
-        .from('chat_sessions')
-        .insert({
-          title: `Chat ${new Date().toLocaleString()}`,
-          workspace_id: workspaceId,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('[ChatSessionList] Session creation error:', error);
-        throw error;
-      }
-
-      console.log('[ChatSessionList] Session created:', data.id);
-      setSessions([data, ...sessions]);
-      setSelectedSession(data.id, data.workspace_id);
-      toast.success('New chat session created');
-
-    } catch (error: any) {
-      console.error('[ChatSessionList] Error creating session:', error);
-      toast.error(`Failed to create session: ${error.message || 'Unknown error'}`);
-    }
-  };
-
   const deleteSession = async (sessionId: string) => {
     try {
       const { error } = await supabase
@@ -209,35 +145,21 @@ export const ChatSessionList = () => {
 
   const isCollapsed = state === 'collapsed';
 
+  // Listen for refresh events from ChatSidebar when new sessions are created
+  useEffect(() => {
+    const handleRefresh = () => {
+      loadSessions();
+    };
+    
+    window.addEventListener('refresh-chat-sessions', handleRefresh);
+    return () => {
+      window.removeEventListener('refresh-chat-sessions', handleRefresh);
+    };
+  }, [loadSessions]);
+
   return (
     <TooltipProvider>
       <div className="flex-1 flex flex-col min-h-0">
-        <div className={cn(
-          "border-b border-border flex items-center",
-          isCollapsed ? "p-2 justify-center" : "px-3 py-2.5 justify-between"
-        )}>
-          {!isCollapsed && (
-            <span className="text-sm font-medium text-foreground">
-              Chat Sessions
-            </span>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button 
-                size="icon" 
-                variant="ghost" 
-                className={cn(isCollapsed ? "h-8 w-8" : "h-7 w-7")}
-                onClick={createNewSession}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <p>New chat</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-
         <ScrollArea className="flex-1 min-w-0">
           <div className="p-2 space-y-1 min-w-0">
             {loading ? (
