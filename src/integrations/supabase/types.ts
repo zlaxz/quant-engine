@@ -128,6 +128,53 @@ export type Database = {
           },
         ]
       }
+      causal_memories: {
+        Row: {
+          causal_graph: Json | null
+          counterfactuals: Json | null
+          created_at: string | null
+          embedding: string | null
+          event_description: string
+          id: string
+          mechanism: string | null
+          related_strategies: string[] | null
+          statistical_validation: Json | null
+          workspace_id: string
+        }
+        Insert: {
+          causal_graph?: Json | null
+          counterfactuals?: Json | null
+          created_at?: string | null
+          embedding?: string | null
+          event_description: string
+          id?: string
+          mechanism?: string | null
+          related_strategies?: string[] | null
+          statistical_validation?: Json | null
+          workspace_id: string
+        }
+        Update: {
+          causal_graph?: Json | null
+          counterfactuals?: Json | null
+          created_at?: string | null
+          embedding?: string | null
+          event_description?: string
+          id?: string
+          mechanism?: string | null
+          related_strategies?: string[] | null
+          statistical_validation?: Json | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "causal_memories_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_sessions: {
         Row: {
           created_at: string | null
@@ -799,6 +846,199 @@ export type Database = {
           },
         ]
       }
+      mission_dispatches: {
+        Row: {
+          agent_count: number | null
+          best_value_found: number | null
+          completed_at: string | null
+          created_at: string | null
+          decision_context: Json
+          dispatch_type: Database["public"]["Enums"]["swarm_dispatch_type"]
+          id: string
+          mission_id: string
+          status: string | null
+          strategies_generated: number | null
+          strategies_passed_audit: number | null
+          swarm_job_id: string | null
+        }
+        Insert: {
+          agent_count?: number | null
+          best_value_found?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          decision_context: Json
+          dispatch_type: Database["public"]["Enums"]["swarm_dispatch_type"]
+          id?: string
+          mission_id: string
+          status?: string | null
+          strategies_generated?: number | null
+          strategies_passed_audit?: number | null
+          swarm_job_id?: string | null
+        }
+        Update: {
+          agent_count?: number | null
+          best_value_found?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          decision_context?: Json
+          dispatch_type?: Database["public"]["Enums"]["swarm_dispatch_type"]
+          id?: string
+          mission_id?: string
+          status?: string | null
+          strategies_generated?: number | null
+          strategies_passed_audit?: number | null
+          swarm_job_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mission_dispatches_mission_id_fkey"
+            columns: ["mission_id"]
+            isOneToOne: false
+            referencedRelation: "missions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mission_progress: {
+        Row: {
+          best_strategy_id: string | null
+          best_value: number
+          created_at: string | null
+          id: string
+          mission_id: string
+          notes: string | null
+          strategies_evaluated_delta: number | null
+          swarm_job_id: string | null
+          trigger_type: string
+        }
+        Insert: {
+          best_strategy_id?: string | null
+          best_value: number
+          created_at?: string | null
+          id?: string
+          mission_id: string
+          notes?: string | null
+          strategies_evaluated_delta?: number | null
+          swarm_job_id?: string | null
+          trigger_type: string
+        }
+        Update: {
+          best_strategy_id?: string | null
+          best_value?: number
+          created_at?: string | null
+          id?: string
+          mission_id?: string
+          notes?: string | null
+          strategies_evaluated_delta?: number | null
+          swarm_job_id?: string | null
+          trigger_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mission_progress_best_strategy_id_fkey"
+            columns: ["best_strategy_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_genome"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mission_progress_mission_id_fkey"
+            columns: ["mission_id"]
+            isOneToOne: false
+            referencedRelation: "missions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      missions: {
+        Row: {
+          attempts: number | null
+          completed_at: string | null
+          created_at: string | null
+          current_best_strategy_id: string | null
+          current_best_value: number | null
+          deadline: string | null
+          id: string
+          max_correlation: number | null
+          max_drawdown: number | null
+          metadata: Json | null
+          min_trades: number | null
+          min_win_rate: number | null
+          name: string
+          objective: string
+          priority: number | null
+          started_at: string | null
+          status: string
+          strategies_evaluated: number | null
+          strategies_passed: number | null
+          target_metric: string
+          target_operator: string
+          target_regimes: string[] | null
+          target_value: number
+          updated_at: string | null
+        }
+        Insert: {
+          attempts?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          current_best_strategy_id?: string | null
+          current_best_value?: number | null
+          deadline?: string | null
+          id?: string
+          max_correlation?: number | null
+          max_drawdown?: number | null
+          metadata?: Json | null
+          min_trades?: number | null
+          min_win_rate?: number | null
+          name: string
+          objective: string
+          priority?: number | null
+          started_at?: string | null
+          status?: string
+          strategies_evaluated?: number | null
+          strategies_passed?: number | null
+          target_metric?: string
+          target_operator?: string
+          target_regimes?: string[] | null
+          target_value: number
+          updated_at?: string | null
+        }
+        Update: {
+          attempts?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          current_best_strategy_id?: string | null
+          current_best_value?: number | null
+          deadline?: string | null
+          id?: string
+          max_correlation?: number | null
+          max_drawdown?: number | null
+          metadata?: Json | null
+          min_trades?: number | null
+          min_win_rate?: number | null
+          name?: string
+          objective?: string
+          priority?: number | null
+          started_at?: string | null
+          status?: string
+          strategies_evaluated?: number | null
+          strategies_passed?: number | null
+          target_metric?: string
+          target_operator?: string
+          target_regimes?: string[] | null
+          target_value?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_best_strategy"
+            columns: ["current_best_strategy_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_genome"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       morning_briefings: {
         Row: {
           created_at: string | null
@@ -926,6 +1166,81 @@ export type Database = {
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      red_team_audits: {
+        Row: {
+          correlation_score: number | null
+          created_at: string | null
+          critical_issues: string[] | null
+          duration_ms: number | null
+          fee_impact_score: number | null
+          full_report: string | null
+          id: string
+          liquidity_score: number | null
+          macro_shock_score: number | null
+          mission_id: string | null
+          overall_score: number | null
+          overfitting_score: number | null
+          passed: boolean
+          reasoning_chains: Json | null
+          regime_blind_score: number | null
+          strategy_id: string
+          warnings: string[] | null
+        }
+        Insert: {
+          correlation_score?: number | null
+          created_at?: string | null
+          critical_issues?: string[] | null
+          duration_ms?: number | null
+          fee_impact_score?: number | null
+          full_report?: string | null
+          id?: string
+          liquidity_score?: number | null
+          macro_shock_score?: number | null
+          mission_id?: string | null
+          overall_score?: number | null
+          overfitting_score?: number | null
+          passed?: boolean
+          reasoning_chains?: Json | null
+          regime_blind_score?: number | null
+          strategy_id: string
+          warnings?: string[] | null
+        }
+        Update: {
+          correlation_score?: number | null
+          created_at?: string | null
+          critical_issues?: string[] | null
+          duration_ms?: number | null
+          fee_impact_score?: number | null
+          full_report?: string | null
+          id?: string
+          liquidity_score?: number | null
+          macro_shock_score?: number | null
+          mission_id?: string | null
+          overall_score?: number | null
+          overfitting_score?: number | null
+          passed?: boolean
+          reasoning_chains?: Json | null
+          regime_blind_score?: number | null
+          strategy_id?: string
+          warnings?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "red_team_audits_mission_id_fkey"
+            columns: ["mission_id"]
+            isOneToOne: false
+            referencedRelation: "missions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "red_team_audits_strategy_id_fkey"
+            columns: ["strategy_id"]
+            isOneToOne: false
+            referencedRelation: "strategy_genome"
             referencedColumns: ["id"]
           },
         ]
@@ -1086,7 +1401,15 @@ export type Database = {
           tokens_used?: number | null
           tool_calls?: Json | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_session_contexts_session_id"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shadow_positions: {
         Row: {
@@ -1728,6 +2051,10 @@ export type Database = {
           win_rate: number
         }[]
       }
+      check_mission_complete: {
+        Args: { p_mission_id: string }
+        Returns: boolean
+      }
       claim_swarm_tasks: {
         Args: { p_batch_size?: number; p_worker_id: string }
         Returns: {
@@ -1797,6 +2124,21 @@ export type Database = {
           pbo_score: number
           similarity: number
           warning_message: string
+        }[]
+      }
+      get_active_mission: {
+        Args: never
+        Returns: {
+          current_best_strategy_id: string
+          current_best_value: number
+          gap_to_target: number
+          max_drawdown: number
+          mission_id: string
+          name: string
+          priority: number
+          target_metric: string
+          target_operator: string
+          target_value: number
         }[]
       }
       get_experiment_summary: {
@@ -1878,6 +2220,16 @@ export type Database = {
         Args: { p_session_id: string }
         Returns: string
       }
+      get_strategies_pending_audit: {
+        Args: { p_limit?: number }
+        Returns: {
+          code_content: string
+          fitness_score: number
+          sharpe_ratio: number
+          strategy_id: string
+          strategy_name: string
+        }[]
+      }
       get_top_strategies: {
         Args: {
           p_limit?: number
@@ -1945,6 +2297,20 @@ export type Database = {
         Args: { p_strategy_id: string }
         Returns: string
       }
+      record_red_team_audit: {
+        Args: {
+          p_duration_ms: number
+          p_full_report: string
+          p_issues: string[]
+          p_mission_id: string
+          p_overall_score: number
+          p_passed: boolean
+          p_scores: Json
+          p_strategy_id: string
+          p_warnings: string[]
+        }
+        Returns: string
+      }
       search_memory_notes: {
         Args: {
           match_count?: number
@@ -1971,12 +2337,27 @@ export type Database = {
         Returns: undefined
       }
       update_job_progress: { Args: { p_job_id: string }; Returns: undefined }
+      update_mission_progress: {
+        Args: {
+          p_metric_value: number
+          p_mission_id: string
+          p_strategy_id: string
+          p_trigger_type?: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       briefing_verdict: "pending" | "approved" | "rejected"
       graduation_status: "pending" | "graduated" | "failed" | "paused"
       position_side: "long" | "short"
       strategy_status: "incubating" | "active" | "failed" | "retired"
+      swarm_dispatch_type:
+        | "aggressive"
+        | "risk"
+        | "novelty"
+        | "refinement"
+        | "red_team"
       swarm_status:
         | "pending"
         | "processing"
@@ -2114,6 +2495,13 @@ export const Constants = {
       graduation_status: ["pending", "graduated", "failed", "paused"],
       position_side: ["long", "short"],
       strategy_status: ["incubating", "active", "failed", "retired"],
+      swarm_dispatch_type: [
+        "aggressive",
+        "risk",
+        "novelty",
+        "refinement",
+        "red_team",
+      ],
       swarm_status: [
         "pending",
         "processing",
