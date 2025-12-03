@@ -25,6 +25,11 @@ pyarrow>=14.0.0
 # Shadow Validator - WebSocket streaming
 websockets>=12.0
 
+# ThetaData - Live market data (stocks + options)
+# Requires Theta Terminal running locally
+# Provides: trades, quotes, Greeks, IV via WebSocket
+thetadata>=1.0.0
+
 # Async HTTP for Supabase calls
 aiohttp>=3.9.0
 

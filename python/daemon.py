@@ -117,14 +117,18 @@ try:
 except ImportError:
     RED_TEAM_AVAILABLE = False
 
-# Shadow Trader imports
+# Shadow Trader imports - ThetaData for live market data
 try:
-    from massive_socket import MassiveSocket, QuoteTick, TradeTick, Tick
+    from thetadata_client import ThetaDataClient, QuoteTick, TradeTick, Tick, SecurityType
     SHADOW_TRADING_AVAILABLE = True
 except ImportError:
     SHADOW_TRADING_AVAILABLE = False
-    logger = logging.getLogger('NightShift')
-    # Will be initialized after logging setup
+    ThetaDataClient = None
+    QuoteTick = None
+    TradeTick = None
+    Tick = None
+    SecurityType = None
+    # Will log warning after logging setup
 
 # Stream Buffer for live tick aggregation
 try:
@@ -645,8 +649,12 @@ class ShadowTrader:
     """
     Real-Time Paper Trading Validator.
 
-    Consumes live market data from MassiveSocket and simulates execution
+    Consumes live market data from ThetaData and simulates execution
     for active strategies to validate performance before production.
+
+    Data Source: ThetaData (requires Theta Terminal running locally)
+    - Stocks: Trades and quotes for SPY, QQQ, IWM, etc.
+    - Options: Full chain streaming for Pro tier subscribers
 
     Execution Simulation:
     - Spread: Always buy at ask, sell at bid
@@ -675,7 +683,7 @@ class ShadowTrader:
         self.api_key = api_key
 
         # State
-        self._socket: Optional['MassiveSocket'] = None
+        self._client: Optional['ThetaDataClient'] = None
         self._running = False
         self._positions: Dict[str, ShadowPosition] = {}  # position_id -> position
         self._strategy_positions: Dict[str, List[str]] = {}  # strategy_id -> [position_ids]
@@ -717,21 +725,30 @@ class ShadowTrader:
         logger.info(f"   Graduation: {self.GRADUATION_TRADE_COUNT} trades @ {self.GRADUATION_SHARPE_THRESHOLD} Sharpe")
 
     async def start(self) -> None:
-        """Start shadow trading with live data feed."""
+        """Start shadow trading with live data feed from ThetaData."""
         if not SHADOW_TRADING_AVAILABLE:
-            logger.warning("Shadow trading unavailable - massive_socket not imported")
+            logger.warning("Shadow trading unavailable - thetadata_client not imported")
             return
 
-        logger.info("🔮 [ShadowTrader] Starting live paper trading...")
+        logger.info("🔮 [ShadowTrader] Starting live paper trading via ThetaData...")
 
         try:
-            # Connect to WebSocket
-            self._socket = MassiveSocket(
-                api_key=self.api_key,
-                symbols=self.symbols,
-                feed_type='stocks',
+            # Create ThetaData client with callbacks
+            self._client = ThetaDataClient(
+                auto_reconnect=True,
+                reconnect_delay=5.0,
             )
-            await self._socket.connect()
+
+            # Connect to Theta Terminal
+            if not await self._client.connect():
+                logger.error("❌ [ShadowTrader] Failed to connect to Theta Terminal")
+                logger.error("   Make sure Theta Terminal is running!")
+                return
+
+            # Subscribe to stock trades and quotes
+            await self._client.subscribe_stock_trades(self.symbols)
+            await self._client.subscribe_stock_quotes(self.symbols)
+
             self._running = True
 
             # Start background tasks
@@ -739,10 +756,8 @@ class ShadowTrader:
             asyncio.create_task(self._signal_processor())
             asyncio.create_task(self._position_updater())
 
-            # Start WebSocket receiver
-            asyncio.create_task(self._socket.run())
-
-            logger.info("🔮 [ShadowTrader] Live feed connected")
+            logger.info("🔮 [ShadowTrader] ThetaData feed connected")
+            logger.info(f"   Streaming: {', '.join(self.symbols)}")
 
         except Exception as e:
             logger.error(f"❌ [ShadowTrader] Failed to start: {e}")
@@ -751,13 +766,13 @@ class ShadowTrader:
     async def stop(self) -> None:
         """Stop shadow trading."""
         self._running = False
-        if self._socket:
-            await self._socket.close()
+        if self._client:
+            await self._client.disconnect()
         logger.info("🔮 [ShadowTrader] Stopped")
 
     async def _tick_consumer(self) -> None:
         """
-        Consume ticks from WebSocket, aggregate into bars, and trigger strategy execution.
+        Consume ticks from ThetaData, aggregate into bars, and trigger strategy execution.
 
         This is the "Transmission" - it connects live data to strategies:
         1. Quote ticks → Update position prices
@@ -765,10 +780,10 @@ class ShadowTrader:
         3. New bar closed → Run all active strategies on rolling DataFrame
         4. Signal changed → Submit to ShadowTrader for simulated execution
         """
-        if not self._socket:
+        if not self._client:
             return
 
-        async for tick in self._socket.stream():
+        async for tick in self._client.stream():
             if not self._running:
                 break
 
@@ -1335,7 +1350,7 @@ This strategy has demonstrated consistent performance over {metrics.get('trade_c
         return {
             **self.stats,
             'open_positions': len(self._positions),
-            'connected': self._socket.is_connected if self._socket else False,
+            'connected': self._client.is_connected if self._client else False,
             'current_regime': self._current_regime,
         }
 
