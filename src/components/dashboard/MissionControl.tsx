@@ -7,7 +7,7 @@
  * Created: 2025-12-03
  */
 
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   TrendingUp,
-  TrendingDown,
   Activity,
   Zap,
 } from 'lucide-react';

@@ -7,6 +7,7 @@ import { HashRouter, Routes, Route } from "react-router-dom";
 import { ChatProvider } from "@/contexts/ChatContext";
 import { ResearchDisplayProvider } from "@/contexts/ResearchDisplayContext";
 import { MissionControlProvider } from "@/contexts/MissionControlContext";
+import { VisualizationProvider } from "@/contexts/VisualizationContext";
 import { useEffect, useState, lazy, Suspense } from 'react';
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
@@ -77,41 +78,43 @@ const App = () => {
             <ChatProvider>
               <ResearchDisplayProvider>
                 <MissionControlProvider>
-                  <Toaster />
-                  <Sonner />
-                  <HashRouter>
-                    <CommandPalette />
-                    <Routes>
-                      <Route path="/" element={<Index />} />
-                      <Route path="/settings" element={<Settings />} />
-                      <Route path="/dashboard" element={<Dashboard />} />
-                      <Route 
-                        path="/popout/:id" 
-                        element={
-                          <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
-                            <PopoutVisualization />
-                          </Suspense>
-                        } 
-                      />
-                      <Route 
-                        path="/mission-control" 
-                        element={
-                          <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
-                            <MissionControlPopout />
-                          </Suspense>
-                        } 
-                      />
-                      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </HashRouter>
+                  <VisualizationProvider>
+                    <Toaster />
+                    <Sonner />
+                    <HashRouter>
+                      <CommandPalette />
+                      <Routes>
+                        <Route path="/" element={<Index />} />
+                        <Route path="/settings" element={<Settings />} />
+                        <Route path="/dashboard" element={<Dashboard />} />
+                        <Route 
+                          path="/popout/:id" 
+                          element={
+                            <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
+                              <PopoutVisualization />
+                            </Suspense>
+                          } 
+                        />
+                        <Route 
+                          path="/mission-control" 
+                          element={
+                            <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
+                              <MissionControlPopout />
+                            </Suspense>
+                          } 
+                        />
+                        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </HashRouter>
 
-                  {showFirstLaunch && (
-                    <FirstLaunchModal
-                      open={showFirstLaunch}
-                      onComplete={handleFirstLaunchComplete}
-                    />
-                  )}
+                    {showFirstLaunch && (
+                      <FirstLaunchModal
+                        open={showFirstLaunch}
+                        onComplete={handleFirstLaunchComplete}
+                      />
+                    )}
+                  </VisualizationProvider>
                 </MissionControlProvider>
               </ResearchDisplayProvider>
             </ChatProvider>

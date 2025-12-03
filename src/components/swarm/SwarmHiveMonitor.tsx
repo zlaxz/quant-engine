@@ -9,7 +9,7 @@
  * Created: 2025-12-03
  */
 
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -417,7 +417,7 @@ function SwarmHiveMonitorComponent() {
             {/* 10x5 Grid of agents */}
             <div className="grid grid-cols-10 gap-2 p-3 rounded-lg bg-gray-900/50 border border-gray-800">
               {agentGrid.map(({ index, task }) => (
-                <AgentDot key={index} task={task} index={index} />
+                <AgentDot key={index} task={task || null} index={index} />
               ))}
             </div>
 

@@ -11,7 +11,7 @@
  * Created: 2025-12-03
  */
 
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -23,7 +23,6 @@ import {
   Ghost,
   Swords,
   ArrowRight,
-  CheckCircle2,
   AlertTriangle,
   TrendingUp,
   Activity,
