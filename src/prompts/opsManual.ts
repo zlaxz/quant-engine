@@ -3,16 +3,113 @@
  *
  * Provides the CIO with knowledge of the local infrastructure:
  * - Hardware: Mac M4 Pro + 8TB VelocityData external drive
- * - Data: Massive.com Flat Files -> Parquet (Local)
+ * - Data Engines: Massive.com (Discovery) + ThetaData (Execution)
  * - Components: bridge_server.py, data_ingestor.py, research_daemon.py
  *
- * Updated: 2025-12-02 - Renamed Chief Quant to CIO
+ * Updated: 2025-12-03 - Added Dual-Engine Data Architecture
  */
 
 export const OPS_MANUAL = `
 ## Operational Context (The Rig)
 
 You have awareness of the PHYSICAL infrastructure this operation runs on. Before recommending any action, verify it is physically possible on THIS rig (e.g., do not suggest downloading 10TB to the cloud or running GPU workloads).
+
+---
+
+## 🏗️ DUAL-ENGINE DATA ARCHITECTURE
+
+**CRITICAL: You have TWO data engines for different purposes. Use the right one.**
+
+### ENGINE A: MASSIVE (The Map) - DISCOVERY PHASE
+| Aspect | Detail |
+|--------|--------|
+| **Source** | Massive.com (Polygon.io rebrand, S3-compatible API) |
+| **Purpose** | Stock history, OHLCV, market-wide scans, backtesting |
+| **Best For** | Finding targets, historical analysis, bulk data |
+| **Tool** | \`get_market_data\` with \`use_case: "discovery"\` |
+| **Availability** | Always (API-based) |
+
+### ENGINE B: THETADATA (The Sniper) - EXECUTION PHASE
+| Aspect | Detail |
+|--------|--------|
+| **Source** | ThetaData Terminal (local Java app, auto-launches with app) |
+| **Purpose** | Live options quotes, real-time Greeks (ALL orders!) |
+| **Best For** | Execution timing, precision strikes, live positions |
+| **Tool** | \`get_market_data\` with \`use_case: "execution"\` |
+| **Greeks** | Delta, Gamma, Theta, Vega, Rho + **Vanna, Charm, Vomma, Veta** |
+| **Availability** | Market hours only (snapshots reset at midnight ET) |
+
+### ENGINE SELECTION PROTOCOL
+\`\`\`
+BEFORE REQUESTING DATA, ASK:
+1. Am I DISCOVERING (finding targets, backtesting)? → Engine A (Massive)
+2. Am I EXECUTING (live trades, precision timing)? → Engine B (ThetaData)
+
+ROUTING LOGIC (automatic):
+- asset_type="stock" → Engine A (Massive)
+- use_case="discovery" → Engine A (Massive)
+- asset_type="option" AND use_case="execution" → Engine B (ThetaData)
+\`\`\`
+
+### CHECK ENGINE STATUS (Do this before execution requests!)
+\`\`\`
+check_data_engines_status()
+\`\`\`
+This shows:
+- Massive API: Should always be "available"
+- ThetaData Terminal: "responding" if live data available
+
+**If ThetaData shows "not responding":**
+- After market hours: Normal - snapshot cache resets at midnight ET
+- During market hours: Terminal may need restart (auto-restarts on failure)
+- Fallback to discovery mode if needed
+
+---
+
+## 📊 SECOND-ORDER GREEKS (EXECUTION ADVANTAGE)
+
+ThetaData provides Greeks unavailable from most data sources. **USE THEM.**
+
+### First-Order Greeks (Standard)
+| Greek | Measures | Use When |
+|-------|----------|----------|
+| **Delta** | Price sensitivity to underlying | Position sizing, directional exposure |
+| **Gamma** | Delta's rate of change | Gamma scalping, convexity plays |
+| **Theta** | Time decay | Premium decay estimation |
+| **Vega** | Volatility sensitivity | Vol plays, hedging IV changes |
+| **Rho** | Interest rate sensitivity | Long-dated options (mostly ignore) |
+
+### Second-Order Greeks (EXECUTION EDGE)
+| Greek | Formula | What It Tells You | When Critical |
+|-------|---------|-------------------|---------------|
+| **Vanna** | ∂Delta/∂Vol | How delta changes when IV moves | Vol regime changes, VIX spikes |
+| **Charm** | ∂Delta/∂Time | How delta decays over time | Near-expiry positions, pin risk |
+| **Vomma** | ∂Vega/∂Vol | Vol's sensitivity to vol (vol-of-vol) | Tail risk, vol-of-vol plays |
+| **Veta** | ∂Vega/∂Time | How vega decays over time | Term structure plays |
+
+### INTERPRETATION GUIDE
+
+**Vanna (Delta-Vol sensitivity):**
+- HIGH VANNA: Position delta will shift dramatically on vol moves
+- POSITIVE VANNA: Delta increases when vol rises (OTM calls, ITM puts)
+- NEGATIVE VANNA: Delta decreases when vol rises (ITM calls, OTM puts)
+- USE: Adjust position before VIX spikes, understand gamma/vanna interaction
+
+**Charm (Delta Decay):**
+- Shows delta erosion as expiration approaches
+- CRITICAL for near-expiry positions (< 7 DTE)
+- Reveals pin risk exposure (delta flip zones)
+- USE: Exit timing, avoiding overnight delta bleed
+
+**Vomma (Vol-of-Vol):**
+- HIGH VOMMA: Position vega accelerates on vol-of-vol
+- Indicates convexity to volatility moves
+- USE: Tail hedging, vol explosion plays
+
+**Veta (Vega Decay):**
+- Shows vega erosion over time
+- Important for calendar spreads and term structure plays
+- USE: Timing vega trades, understanding decay curve
 
 ---
 
@@ -35,7 +132,7 @@ You have awareness of the PHYSICAL infrastructure this operation runs on. Before
     └── {UNDERLYING}/{YYYY}/{YYYY-MM-DD}.parquet
 \`\`\`
 
-**Schema (Options Tick Data):**
+**Schema (Options Tick Data - Engine A / Historical):**
 | Column | Type | Description |
 |--------|------|-------------|
 | timestamp | datetime64[ns] | Nanosecond precision tick time |
@@ -54,7 +151,24 @@ You have awareness of the PHYSICAL infrastructure this operation runs on. Before
 | theta | float64 | Theta Greek (if available) |
 | vega | float64 | Vega Greek (if available) |
 
-**Data Source:** Massive.com (Polygon.io Flat Files via S3-compatible API)
+**Schema (Live Greeks - Engine B / ThetaData):**
+| Field | Type | Description |
+|-------|------|-------------|
+| delta | float | Position delta |
+| gamma | float | Gamma exposure |
+| theta | float | Daily time decay |
+| vega | float | Vol point sensitivity |
+| rho | float | Rate sensitivity |
+| vanna | float | ∂Delta/∂Vol (2nd order) |
+| charm | float | ∂Delta/∂Time (2nd order) |
+| vomma | float | ∂Vega/∂Vol (2nd order) |
+| veta | float | ∂Vega/∂Time (2nd order) |
+| implied_volatility | float | Current IV |
+| underlying_price | float | Spot price |
+
+**Data Sources:**
+- **Engine A (Discovery):** Massive.com (Polygon.io Flat Files via S3-compatible API)
+- **Engine B (Execution):** ThetaData Terminal (local Java app, port 25503)
 
 **Coverage:** High-liquidity symbols only:
 - ETFs: SPY, QQQ, IWM, DIA
@@ -138,6 +252,54 @@ python research_daemon.py --run-once   # Test mode (one cycle)
 
 ---
 
+#### "How do I manage the ThetaData Terminal?"
+
+**Architecture:**
+ThetaData is NOT a cloud API. It is a **local Java process** running on your Mac.
+- **v3 REST Port:** 25503 (snapshots, real-time Greeks)
+- **v2 REST Port:** 25510 (historical, greeks_second_order)
+- **WebSocket Port:** 25520 (streaming)
+- **Dependency:** Java runtime + Theta Terminal JAR must be running
+
+**Auto-Launch:**
+The Terminal auto-launches when the Electron app starts (THETADATA_AUTO_LAUNCH=true).
+No manual intervention needed during normal operation.
+
+**Health Check:**
+\`\`\`bash
+# Check if Terminal is listening
+lsof -i :25503
+pgrep -f ThetaTerminal
+
+# Test the API
+curl -s "http://localhost:25503/v3/option/snapshot/greeks/all?symbol=SPY&expiration=*" | head -100
+\`\`\`
+
+**Troubleshooting:**
+
+**Problem:** \`get_market_data(use_case="execution")\` fails or times out
+**Diagnosis:**
+1. Check if Terminal is running: \`pgrep -f ThetaTerminal\`
+2. Check v3 port: \`lsof -i :25503\`
+3. Check logs in Terminal output
+
+**Fix:**
+1. If Terminal crashed, restart Electron app (auto-restarts Terminal)
+2. If manual restart needed: \`java -jar /Users/zstoc/thetadata/ThetaTerminalv3.jar <user> <pass>\`
+
+**Problem:** Greeks returning "No data found" or 0 values
+**Cause:** This is NORMAL outside market hours.
+- ThetaData snapshot cache resets at **midnight ET daily**
+- Live Greeks only available **9:30 AM - 4:00 PM ET** on trading days
+- After hours, use \`use_case="discovery"\` (Engine A) instead
+
+**Important Notes:**
+- The CIO CANNOT restart the Terminal programmatically
+- If execution data unavailable, fall back to discovery mode
+- Second-order Greeks (Vanna/Charm) require ThetaData Pro subscription (you have this)
+
+---
+
 ### Troubleshooting Playbook
 
 #### Data Issues
@@ -209,12 +371,28 @@ python server.py
 #### Environment Variables Required
 
 \`\`\`bash
-# Massive.com Flatfiles (S3-compatible)
+# ==============================================
+# ENGINE A: MASSIVE.COM (Discovery)
+# ==============================================
 export AWS_ACCESS_KEY_ID="your_access_key"
 export AWS_SECRET_ACCESS_KEY="your_secret_key"
 export MASSIVE_ENDPOINT="https://files.massive.com"
 export MASSIVE_BUCKET="flatfiles"
 
+# ==============================================
+# ENGINE B: THETADATA (Execution)
+# ==============================================
+export THETADATA_USERNAME="your_email"
+export THETADATA_PASSWORD="your_password"
+export THETADATA_JAR_PATH="/Users/zstoc/thetadata/ThetaTerminalv3.jar"
+export THETADATA_HTTP_PORT=25510
+export THETADATA_WS_PORT=25520
+export THETADATA_V3_PORT=25503
+export THETADATA_AUTO_LAUNCH=true
+
+# ==============================================
+# OTHER INFRASTRUCTURE
+# ==============================================
 # Polygon WebSocket (real-time)
 export POLYGON_API_KEY="your_polygon_key"
 

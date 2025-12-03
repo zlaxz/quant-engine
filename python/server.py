@@ -609,6 +609,86 @@ def get_data_engines_status():
         })
 
 
+@app.route('/health/theta', methods=['GET'])
+def health_theta():
+    """
+    GET /health/theta - ThetaData Terminal health check.
+
+    THE SILENT FAIL PROBLEM:
+    ThetaData is a local Java app. If it crashes or isn't running,
+    your bot will hang indefinitely. This endpoint makes it visible.
+
+    Response:
+        {"status": "online", "port": 25503, "responding": true}
+        {"status": "offline", "port": 25503, "responding": false, "reason": "..."}
+    """
+    import socket
+
+    theta_port = int(os.environ.get('THETADATA_V3_PORT', 25503))
+
+    try:
+        # Try to connect to the Theta Terminal port
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        result = sock.connect_ex(('127.0.0.1', theta_port))
+        sock.close()
+
+        if result == 0:
+            # Port is open, now test if it responds to HTTP
+            import requests
+            try:
+                response = requests.get(
+                    f'http://127.0.0.1:{theta_port}/v3/option/snapshot/greeks/all',
+                    params={'symbol': 'SPY', 'expiration': '*'},
+                    timeout=3
+                )
+                # 200 = working (even "No data found" is valid response)
+                if response.status_code == 200:
+                    return jsonify({
+                        'status': 'online',
+                        'port': theta_port,
+                        'responding': True,
+                        'message': 'ThetaData Terminal is running and responding'
+                    })
+                else:
+                    return jsonify({
+                        'status': 'degraded',
+                        'port': theta_port,
+                        'responding': False,
+                        'reason': f'HTTP {response.status_code}'
+                    })
+            except requests.exceptions.Timeout:
+                return jsonify({
+                    'status': 'degraded',
+                    'port': theta_port,
+                    'responding': False,
+                    'reason': 'HTTP request timeout'
+                })
+            except Exception as e:
+                return jsonify({
+                    'status': 'degraded',
+                    'port': theta_port,
+                    'responding': False,
+                    'reason': str(e)
+                })
+        else:
+            return jsonify({
+                'status': 'offline',
+                'port': theta_port,
+                'responding': False,
+                'reason': 'Port not open - Terminal not running',
+                'action': 'Launch Theta Terminal or restart Electron app'
+            })
+
+    except Exception as e:
+        return jsonify({
+            'status': 'offline',
+            'port': theta_port,
+            'responding': False,
+            'reason': str(e)
+        })
+
+
 # =============================================================================
 # MAIN
 # =============================================================================

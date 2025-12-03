@@ -317,6 +317,128 @@ class StreamBuffer:
         self._total_bars = 0
         logger.info(f"📊 StreamBuffer {self.symbol} reset")
 
+    def warmup(self, historical_data: pd.DataFrame) -> int:
+        """
+        Warm up the buffer with historical data.
+
+        THE COLD START PROBLEM:
+        When you turn the bot on at 9:30 AM, it has zero data.
+        It would have to wait 50 minutes to build a 50-period moving average.
+        This misses the most profitable hour of the day.
+
+        SOLUTION:
+        Before starting live trading, fetch historical candles and inject them
+        into the buffer. The buffer is then "warm" and ready to trade immediately.
+
+        Args:
+            historical_data: DataFrame with columns: date, open, high, low, close, volume
+                             Can also include: vwap, trade_count
+                             Should be sorted chronologically (oldest first)
+
+        Returns:
+            Number of bars loaded
+
+        Usage:
+            # Fetch last 500 candles from Massive or ThetaData
+            historical = get_historical_bars('SPY', limit=500)
+            buffer = StreamBuffer('SPY')
+            buffer.warmup(historical)
+            # Now buffer.is_ready() returns True immediately!
+        """
+        if historical_data is None or historical_data.empty:
+            logger.warning(f"⚠️ StreamBuffer {self.symbol}: No historical data for warmup")
+            return 0
+
+        # Ensure we have required columns
+        required_cols = {'open', 'high', 'low', 'close', 'volume'}
+        df_cols = set(historical_data.columns.str.lower())
+
+        if not required_cols.issubset(df_cols):
+            missing = required_cols - df_cols
+            logger.error(f"❌ StreamBuffer {self.symbol}: Missing columns for warmup: {missing}")
+            return 0
+
+        # Normalize column names
+        df = historical_data.copy()
+        df.columns = df.columns.str.lower()
+
+        # Handle date column (might be index or column)
+        if 'date' not in df.columns:
+            if df.index.name == 'date' or isinstance(df.index, pd.DatetimeIndex):
+                df = df.reset_index()
+                df.columns = ['date'] + list(df.columns[1:])
+
+        # Sort chronologically (oldest first)
+        df = df.sort_values('date')
+
+        # Trim to window size (keep most recent)
+        if len(df) > self.window_size:
+            df = df.tail(self.window_size)
+
+        # Convert to bar format
+        bars_loaded = 0
+        for _, row in df.iterrows():
+            bar_dict = {
+                'date': pd.to_datetime(row['date']),
+                'open': float(row['open']),
+                'high': float(row['high']),
+                'low': float(row['low']),
+                'close': float(row['close']),
+                'volume': float(row['volume']),
+                'vwap': float(row.get('vwap', row['close'])),
+                'trade_count': int(row.get('trade_count', 0))
+            }
+            self._bars.append(bar_dict)
+            bars_loaded += 1
+
+        # Update state
+        self._total_bars = bars_loaded
+        self._df = None  # Invalidate cached DataFrame
+
+        # Check if ready
+        if len(self._bars) >= self.min_bars_to_trade:
+            self._is_ready = True
+            logger.info(f"🟢 StreamBuffer {self.symbol} WARMED UP - {bars_loaded} bars loaded, READY TO TRADE")
+        else:
+            logger.info(f"📊 StreamBuffer {self.symbol} warmed up with {bars_loaded} bars (need {self.min_bars_to_trade} to trade)")
+
+        return bars_loaded
+
+    def warmup_from_dict(self, bars: List[Dict]) -> int:
+        """
+        Warm up from a list of bar dictionaries.
+
+        Convenience method when data comes from an API as dicts.
+
+        Args:
+            bars: List of dicts with keys: date, open, high, low, close, volume
+
+        Returns:
+            Number of bars loaded
+        """
+        if not bars:
+            return 0
+
+        df = pd.DataFrame(bars)
+        return self.warmup(df)
+
+    def get_warmup_requirement(self) -> Dict[str, Any]:
+        """
+        Get information about warmup requirements.
+
+        Returns:
+            Dict with warmup details for daemon to fetch correct historical data
+        """
+        return {
+            'symbol': self.symbol,
+            'bars_needed': self.min_bars_to_trade,
+            'recommended_bars': self.window_size,  # Fetch full window for indicators
+            'bar_interval_seconds': self.bar_interval,
+            'is_ready': self._is_ready,
+            'current_bars': len(self._bars),
+            'bars_until_ready': max(0, self.min_bars_to_trade - len(self._bars))
+        }
+
 
 class MultiSymbolBuffer:
     """
@@ -367,3 +489,40 @@ class MultiSymbolBuffer:
     def get_stats(self) -> Dict[str, Dict]:
         """Get stats for all buffers."""
         return {s: b.get_stats() for s, b in self.buffers.items()}
+
+    def warmup(self, symbol: str, historical_data: pd.DataFrame) -> int:
+        """
+        Warm up a specific symbol's buffer with historical data.
+
+        Args:
+            symbol: Symbol to warm up
+            historical_data: DataFrame with OHLCV data
+
+        Returns:
+            Number of bars loaded
+        """
+        symbol = symbol.upper()
+        if symbol in self.buffers:
+            return self.buffers[symbol].warmup(historical_data)
+        return 0
+
+    def warmup_all(self, historical_data: Dict[str, pd.DataFrame]) -> Dict[str, int]:
+        """
+        Warm up all buffers from a dict of historical data.
+
+        Args:
+            historical_data: Dict mapping symbol -> DataFrame
+
+        Returns:
+            Dict mapping symbol -> bars loaded
+        """
+        results = {}
+        for symbol, df in historical_data.items():
+            symbol = symbol.upper()
+            if symbol in self.buffers:
+                results[symbol] = self.buffers[symbol].warmup(df)
+        return results
+
+    def get_warmup_requirements(self) -> Dict[str, Dict[str, Any]]:
+        """Get warmup requirements for all buffers."""
+        return {s: b.get_warmup_requirement() for s, b in self.buffers.items()}

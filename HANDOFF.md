@@ -101,6 +101,32 @@
    - Auto-shutdown on app close
    - Health monitoring with auto-restart
 
+3. **CIO Prompting Updates** - Dual-engine awareness across all prompts
+   - `src/prompts/opsManual.ts` - Major update:
+     - Dual-engine architecture section (Engine A vs Engine B)
+     - Second-order Greeks interpretation guide (Vanna, Charm, Vomma, Veta)
+     - ThetaData Terminal management + troubleshooting
+     - Updated environment variables with ThetaData config
+   - `src/prompts/cioIdentityCore.ts` - Major update:
+     - Added "Data Philosophy" section with Sniper vs Map mindset
+     - Updated "MY DIRECT POWERS" table with dual-engine tools
+     - CIO now understands when to use each engine
+
+4. **Pre-Flight Safety Fixes** - Critical live trading safety
+   - `python/engine/trading/risk_manager.py` - NEW: Contract-aware position sizing
+     - x100 multiplier for options (prevents blowing up account)
+     - x50 multiplier for ES futures, x20 for NQ, etc.
+     - MAX_CONTRACTS safety limits (50 options, 10 futures)
+     - validate_order() for pre-submission checks
+   - `python/engine/trading/stream_buffer.py` - Added warmup() method
+     - Solves Cold Start problem (no more 50-min wait at market open)
+     - warmup() injects historical bars instantly
+     - get_warmup_requirement() for daemon integration
+   - `python/server.py` - Added `/health/theta` endpoint
+     - Explicit ThetaData Terminal health check
+     - Returns status: online/offline/degraded
+     - UI can now show RED indicator if Terminal down
+
 ## Next Actions (Priority Order)
 1. **Make Guardian UI Actionable**
    - Add "Run White Noise Test" button to SystemIntegrity
