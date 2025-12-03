@@ -126,6 +126,13 @@ except ImportError:
     logger = logging.getLogger('NightShift')
     # Will be initialized after logging setup
 
+# Stream Buffer for live tick aggregation
+try:
+    from engine.trading.stream_buffer import StreamBuffer, MultiSymbolBuffer, NewBarEvent
+    STREAM_BUFFER_AVAILABLE = True
+except ImportError:
+    STREAM_BUFFER_AVAILABLE = False
+
 # Configure logging with rotation
 logging.basicConfig(
     level=logging.INFO,
@@ -676,6 +683,21 @@ class ShadowTrader:
         self._last_quotes: Dict[str, 'QuoteTick'] = {}
         self._current_regime: str = RegimeType.LOW_VOL_GRIND
 
+        # Live Strategy Execution - The "Transmission"
+        self._stream_buffers: Optional['MultiSymbolBuffer'] = None
+        self._loaded_strategies: Dict[str, Any] = {}  # strategy_id -> loaded instance
+        self._last_signals: Dict[str, int] = {}  # strategy_id -> last signal (0, 1, -1)
+        self._strategy_symbols: Dict[str, str] = {}  # strategy_id -> symbol
+
+        # Initialize stream buffers if available
+        if STREAM_BUFFER_AVAILABLE:
+            self._stream_buffers = MultiSymbolBuffer(
+                symbols=self.symbols,
+                window_size=500,
+                bar_interval=60,  # 1-minute bars
+                min_bars_to_trade=50  # Cold start protection
+            )
+
         # Statistics
         self.stats = {
             'signals_received': 0,
@@ -684,10 +706,14 @@ class ShadowTrader:
             'positions_opened': 0,
             'positions_closed': 0,
             'graduations': 0,
+            'bars_processed': 0,
+            'strategy_runs': 0,
+            'signal_changes': 0,
         }
 
         logger.info("🔮 ShadowTrader initialized")
         logger.info(f"   Symbols: {self.symbols}")
+        logger.info(f"   Stream Buffers: {'ENABLED' if self._stream_buffers else 'DISABLED'}")
         logger.info(f"   Graduation: {self.GRADUATION_TRADE_COUNT} trades @ {self.GRADUATION_SHARPE_THRESHOLD} Sharpe")
 
     async def start(self) -> None:
@@ -730,7 +756,15 @@ class ShadowTrader:
         logger.info("🔮 [ShadowTrader] Stopped")
 
     async def _tick_consumer(self) -> None:
-        """Consume ticks from WebSocket and update state."""
+        """
+        Consume ticks from WebSocket, aggregate into bars, and trigger strategy execution.
+
+        This is the "Transmission" - it connects live data to strategies:
+        1. Quote ticks → Update position prices
+        2. Trade ticks → Aggregate into 1-min bars via StreamBuffer
+        3. New bar closed → Run all active strategies on rolling DataFrame
+        4. Signal changed → Submit to ShadowTrader for simulated execution
+        """
         if not self._socket:
             return
 
@@ -747,8 +781,19 @@ class ShadowTrader:
                     await self._update_position_prices(tick)
 
                 elif isinstance(tick, TradeTick):
-                    # Could use trade prints for additional validation
-                    pass
+                    # Feed trade ticks to StreamBuffer for bar aggregation
+                    if self._stream_buffers:
+                        new_bar_event = self._stream_buffers.on_tick(
+                            symbol=tick.symbol,
+                            price=tick.price,
+                            size=tick.size,
+                            timestamp=tick.timestamp
+                        )
+
+                        # If a new bar just closed, run strategies
+                        if new_bar_event:
+                            self.stats['bars_processed'] += 1
+                            await self._on_new_bar(new_bar_event)
 
             except Exception as e:
                 logger.error(f"Tick processing error: {e}")
@@ -772,6 +817,184 @@ class ShadowTrader:
                     position.max_favorable = pnl_pct
                 if pnl_pct < position.max_adverse:
                     position.max_adverse = pnl_pct
+
+    async def _on_new_bar(self, event: 'NewBarEvent') -> None:
+        """
+        Run strategies when a new bar closes - The Live Strategy Execution Engine.
+
+        This is the key innovation: We maintain a rolling DataFrame of the last 500 bars
+        and pass it to strategies exactly like a mini-backtest. This ensures
+        "Simulation-Reality Parity" - the strategy behaves identically live vs backtest.
+
+        Args:
+            event: NewBarEvent containing symbol, closed bar, and rolling DataFrame
+        """
+        symbol = event.symbol
+        df = event.dataframe
+        bar_count = event.bar_count
+
+        # Cold Start Protection: Don't trade until we have enough data
+        buffer = self._stream_buffers.get_buffer(symbol) if self._stream_buffers else None
+        if buffer and not buffer.is_ready():
+            if bar_count % 10 == 0:  # Log every 10 bars during warmup
+                logger.info(f"🔄 [Live] {symbol} warming up: {bar_count}/{buffer.min_bars_to_trade} bars")
+            return
+
+        # Get all active and shadow strategies for this symbol
+        active_strategies = await self._get_live_strategies(symbol)
+
+        if not active_strategies:
+            return  # No strategies to run
+
+        for strategy_info in active_strategies:
+            strategy_id = strategy_info['id']
+            strategy_name = strategy_info['name']
+
+            try:
+                # Load strategy if not cached
+                if strategy_id not in self._loaded_strategies:
+                    instance = await self._load_strategy_instance(strategy_info)
+                    if instance:
+                        self._loaded_strategies[strategy_id] = instance
+                        self._last_signals[strategy_id] = 0  # Start flat
+                        self._strategy_symbols[strategy_id] = symbol
+                    else:
+                        continue
+
+                strategy_instance = self._loaded_strategies[strategy_id]
+                self.stats['strategy_runs'] += 1
+
+                # Run strategy on rolling DataFrame
+                # The strategy returns a Series/array of positions (like in backtest)
+                # We only care about the LAST value (current signal)
+                result = strategy_instance.run(df, initial_capital=100000)
+
+                # Extract the last signal
+                # Handle different return formats from strategies
+                if isinstance(result, tuple):
+                    # Strategy returns (returns, equity, trades) - extract position from equity
+                    _, equity, _ = result
+                    # Determine signal from equity change direction
+                    if len(equity) >= 2:
+                        current_signal = 1 if equity.iloc[-1] > equity.iloc[-2] else 0
+                    else:
+                        current_signal = 0
+                elif hasattr(result, 'iloc'):
+                    # Series or DataFrame - take last value
+                    current_signal = int(result.iloc[-1]) if len(result) > 0 else 0
+                else:
+                    current_signal = int(result) if result else 0
+
+                # Normalize to -1, 0, 1
+                current_signal = max(-1, min(1, current_signal))
+
+                # Check if signal changed
+                last_signal = self._last_signals.get(strategy_id, 0)
+                if current_signal != last_signal:
+                    self.stats['signal_changes'] += 1
+
+                    # Determine action
+                    if current_signal > 0 and last_signal <= 0:
+                        action = 'buy'
+                    elif current_signal < 0 and last_signal >= 0:
+                        action = 'sell'
+                    elif current_signal == 0 and last_signal != 0:
+                        action = 'close'
+                    else:
+                        action = None
+
+                    if action:
+                        # Submit signal to ShadowTrader
+                        signal = ShadowSignal(
+                            strategy_id=strategy_id,
+                            symbol=symbol,
+                            action=action,
+                            quantity=self._calculate_position_size(strategy_info),
+                            signal_time=datetime.utcnow()
+                        )
+                        await self.submit_signal(signal)
+
+                        logger.info(
+                            f"🎯 [Live] {strategy_name} signal: {last_signal} → {current_signal} ({action.upper()})"
+                        )
+
+                    # Update last signal
+                    self._last_signals[strategy_id] = current_signal
+
+            except Exception as e:
+                logger.error(f"Strategy {strategy_name} execution error: {e}")
+                traceback.print_exc()
+
+    async def _get_live_strategies(self, symbol: str) -> List[Dict[str, Any]]:
+        """Get all active/shadow strategies that trade this symbol."""
+        try:
+            result = self.supabase.table('strategy_genome').select(
+                'id', 'name', 'code_content', 'dna_config', 'status'
+            ).in_('status', ['active', 'shadow']).execute()
+
+            if not result.data:
+                return []
+
+            # Filter strategies that trade this symbol (or all symbols if not specified)
+            strategies = []
+            for s in result.data:
+                config = s.get('dna_config', {}) or {}
+                strategy_symbols = config.get('symbols', self.symbols)
+                if symbol in strategy_symbols or not strategy_symbols:
+                    strategies.append(s)
+
+            return strategies
+
+        except Exception as e:
+            logger.error(f"Failed to fetch live strategies: {e}")
+            return []
+
+    async def _load_strategy_instance(self, strategy_info: Dict[str, Any]) -> Optional[Any]:
+        """Dynamically load and instantiate a strategy from its code."""
+        try:
+            code_content = strategy_info.get('code_content', '')
+            config = strategy_info.get('dna_config', {}) or {}
+
+            if not code_content:
+                logger.warning(f"Strategy {strategy_info['name']} has no code content")
+                return None
+
+            # Create a module namespace and execute the code
+            namespace = {
+                'pd': pd,
+                'np': np,
+                'datetime': datetime,
+                'timedelta': timedelta,
+            }
+
+            exec(code_content, namespace)
+
+            # Find the Strategy class
+            if 'Strategy' not in namespace:
+                logger.warning(f"Strategy {strategy_info['name']} has no 'Strategy' class")
+                return None
+
+            # Instantiate with config
+            StrategyClass = namespace['Strategy']
+            instance = StrategyClass(config)
+
+            logger.info(f"📦 Loaded strategy: {strategy_info['name']}")
+            return instance
+
+        except Exception as e:
+            logger.error(f"Failed to load strategy {strategy_info['name']}: {e}")
+            return None
+
+    def _calculate_position_size(self, strategy_info: Dict[str, Any]) -> int:
+        """Calculate position size based on strategy config and risk limits."""
+        config = strategy_info.get('dna_config', {}) or {}
+
+        # Default to small size for shadow trading
+        base_shares = config.get('position_size', 100)
+
+        # Apply shadow mode scaling (10% of real size for safety)
+        shadow_scale = 0.1
+        return max(1, int(base_shares * shadow_scale))
 
     async def submit_signal(self, signal: ShadowSignal) -> None:
         """Submit a trading signal for execution."""
