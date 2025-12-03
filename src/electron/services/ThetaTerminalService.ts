@@ -13,9 +13,7 @@
 
 import { spawn, ChildProcess, exec } from 'child_process';
 import { promisify } from 'util';
-import * as path from 'path';
 import * as fs from 'fs';
-import * as net from 'net';
 
 const execAsync = promisify(exec);
 
@@ -66,27 +64,6 @@ class ThetaTerminalService {
       v3Port: parseInt(process.env.THETADATA_V3_PORT || '25503', 10),
       autoLaunch: process.env.THETADATA_AUTO_LAUNCH === 'true',
     };
-  }
-
-  /**
-   * Check if a port is in use (terminal already running)
-   */
-  private async isPortInUse(port: number): Promise<boolean> {
-    return new Promise((resolve) => {
-      const server = net.createServer();
-      server.once('error', (err: NodeJS.ErrnoException) => {
-        if (err.code === 'EADDRINUSE') {
-          resolve(true);
-        } else {
-          resolve(false);
-        }
-      });
-      server.once('listening', () => {
-        server.close();
-        resolve(false);
-      });
-      server.listen(port);
-    });
   }
 
   /**

@@ -135,6 +135,7 @@ export type Database = {
           created_at: string | null
           embedding: string | null
           event_description: string
+          failure_type: string | null
           id: string
           mechanism: string | null
           related_strategies: string[] | null
@@ -147,6 +148,7 @@ export type Database = {
           created_at?: string | null
           embedding?: string | null
           event_description: string
+          failure_type?: string | null
           id?: string
           mechanism?: string | null
           related_strategies?: string[] | null
@@ -159,6 +161,7 @@ export type Database = {
           created_at?: string | null
           embedding?: string | null
           event_description?: string
+          failure_type?: string | null
           id?: string
           mechanism?: string | null
           related_strategies?: string[] | null
@@ -1976,6 +1979,15 @@ export type Database = {
       }
     }
     Views: {
+      failure_type_stats: {
+        Row: {
+          failure_type: string | null
+          last_occurrence: string | null
+          occurrence_count: number | null
+          percentage: number | null
+        }
+        Relationships: []
+      }
       v_active_swarm_jobs: {
         Row: {
           agent_count: number | null
