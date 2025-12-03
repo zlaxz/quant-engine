@@ -14,6 +14,7 @@ import { ResumeTaskDialog, type UnfinishedTask } from '@/components/research';
 import { DemoModeButton } from '@/components/visualizations/DemoModeButton';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { HelpCircle, Settings, LayoutDashboard, Command, ListOrdered, Map } from 'lucide-react';
 import { SystemStatus } from '@/components/dashboard/SystemStatus';
 import { RegimeIndicator } from '@/components/dashboard/RegimeIndicator';
@@ -137,14 +138,18 @@ const Index = () => {
             <MainLayout
               leftPanel={<ChatArea />}
               rightPanel={
-                <>
-                  {/* Top 50% - Dual Purpose Panel (Visualizations / Artifacts) */}
-                  <div className="flex-[2.5] min-h-0 overflow-hidden">
-                    <DualPurposePanel />
-                  </div>
+                <ResizablePanelGroup direction="vertical" className="h-full">
+                  {/* Top - Dual Purpose Panel (Visualizations / Artifacts) */}
+                  <ResizablePanel defaultSize={50} minSize={20} maxSize={80}>
+                    <div className="h-full overflow-hidden">
+                      <DualPurposePanel />
+                    </div>
+                  </ResizablePanel>
                   
-                  {/* Bottom 50% - Tabbed Roadmap & Mission Control */}
-                  <div className="flex-[2.5] min-h-0 border-t border-border">
+                  <ResizableHandle withHandle />
+                  
+                  {/* Bottom - Tabbed Roadmap & Mission Control */}
+                  <ResizablePanel defaultSize={50} minSize={20} maxSize={80}>
                     <Tabs defaultValue="roadmap" className="h-full flex flex-col">
                       <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-9 px-2">
                         <TabsTrigger value="roadmap" className="gap-1.5 data-[state=active]:bg-muted">
@@ -163,8 +168,8 @@ const Index = () => {
                         <MissionControl className="h-full border-0 rounded-none" />
                       </TabsContent>
                     </Tabs>
-                  </div>
-                </>
+                  </ResizablePanel>
+                </ResizablePanelGroup>
               }
             />
           </div>
