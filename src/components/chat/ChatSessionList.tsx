@@ -258,10 +258,10 @@ export const ChatSessionList = () => {
                 <div
                   key={session.id}
                   className={cn(
-                    'group rounded-lg transition-colors flex items-center gap-2 cursor-pointer',
+                    'group rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer',
                     'hover:bg-accent/50',
                     selectedSessionId === session.id && 'bg-accent',
-                    isCollapsed ? 'p-2 justify-center' : 'px-2.5 py-2'
+                    isCollapsed ? 'p-2 justify-center' : 'px-2 py-1.5'
                   )}
                   onClick={() => setSelectedSession(session.id, session.workspace_id)}
                 >
@@ -286,7 +286,7 @@ export const ChatSessionList = () => {
                         "h-4 w-4 shrink-0",
                         selectedSessionId === session.id ? "text-primary" : "text-muted-foreground"
                       )} />
-                      <div className="flex-1 min-w-0 overflow-hidden">
+                      <div className="flex-1 min-w-0 overflow-hidden mr-1">
                         <div className={cn(
                           "text-sm leading-tight truncate",
                           selectedSessionId === session.id ? "font-medium text-foreground" : "text-foreground/80"
@@ -297,39 +297,31 @@ export const ChatSessionList = () => {
                           {new Date(session.created_at).toLocaleDateString()}
                         </div>
                       </div>
-                      <div className="flex items-center shrink-0 ml-1">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openRenameDialog(session);
-                              }}
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Rename</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 hover:text-destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSessionToDelete(session.id);
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete</TooltipContent>
-                        </Tooltip>
+                      <div className="flex items-center shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openRenameDialog(session);
+                          }}
+                          title="Rename"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSessionToDelete(session.id);
+                          }}
+                          title="Delete"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </div>
                     </>
                   )}
