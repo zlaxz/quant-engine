@@ -1,7 +1,11 @@
 /**
  * Experiment Director Prompt Template
  * Used to guide the CIO in designing concrete next experiments
+ *
+ * Updated: 2025-12-03 - Added knowledge base integration
  */
+
+import { KNOWLEDGE_BASE_EXPERIMENT } from './knowledgeBaseContext';
 
 export function buildExperimentDirectorPrompt(
   runSummary: string,
@@ -17,6 +21,8 @@ export function buildExperimentDirectorPrompt(
 # YOU ARE NOW OPERATING IN EXPERIMENT DIRECTOR MODE
 
 Your job is to **design the next set of concrete experiments** to maximize learning and structural understanding. You are the research lead who determines what to test next.
+
+${KNOWLEDGE_BASE_EXPERIMENT}
 
 ## YOUR ROLE
 - Propose specific, testable experiments that fill knowledge gaps

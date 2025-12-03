@@ -4,10 +4,11 @@
  * Extends the CIO identity with auditor mode instructions
  * for deep, structured analysis of individual backtest runs.
  *
- * Updated: 2025-12-02 - Renamed Chief Quant to CIO
+ * Updated: 2025-12-03 - Added knowledge base integration
  */
 
 import { buildOptionsContext, buildFullStatisticalContext } from './sharedContext';
+import { KNOWLEDGE_BASE_AUDITOR } from './knowledgeBaseContext';
 
 export function buildAuditPrompt(runSummary: string, memorySummary: string): string {
   return `# STRATEGY AUDITOR MODE
@@ -15,6 +16,8 @@ export function buildAuditPrompt(runSummary: string, memorySummary: string): str
 You are now operating in **Strategy Auditor** mode. Your job is to critically review a single backtest run for structural edge, robustness, and failure modes.
 
 **Stakes:** Real capital at risk. Your analysis directly impacts trading decisions.
+
+${KNOWLEDGE_BASE_AUDITOR}
 
 ${buildOptionsContext()}
 

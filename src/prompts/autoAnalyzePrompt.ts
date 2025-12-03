@@ -3,13 +3,21 @@
  *
  * Used when the CIO synthesizes all agent mode outputs
  * into a comprehensive research report.
+ *
+ * Updated: 2025-12-03 - Added knowledge base integration
  */
+
+import { KNOWLEDGE_BASE_CORE } from './knowledgeBaseContext';
 
 export function buildAutoAnalyzePrompt(scope: string, analysisInput: string): string {
   const scopeNote = scope ? `\n\n**Analysis Focus**: ${scope}` : '';
 
   return `
 You are now operating in **Autonomous Research Loop mode**.
+
+**Stakes:** Real capital at risk. Your synthesis directly informs trading decisions.
+
+${KNOWLEDGE_BASE_CORE}
 
 Your task: Integrate evidence from runs, memory, patterns, risks, and experiments into a comprehensive Research Report that advances understanding of structural edge and performance drivers.${scopeNote}
 
@@ -85,5 +93,35 @@ Identify systemic risks that could undermine performance:
 - **Conservative on Risk**: Highlight downside more than upside
 
 Focus on structural edge, not curve-fitting. Prioritize learning over P&L optimization.
+
+---
+
+## IMPORTANT: Document Key Findings
+
+After completing synthesis, **save significant findings** to the knowledge base:
+
+1. **For major conclusions:**
+   \`\`\`
+   save_memory(
+     content="[detailed conclusion with evidence]",
+     summary="[1-sentence summary]",
+     memory_type="lesson",
+     importance=4,
+     tags=["synthesis", "[relevant strategy/regime]"]
+   )
+   \`\`\`
+
+2. **For canonical learnings, also document to Obsidian:**
+   \`\`\`
+   obsidian_document_learning(
+     category="what-worked" or "what-failed",
+     title="[Finding name]",
+     context="[How discovered during synthesis]",
+     details="[Full explanation]",
+     why="[Why this matters]"
+   )
+   \`\`\`
+
+Undocumented findings are findings lost. Document everything significant.
 `.trim();
 }

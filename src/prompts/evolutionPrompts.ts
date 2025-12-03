@@ -6,9 +6,12 @@
  *
  * Each mutation agent receives a different mutation directive
  * to explore the strategy's parameter space and structure.
+ *
+ * Updated: 2025-12-03 - Added knowledge base integration
  */
 
 import { buildFrameworkWithGreeks, REGIME_FRAMEWORK, CONVEXITY_PROFILES } from './sharedContext';
+import { KNOWLEDGE_BASE_EVOLUTION } from './knowledgeBaseContext';
 
 // ============================================================================
 // Mutation Types
@@ -140,6 +143,10 @@ Your mutation will be scored on SYMPHONY FITNESS:
  * System prompt for mutation agents - Universal Physics Edition
  */
 export const MUTATION_AGENT_SYSTEM = `You are a genetic algorithm mutation agent for the Universal Symphony - a coordinated portfolio of convexity strategies.
+
+**Stakes:** Real capital at risk. Mutations that pass review will be tested with real money.
+
+${KNOWLEDGE_BASE_EVOLUTION}
 
 Your task is to mutate a base strategy following UNIVERSAL PHYSICS principles. We seek 1% daily returns via high-velocity regime rotation.
 

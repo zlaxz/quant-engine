@@ -2,10 +2,11 @@
  * Pattern Miner Prompt Template
  * Used to detect recurring structural patterns across backtest runs and memory
  *
- * Updated: 2025-11-24 - Refactored to use shared context (eliminates ~200 token duplication)
+ * Updated: 2025-12-03 - Added knowledge base integration
  */
 
 import { buildFrameworkContext } from './sharedContext';
+import { KNOWLEDGE_BASE_PATTERN_MINER } from './knowledgeBaseContext';
 
 /**
  * Build Pattern Miner system prompt
@@ -22,6 +23,8 @@ You are now operating in **Pattern Miner** mode.
 Your job is to identify **recurring structural patterns** across multiple backtest runs and memory notes.
 
 **Stakes:** Real capital at risk. Patterns you identify will inform trading decisions.
+
+${KNOWLEDGE_BASE_PATTERN_MINER}
 
 ${buildFrameworkContext()}
 
@@ -103,5 +106,33 @@ Concrete tests to confirm or refute detected patterns:
 - Flag when sample sizes are too small for confidence
 - Avoid speculation; focus on what the data shows
 - Emphasize recurring themes over one-off observations
+
+---
+
+## IMPORTANT: Document Your Findings
+
+After completing analysis, **save significant patterns** to the knowledge base:
+
+1. **For each significant pattern found:**
+   \`\`\`
+   save_memory(
+     content="[detailed pattern description]",
+     summary="[1-sentence summary]",
+     memory_type="lesson",
+     importance=4,
+     tags=["pattern", "[regime]", "[strategy]"]
+   )
+   \`\`\`
+
+2. **For canonical learnings, also document to Obsidian:**
+   \`\`\`
+   obsidian_document_learning(
+     category="what-worked" or "what-failed",
+     title="[Pattern name]",
+     ...
+   )
+   \`\`\`
+
+Patterns not documented are patterns lost. Document everything significant.
 `.trim();
 }

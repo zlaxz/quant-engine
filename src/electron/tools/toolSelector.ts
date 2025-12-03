@@ -3,7 +3,7 @@
  * Reduces token count by providing only relevant tools based on user message
  */
 
-import { FunctionDeclaration } from '@google/generative-ai';
+import { FunctionDeclaration } from '@google/genai';
 import {
   FILE_TOOLS,
   PYTHON_TOOLS,

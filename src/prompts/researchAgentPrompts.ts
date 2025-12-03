@@ -4,10 +4,11 @@
  * These prompts are designed for SWARM_MODEL execution, providing
  * focused, self-contained analysis tasks for parallel execution.
  *
- * Updated: 2025-11-24 - Refactored to use shared context (eliminates ~600 token duplication)
+ * Updated: 2025-12-03 - Added knowledge base integration
  */
 
 import { buildFrameworkContext, buildRiskFrameworkContext } from './sharedContext';
+import { KNOWLEDGE_BASE_PATTERN_MINER, KNOWLEDGE_BASE_RISK, KNOWLEDGE_BASE_EXPERIMENT, KNOWLEDGE_BASE_SHORT } from './knowledgeBaseContext';
 
 /**
  * Pattern Miner Agent
@@ -23,6 +24,8 @@ export function buildPatternMinerAgentPrompt(
   return `# Pattern Miner Agent${scopeNote}
 
 **Stakes:** Real capital at risk. Patterns you identify inform trading decisions.
+
+${KNOWLEDGE_BASE_PATTERN_MINER}
 
 ${buildFrameworkContext()}
 
@@ -75,6 +78,8 @@ export function buildCuratorAgentPrompt(
 
 **Stakes:** Memory informs all trading decisions. Institutional knowledge matters.
 
+${KNOWLEDGE_BASE_SHORT}
+
 ${buildFrameworkContext()}
 
 Your task: Review workspace memory and suggest structural improvements.
@@ -123,6 +128,8 @@ export function buildRiskAgentPrompt(
   return `# Risk Officer Agent${scopeNote}
 
 **Stakes:** Real capital. Family financial security. Your job is to PREVENT disasters.
+
+${KNOWLEDGE_BASE_RISK}
 
 ${buildRiskFrameworkContext()}
 
@@ -177,6 +184,8 @@ export function buildExperimentAgentPrompt(
   return `# Experiment Director Agent${scopeNote}
 
 **Stakes:** Every experiment costs real resources. Focus on maximum learning per test.
+
+${KNOWLEDGE_BASE_EXPERIMENT}
 
 ${buildFrameworkContext()}
 

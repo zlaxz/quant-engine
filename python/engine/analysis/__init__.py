@@ -5,8 +5,11 @@
 # Custom implementation audited and working
 from .metrics import PerformanceMetrics
 from .visualization import PortfolioVisualizer
+from .market_regime import get_mock_regime_data, get_regime_json
 
 __all__ = [
     'PerformanceMetrics',
-    'PortfolioVisualizer'
+    'PortfolioVisualizer',
+    'get_mock_regime_data',
+    'get_regime_json'
 ]

@@ -1,7 +1,11 @@
 /**
  * Red Team Auditor Prompt Templates
  * Each auditor focuses on a specific aspect of code quality and robustness
+ *
+ * Updated: 2025-12-03 - Added knowledge base integration
  */
+
+import { KNOWLEDGE_BASE_RED_TEAM } from './knowledgeBaseContext';
 
 /**
  * Strategy Logic Auditor
@@ -14,6 +18,10 @@ export function buildStrategyLogicAuditPrompt(
 ): string {
   return `You are one member of a multi-agent red team conducting a code audit.
 Your role: **Strategy Logic Auditor**
+
+**Stakes:** This code will trade real capital. Bugs cause real losses.
+
+${KNOWLEDGE_BASE_RED_TEAM}
 
 You are reviewing rotation-engine code at: ${path}
 
@@ -64,6 +72,10 @@ export function buildOverfitAuditPrompt(
 ): string {
   return `You are one member of a multi-agent red team conducting a code audit.
 Your role: **Overfit Auditor**
+
+**Stakes:** Overfit code loses real money in live trading.
+
+${KNOWLEDGE_BASE_RED_TEAM}
 
 You are reviewing rotation-engine code at: ${path}
 
@@ -118,6 +130,10 @@ export function buildLookaheadBiasAuditPrompt(
   return `You are one member of a multi-agent red team conducting a code audit.
 Your role: **Lookahead Bias / Data Leakage Auditor**
 
+**Stakes:** Lookahead bias creates false confidence. Real trading will fail.
+
+${KNOWLEDGE_BASE_RED_TEAM}
+
 You are reviewing rotation-engine code at: ${path}
 
 ${context ? `Context: ${context}\n` : ''}
@@ -171,6 +187,10 @@ export function buildRobustnessAuditPrompt(
 ): string {
   return `You are one member of a multi-agent red team conducting a code audit.
 Your role: **Robustness / Edge-Case Auditor**
+
+**Stakes:** Edge cases in live trading cause unexpected losses.
+
+${KNOWLEDGE_BASE_RED_TEAM}
 
 You are reviewing rotation-engine code at: ${path}
 
@@ -230,6 +250,10 @@ export function buildConsistencyAuditPrompt(
 ): string {
   return `You are one member of a multi-agent red team conducting a code audit.
 Your role: **Implementation Consistency Auditor**
+
+**Stakes:** Inconsistent code leads to unpredictable behavior with real capital.
+
+${KNOWLEDGE_BASE_RED_TEAM}
 
 You are reviewing rotation-engine code at: ${path}
 

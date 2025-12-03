@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI, FunctionCallingConfigMode } from '@google/genai';
 import OpenAI from 'openai';
 import { ALL_TOOLS } from '../tools/toolDefinitions';
 import { executeTool } from '../tools/toolHandlers';
@@ -12,6 +12,13 @@ import {
 import { MODELS } from '../../config/models';
 import { getDecisionLogger } from '../utils/decisionLogger';
 import { routeTask } from '../utils/routingDecision';
+// 10X CIO System
+import {
+  assembleCIOPromptSync,
+  getCurrentMode,
+  forceMode,
+  cioStateMachine
+} from '../../prompts/cioPromptAssembler';
 
 // LLM routing config - centralized
 const PRIMARY_MODEL = MODELS.PRIMARY.model;
@@ -21,7 +28,7 @@ const SWARM_PROVIDER = MODELS.SWARM.provider;
 const HELPER_MODEL = MODELS.HELPER.model;
 
 // Max tool call iterations to prevent infinite loops
-const MAX_TOOL_ITERATIONS = 10;
+const MAX_TOOL_ITERATIONS = 50;
 
 // Safe logging that won't crash on EPIPE (broken pipe)
 function safeLog(...args: any[]): void {
@@ -262,10 +269,10 @@ async function withRetry<T>(
 }
 
 // Lazy client getters - read API keys at call time, not module load time
-function getGeminiClient(): GoogleGenerativeAI | null {
+function getGeminiClient(): GoogleGenAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
-  return new GoogleGenerativeAI(apiKey);
+  return new GoogleGenAI({ apiKey });
 }
 
 function getOpenAIClient(): OpenAI | null {
@@ -386,106 +393,39 @@ export function registerLlmHandlers() {
       const systemMessage = messages.find(m => m.role === 'system');
       const nonSystemMessages = messages.filter(m => m.role !== 'system');
 
-      // Build system instruction with architecture context and tool usage directive
-      const toolDirective = `
+      // Build system instruction using 10X CIO System
+      // This replaces the old verbose toolDirective with a focused, personality-driven prompt
+      // Note: lastUserMessage is already declared above at line ~351
 
-## CRITICAL: YOU HAVE REAL TOOLS - USE THEM!
+      // Detect mode from user message
+      const currentMode = getCurrentMode();
 
-You are running inside an Electron desktop app with FULL filesystem access and Python execution capabilities.
+      // Assemble CIO prompt with current mode
+      // PERFORMANCE: This is synchronous and fast (~1ms)
+      const cioPrompt = assembleCIOPromptSync(currentMode);
 
-**When the user asks you to do something with code, files, or backtests - YOU MUST USE YOUR TOOLS.**
+      // Essential tool enforcement (condensed from verbose version)
+      const toolEnforcement = `
 
-DO NOT say:
-❌ "I cannot run Python scripts"
-❌ "I don't have access to execute"
-❌ "You'll need to run this yourself"
-❌ "I explored the codebase" (without actually reading files)
+## TOOL MANDATE (CRITICAL)
 
-YOU CAN AND MUST:
-✅ Read any file: call read_file tool
-✅ Write/edit files: call write_file tool
-✅ Run Python backtests: call batch_backtest or sweep_params tools
-✅ Execute tests: call run_tests tool
-✅ List directories: call list_directory tool
-✅ Search code: call search_code tool
-✅ Run git commands: call git_status, git_diff, etc.
+You are running in an Electron app with FULL tool access. Tools execute IMMEDIATELY.
 
-## SYSTEM ARCHITECTURE
+**NEVER SAY:**
+- "I cannot run Python scripts" - USE run_python_script
+- "I don't have access" - USE the tools below
+- "You'll need to run this" - YOU run it
 
-You are running inside an Electron desktop app. All tools execute automatically via IPC handlers.
-- When you call a tool, it executes IMMEDIATELY on the user's machine
-- Tool results are returned to you automatically
-- All file operations use paths relative to rotation-engine directory
-- Python execution happens via child_process on the local machine
-- You have FULL ACCESS to the filesystem and Python environment
+**TOOL CATEGORIES:**
+- Files: read_file, write_file, list_directory, search_code
+- Backtest: batch_backtest, sweep_params, run_python_script
+- Git: git_status, git_diff, git_commit
+- Agents: spawn_agent, execute_via_claude_code
 
-## TOOL USAGE MANDATE:
-
-**ALWAYS USE TOOLS FIRST** before saying you can't do something:
-
-1. User asks to read a file → call read_file
-2. User asks to run a backtest → call batch_backtest
-3. User asks about code → call search_code or read_file to see it
-4. User asks to modify code → call read_file, then write_file
-5. User asks to run tests → call run_tests
-
-**Never apologize for not being able to do something if you have a tool for it.**
-
-## AGENT SPAWNING (for complex tasks):
-
-For complex multi-file analysis, you can spawn specialized agents:
-- **spawn_agents_parallel**: Multiple INDEPENDENT tasks run in parallel via DeepSeek
-- **spawn_agent**: Single task delegated to DeepSeek
-
-Agents are AUTOMATIC - just call the tool with task descriptions.
-
-## WHEN TO USE TOOLS:
-
-- **File operations**: read_file, write_file, list_directory, search_code
-- **Backtesting**: batch_backtest, sweep_params, dry_run_backtest
-- **Code analysis**: find_function, find_class, find_usages, code_stats
-- **Validation**: run_tests, validate_strategy, lint_code, type_check
-- **Git operations**: git_status, git_diff, git_commit, git_push
-- **Data inspection**: inspect_market_data, get_trade_log, data_quality_check
-
-**Remember: You have these tools for a reason. Use them.**
-
-## TASK MANAGEMENT (Research Journey Panel):
-
-You can manage the dynamic to-do list that appears in the Research Journey panel on the right side of the interface.
-
-**Task Management Directives:**
-- \`[TODO_ADD:Category:Task description]\` - Add a new task to the list
-- \`[TODO_COMPLETE:task-id]\` - Remove a completed task (user will see task IDs in UI)
-
-**Task Categories:** Analysis, Backtesting, Code Review, Pattern Mining, Memory Curation, Risk Review, Experiment Planning, Data Inspection, Documentation
-
-**When to add tasks:**
-- You discover something that needs to be investigated
-- You realize a backtest should be run
-- Code needs review or refactoring
-- Memory needs updating
-- Patterns need to be analyzed
-- Risk assessment is needed
-
-**When to complete tasks:**
-- You just finished doing the work described in the task
-- The task is no longer relevant
-
-**Example usage:**
-\`\`\`
-I've identified three areas that need attention:
-[TODO_ADD:Analysis:Review skew_convexity performance in 2022 crash regime]
-[TODO_ADD:Backtesting:Run momentum_breakout with updated parameters]
-[TODO_ADD:Pattern Mining:Compare short put performance across all regimes]
-
-Let me start with the analysis...
-\`\`\`
-
-**Important:** Tasks automatically disappear when marked complete - keep the list focused on what's next.
+**THE RULE:** Use tools FIRST, explain after.
 `;
 
-      const fullSystemInstruction = (systemMessage?.content || '') + toolDirective;
+      const fullSystemInstruction = cioPrompt + toolEnforcement;
 
       // Detect task context from user message (reuse lastUserMessage from routing)
       const taskContext = detectTaskContext(lastUserMessage);
@@ -493,43 +433,38 @@ Let me start with the analysis...
 
       safeLog(`[LLM] Task context: ${taskContext}, providing ${contextualTools.length} tools`);
 
-      // Get model with tools enabled, explicit toolConfig, and system instruction
+      // NEW SDK (@google/genai) uses direct generateContentStream calls
       // ANY mode encourages aggressive tool usage - Gemini should call tools when user asks
       // This is CRITICAL - without ANY mode, Gemini will avoid using tools and apologize
       // See: https://ai.google.dev/gemini-api/docs/function-calling#function-calling-modes
-      // CRITICAL: Gemini 3 uses 'high' thinking level by default - DO NOT override
-      // See: https://ai.google.dev/gemini-api/docs/gemini-3?thinking=high
-      const model = geminiClient.getGenerativeModel({
-        model: PRIMARY_MODEL,
-        tools: [{ functionDeclarations: contextualTools }],  // ← Use contextual subset
+      const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
+
+      // Build config for new SDK - all options go in config object
+      const geminiConfig = {
+        tools: [{ functionDeclarations: contextualTools }],
         toolConfig: {
           functionCallingConfig: {
-            mode: 'ANY' as any, // ANY forces Gemini to use tools - prevents "I can't" responses
+            mode: FunctionCallingConfigMode.ANY, // Forces tool use - prevents "I can't" responses
           }
         },
         systemInstruction: fullSystemInstruction,
-        generationConfig: {
-          temperature: 1.0, // Gemini 3 Pro default - DO NOT CHANGE
-          // thinking_level: 'high' is default - no need to specify
-          // Enable thinking mode to show model reasoning
-          includeThoughts: true,
-        } as any,
-      });
+        temperature: 1.0, // Gemini 3 Pro default - DO NOT CHANGE
+        // Gemini 3 Pro thinking configuration
+        // thinkingLevel: "low" (fast) or "high" (deep reasoning, default)
+        // includeThoughts: true to stream thought summaries (the visible reasoning)
+        thinkingConfig: {
+          thinkingLevel: 'high',  // Max reasoning depth for complex quant analysis
+          includeThoughts: true,  // Stream thought summaries to UI
+        },
+      };
 
-      // Convert messages to Gemini format (excluding system messages)
-      // Gemini requires first message to be 'user' role
-      let historyMessages = nonSystemMessages.slice(0, -1).map(msg => ({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
-      }));
-
-      // Ensure first message is 'user' - Gemini API requirement
-      while (historyMessages.length > 0 && historyMessages[0].role !== 'user') {
-        historyMessages.shift();
-      }
-
-      const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
-      const chat = model.startChat({ history: historyMessages });
+      // Track conversation history for multi-turn tool calling
+      // NEW SDK requires Content[] format: [{ role, parts }, ...]
+      // Wrap the user message properly
+      const userContent = typeof lastMessage.content === 'string'
+        ? { role: 'user', parts: [{ text: lastMessage.content }] }
+        : lastMessage.content;
+      let conversationContents: any[] = [userContent];
 
       // Emit initial thinking event
       _event.sender.send('tool-progress', {
@@ -539,22 +474,45 @@ Let me start with the analysis...
       });
 
       // Tool execution loop - use streaming for all responses
-      let response;
+      let lastResponse: any;
 
-      // Helper to stream a message and return response
-      // FIXED: Accumulate text during streaming to prevent truncation
-      const streamMessage = async (content: string | Array<any>): Promise<{ response: any, fullText: string }> => {
+      // Helper to stream a message and return response using NEW SDK
+      // Uses generateContentStream directly instead of chat.sendMessageStream
+      const streamMessage = async (contents: any): Promise<{ response: any, fullText: string, functionCalls: any[] }> => {
         try {
-          const streamResult = await chat.sendMessageStream(content);
+          // NEW SDK: generateContentStream returns async iterator directly
+          const streamResult = await geminiClient.models.generateContentStream({
+            model: PRIMARY_MODEL,
+            contents: contents,
+            config: geminiConfig
+          });
+
           let accumulatedText = '';
-          
-          for await (const chunk of streamResult.stream) {
-            // Check for thinking content in the chunk
+          let functionCalls: any[] = [];
+          let chunkCount = 0;
+
+          // NEW SDK: iterate directly over the stream result
+          for await (const chunk of streamResult) {
+            chunkCount++;
+            // LOG EVERY CHUNK for debugging
+            safeLog(`\n[STREAM CHUNK ${chunkCount}] Raw chunk:`, JSON.stringify(chunk, null, 2).slice(0, 500));
+
+            // NEW SDK structure: chunk has candidates array
             const candidate = (chunk as any).candidates?.[0];
             if (candidate?.content?.parts) {
+              safeLog(`[STREAM] Found ${candidate.content.parts.length} parts in chunk`);
               for (const part of candidate.content.parts) {
-                // Gemini returns thinking in parts with thought: true
-                if (part.thought && part.text) {
+                // DEBUG: Log ALL part properties
+                safeLog('[STREAM PART]', JSON.stringify(part).slice(0, 300));
+
+                // Check for function calls
+                if (part.functionCall) {
+                  safeLog('[FUNCTION CALL DETECTED!]', part.functionCall.name);
+                  functionCalls.push(part);
+                }
+                // Gemini 3 returns thinking in parts with thought: true
+                else if (part.thought && part.text) {
+                  safeLog('[THOUGHT DETECTED!]', part.text.slice(0, 100));
                   _event.sender.send('llm-stream', {
                     type: 'thinking',
                     content: part.text,
@@ -571,9 +529,11 @@ Let me start with the analysis...
                 }
               }
             } else {
-              // Fallback: try standard text() method
-              const text = chunk.text();
+              // NEW SDK: try chunk.text property or text() method
+              const text = typeof chunk.text === 'string' ? chunk.text :
+                          (typeof chunk.text === 'function' ? chunk.text() : null);
               if (text) {
+                safeLog('[STREAM] Using text property/method:', text.slice(0, 100));
                 accumulatedText += text;
                 _event.sender.send('llm-stream', {
                   type: 'chunk',
@@ -583,21 +543,27 @@ Let me start with the analysis...
               }
             }
           }
-          
-          const response = await streamResult.response;
-          return { response, fullText: accumulatedText };
+
+          // Return the last chunk as "response" for compatibility
+          return { response: { candidates: [{ content: { parts: functionCalls.length > 0 ? functionCalls : [{ text: accumulatedText }] } }] }, fullText: accumulatedText, functionCalls };
         } catch (error) {
           // Fallback to non-streaming if streaming fails
           console.warn('[LLM] Streaming failed, falling back to non-streaming:', error);
-          const response = await withRetry(() => chat.sendMessage(content));
-          return { response, fullText: (response as any).text() || '' };
+          const response = await geminiClient.models.generateContent({
+            model: PRIMARY_MODEL,
+            contents: contents,
+            config: geminiConfig
+          });
+          const text = response.text || '';
+          return { response, fullText: text, functionCalls: [] };
         }
       };
 
-      // Initial response with streaming
-      let streamResult = await streamMessage(lastMessage.content);
-      response = streamResult.response;
+      // Initial response with streaming - use properly formatted conversation
+      let streamResult = await streamMessage(conversationContents);
+      lastResponse = streamResult.response;
       let accumulatedText = streamResult.fullText;
+      let pendingFunctionCalls = streamResult.functionCalls;
 
       let iterations = 0;
       let allToolOutputs: string[] = [];
@@ -621,165 +587,18 @@ Let me start with the analysis...
           };
         }
 
-        const candidate = (response as any).candidates?.[0];
-        if (!candidate) {
-          safeLog('[Gemini] ERROR: Invalid response structure - no candidates array');
+        // NEW SDK: Use function calls collected during streaming
+        const functionCalls = pendingFunctionCalls;
 
-          _event.sender.send('llm-stream', {
-            type: 'error',
-            error: 'Gemini returned invalid response format. This may indicate API issues or safety filters.',
-            timestamp: Date.now()
-          });
-
-          throw new Error('Invalid Gemini response: missing candidates array');
-        }
-
-        // L1: Log finishReason to help diagnose model behavior
-        const finishReason = candidate.finishReason;
-        if (finishReason) {
-          safeLog(`[Gemini] Finish reason: ${finishReason}`);
-
-          if (finishReason === 'SAFETY') {
-            console.warn('[Gemini] Response blocked by safety filters');
-            _event.sender.send('llm-stream', {
-              type: 'chunk',
-              content: '\n\n⚠️ *Response was filtered by safety systems. Try rephrasing your request.*\n',
-              timestamp: Date.now()
-            });
-          } else if (finishReason === 'MAX_TOKENS') {
-            console.warn('[Gemini] Response truncated at token limit');
-          } else if (finishReason === 'RECITATION') {
-            console.warn('[Gemini] Response blocked due to recitation');
-          }
-        }
-
-        // DEBUG: Log exactly what Gemini returned
-        const allParts = candidate.content?.parts || [];
         safeLog('\n' + '='.repeat(60));
-        safeLog('[DEBUG] GEMINI RESPONSE ANALYSIS');
-        safeLog('  Total parts:', allParts.length);
-        allParts.forEach((part: any, i: number) => {
-          const hasText = !!part.text;
-          const hasFunctionCall = !!part.functionCall;
-          safeLog(`  Part ${i}: text=${hasText}, functionCall=${hasFunctionCall}`);
-          if (hasFunctionCall) {
-            safeLog(`    → REAL TOOL CALL: ${part.functionCall.name}`);
-            safeLog(`    → Args: ${JSON.stringify(part.functionCall.args)}`);
-          }
-          if (hasText && part.text.includes('spawn_agent')) {
-            safeLog('    ⚠️  TEXT CONTAINS "spawn_agent" - HALLUCINATION DETECTED');
-            safeLog(`    → Text preview: ${part.text.slice(0, 200)}...`);
-          }
-        });
+        safeLog('[DEBUG] GEMINI RESPONSE ANALYSIS (NEW SDK)');
+        safeLog('  Function calls from stream:', functionCalls.length);
+        safeLog('  Accumulated text length:', accumulatedText.length);
         safeLog('='.repeat(60) + '\n');
 
-        // Check if model wants to call tools
-        const functionCalls = candidate.content?.parts?.filter(
-          (part: any) => part.functionCall
-        );
-
+        // No function calls? We're done.
         if (!functionCalls || functionCalls.length === 0) {
-          // DISABLED FOR TESTING: With Gemini 3 properly configured (temp 1.0, thinking mode),
-          // it should use proper function calling. Disable parser to verify.
-          safeLog('[DEBUG] No function calls detected - checking if Gemini 3 uses proper API');
-          const textParts = allParts.filter((p: any) => p.text);
-          const fullText = textParts.map((p: any) => p.text).join('');
-
-          // Log what Gemini returned instead of function calls
-          if (fullText && fullText.length > 0) {
-            safeLog('[DEBUG] Gemini returned text instead of function calls:');
-            safeLog(fullText.slice(0, 500));
-          }
-
-          // TEMPORARILY DISABLED: Test if Gemini 3 needs this parser
-          const hallucinatedCalls: any[] = []; // Disabled - test proper function calling
-
-          if (hallucinatedCalls.length > 0) {
-            safeLog(`[FALLBACK] Detected ${hallucinatedCalls.length} hallucinated tool calls in text - EXECUTING THEM`);
-
-            // Instead of clearing and confusing users, just start executing tools silently
-            // The UI will show tool progress naturally without the jarring "clear" event
-            _event.sender.send('tool-progress', {
-              type: 'tools-starting',
-              count: hallucinatedCalls.length,
-              iteration: iterations + 1,
-              message: `Executing ${hallucinatedCalls.length} tool call${hallucinatedCalls.length > 1 ? 's' : ''}`,
-              timestamp: Date.now()
-            });
-
-            const toolResults: Array<{
-              functionResponse: {
-                name: string;
-                response: { content: string };
-              };
-            }> = [];
-
-            for (const hCall of hallucinatedCalls) {
-              safeLog(`[FALLBACK] Executing hallucinated: ${hCall.name}`, hCall.args);
-
-              _event.sender.send('tool-progress', {
-                type: 'executing',
-                tool: hCall.name,
-                args: hCall.args,
-                iteration: iterations + 1,
-                timestamp: Date.now()
-              });
-
-              try {
-                const result = await executeTool(hCall.name, hCall.args);
-                const output = result.success ? result.content : `Error: ${result.error}`;
-
-                _event.sender.send('tool-progress', {
-                  type: 'completed',
-                  tool: hCall.name,
-                  success: result.success,
-                  preview: output.slice(0, 300),
-                  iteration: iterations + 1,
-                  timestamp: Date.now()
-                });
-
-                toolResults.push({
-                  functionResponse: {
-                    name: hCall.name,
-                    response: { content: output }
-                  }
-                });
-
-                allToolOutputs.push(`[${hCall.name}]: ${output.slice(0, 500)}${output.length > 500 ? '...' : ''}`);
-              } catch (error) {
-                const errorMsg = error instanceof Error ? error.message : String(error);
-                safeLog(`[FALLBACK] Tool error: ${errorMsg}`);
-                toolResults.push({
-                  functionResponse: {
-                    name: hCall.name,
-                    response: { content: `Tool execution error: ${errorMsg}` }
-                  }
-                });
-              }
-            }
-
-            // Send results back to model with proper formatting
-            // CRITICAL: Must format as functionResponse for Gemini + preserve thought signatures
-            // CRITICAL: Preserve thought signatures for Gemini 3 thinking mode
-            const thoughtSignature = candidate.thoughtSignature || null;
-
-            const formattedResults = toolResults.map(tr => {
-              const part: any = { functionResponse: tr.functionResponse };
-              if (thoughtSignature) {
-                part.thoughtSignature = thoughtSignature;
-              }
-              return part;
-            });
-            
-            streamResult = await streamMessage(formattedResults);
-            response = streamResult.response;
-            accumulatedText += streamResult.fullText;
-            iterations++;
-            continue; // Continue the loop to process new response
-          }
-
-          // No more tool calls (real or hallucinated), we have the final response
-          safeLog('[DEBUG] No functionCall parts found - Gemini returned text only');
+          safeLog('[DEBUG] No function calls detected - response complete');
           break;
         }
 
@@ -787,7 +606,7 @@ Let me start with the analysis...
 
         // Log each tool call for debugging
         functionCalls.forEach((fc: any) => {
-          const call = (fc as any).functionCall;
+          const call = fc.functionCall;
           safeLog(`  → ${call.name}(${JSON.stringify(call.args || {}).slice(0, 100)})`);
         });
 
@@ -964,26 +783,26 @@ Let me start with the analysis...
           }
         }
 
-        // Send tool results back to the model
-        // CRITICAL: Gemini expects functionResponse format, not raw text
-        // The conversation flow must be: model outputs functionCalls → we execute → send back functionResponse
-        // CRITICAL: Preserve thought signatures for Gemini 3 thinking mode
-        // Gemini 3 requires thoughtSignature fields to be returned in multi-turn function calling
-        const thoughtSignature = candidate.thoughtSignature || null;
+        // Send tool results back to the model using NEW SDK
+        // NEW SDK requires FULL conversation history on each call:
+        // 1. Original user message
+        // 2. Model's function calls
+        // 3. Function responses (as user role)
 
-        // Format tool results properly for Gemini's continuation
-        // Must send as parts array with functionResponse objects + thoughtSignature
-        const formattedResults = toolResults.map(tr => {
-          const part: any = { functionResponse: tr.functionResponse };
-          if (thoughtSignature) {
-            part.thoughtSignature = thoughtSignature;
-          }
-          return part;
+        // Add model's function calls to conversation
+        conversationContents.push({ role: 'model', parts: functionCalls });
+
+        // Add function responses
+        conversationContents.push({
+          role: 'user',
+          parts: toolResults.map(tr => ({ functionResponse: tr.functionResponse }))
         });
-        
-        streamResult = await streamMessage(formattedResults);
-        response = streamResult.response;
+
+        // Stream the next response with FULL conversation history
+        streamResult = await streamMessage(conversationContents);
+        lastResponse = streamResult.response;
         accumulatedText += streamResult.fullText;
+        pendingFunctionCalls = streamResult.functionCalls;
         iterations++;
       }
 
@@ -995,7 +814,7 @@ Let me start with the analysis...
         // Warn user
         _event.sender.send('llm-stream', {
           type: 'chunk',
-          content: '\n\n⚠️ *Reached maximum tool iterations (10). The task may be too complex for single execution. Consider breaking it into smaller steps.*\n',
+          content: `\n\n⚠️ *Reached maximum tool iterations (${MAX_TOOL_ITERATIONS}). The task may be too complex for single execution. Consider breaking it into smaller steps.*\n`,
           timestamp: Date.now()
         });
       }

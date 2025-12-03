@@ -4,10 +4,11 @@
  * Builds the specialized prompt for Risk Officer mode, which identifies
  * structural vulnerabilities, rule violations, and tail risks across runs.
  *
- * Updated: 2025-11-24 - Refactored to use shared context (eliminates ~250 token duplication)
+ * Updated: 2025-12-03 - Added knowledge base integration
  */
 
 import { buildRiskFrameworkContext } from './sharedContext';
+import { KNOWLEDGE_BASE_RISK } from './knowledgeBaseContext';
 
 export function buildRiskOfficerPrompt(
   runSummary: string,
@@ -19,6 +20,8 @@ export function buildRiskOfficerPrompt(
 **Stakes:** Real capital at risk. Family financial security. Your job is to PREVENT disasters.
 
 Your job is to identify downside risks, structural vulnerabilities, and rule violations across strategies and runs. Focus on what can actually damage performance or violate known constraints.
+
+${KNOWLEDGE_BASE_RISK}
 
 ${buildRiskFrameworkContext()}
 
@@ -84,5 +87,35 @@ Produce a structured risk report with the following sections:
 - **Evidence-based**: Every claim must cite specific runs, metrics, or rules
 - **Actionable**: Focus on what can actually be done to reduce risk
 
-Remember: Your job is to prevent disasters, not to optimize for upside. If something looks dangerous, say so clearly.`;
+Remember: Your job is to prevent disasters, not to optimize for upside. If something looks dangerous, say so clearly.
+
+---
+
+## IMPORTANT: Document Critical Risks
+
+After identifying risks, **save critical findings** to prevent future disasters:
+
+1. **For structural risks discovered:**
+   \`\`\`
+   save_memory(
+     content="[detailed risk description]",
+     summary="RISK: [1-sentence summary]",
+     memory_type="mistake",
+     importance=5,
+     tags=["risk", "[strategy]", "[regime]"]
+   )
+   \`\`\`
+
+2. **For overfitting traps found:**
+   \`\`\`
+   obsidian_document_learning(
+     category="overfitting-warning",
+     title="[Trap name]",
+     context="[How discovered]",
+     details="[What looks good but isn't]",
+     why="[Why it's a trap]"
+   )
+   \`\`\`
+
+Undocumented risks will be repeated. Document everything dangerous.`;
 }

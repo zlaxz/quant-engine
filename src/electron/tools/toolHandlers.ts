@@ -12,6 +12,38 @@ import OpenAI from 'openai';
 import { app } from 'electron';
 import * as FileOps from './fileOperations';
 import { ALL_TOOLS } from './toolDefinitions';
+import { getMCPManager, initializeMCP } from '../mcp/MCPClientManager';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+// Supabase client for memory operations (quant-engine instance)
+let supabaseClient: SupabaseClient | null = null;
+function getSupabaseClient(): SupabaseClient | null {
+  if (!supabaseClient) {
+    const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const key = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_KEY;
+    if (url && key) {
+      supabaseClient = createClient(url, key);
+      console.log('[Memory] Supabase client initialized');
+    } else {
+      console.warn('[Memory] Supabase not configured - memory tools will be unavailable');
+    }
+  }
+  return supabaseClient;
+}
+
+// Initialize MCP on module load
+let mcpInitialized = false;
+async function ensureMCPInitialized(): Promise<void> {
+  if (!mcpInitialized) {
+    try {
+      await initializeMCP('/Users/zstoc/ObsidianVault');
+      mcpInitialized = true;
+      console.log('[MCP] Initialized successfully');
+    } catch (error) {
+      console.error('[MCP] Failed to initialize:', error);
+    }
+  }
+}
 
 const execAsync = promisify(exec);
 const fsPromises = fs.promises;
@@ -2419,6 +2451,181 @@ const claudeCodeCircuitBreaker = {
   }
 };
 
+// ============================================================================
+// QUANT SKILL ROUTING SYSTEM
+// Automatically detects quant tasks and injects mandatory skill methodology
+// ============================================================================
+
+interface SkillRoute {
+  builder: string;
+  auditors: string[];
+  description: string;
+}
+
+const SKILL_ROUTES: Record<string, SkillRoute> = {
+  'backtest': {
+    builder: 'backtest-architect',
+    auditors: ['backtest-bias-auditor', 'strategy-logic-auditor'],
+    description: 'Backtesting infrastructure with bias detection'
+  },
+  'strategy': {
+    builder: 'options-strategy-builder',
+    auditors: ['strategy-logic-auditor', 'overfitting-detector'],
+    description: 'Trading strategy with logic validation'
+  },
+  'data_pipeline': {
+    builder: 'financial-data-engineer',
+    auditors: ['data-quality-auditor'],
+    description: 'Data pipeline with quality validation'
+  },
+  'ml_model': {
+    builder: 'ml-timeseries-expert',
+    auditors: ['ml-model-validator', 'overfitting-detector', 'statistical-validator'],
+    description: 'ML model with overfitting detection'
+  },
+  'validation': {
+    builder: 'performance-analyst',
+    auditors: ['statistical-validator', 'monte-carlo-simulator'],
+    description: 'Performance validation with statistical rigor'
+  },
+  'feature_engineering': {
+    builder: 'feature-engineering-quant',
+    auditors: ['backtest-bias-auditor'],
+    description: 'Feature engineering with look-ahead bias prevention'
+  },
+  'risk_management': {
+    builder: 'risk-management-expert',
+    auditors: ['options-risk-specialist'],
+    description: 'Risk framework with Greeks management'
+  },
+  'options': {
+    builder: 'options-pricing-expert',
+    auditors: ['options-risk-specialist', 'options-execution-expert'],
+    description: 'Options pricing and execution'
+  }
+};
+
+/**
+ * Detect the type of quant task from the task description
+ * Returns null if not a recognized quant task (will skip skill injection)
+ */
+function detectQuantTaskType(task: string): string | null {
+  const lower = task.toLowerCase();
+
+  // Order matters - more specific matches first
+  if (lower.includes('backtest') || lower.includes('back-test') || lower.includes('historical test')) {
+    return 'backtest';
+  }
+  if (lower.includes('ml ') || lower.includes('machine learning') || lower.includes('train') && lower.includes('model')) {
+    return 'ml_model';
+  }
+  if (lower.includes('feature') && (lower.includes('engineer') || lower.includes('create') || lower.includes('build'))) {
+    return 'feature_engineering';
+  }
+  if (lower.includes('data') && (lower.includes('pipeline') || lower.includes('clean') || lower.includes('load'))) {
+    return 'data_pipeline';
+  }
+  if (lower.includes('option') && (lower.includes('price') || lower.includes('greek') || lower.includes('vol'))) {
+    return 'options';
+  }
+  if (lower.includes('risk') && (lower.includes('manage') || lower.includes('size') || lower.includes('limit'))) {
+    return 'risk_management';
+  }
+  if (lower.includes('validate') || lower.includes('performance') || lower.includes('statistical')) {
+    return 'validation';
+  }
+  if (lower.includes('strategy') || lower.includes('signal') || lower.includes('entry') || lower.includes('exit')) {
+    return 'strategy';
+  }
+
+  return null; // Not a recognized quant task
+}
+
+/**
+ * Build skill injection prompt for Claude Code
+ * This MANDATES the Builder→Auditor methodology with 2x clean audit requirement
+ */
+function buildSkillInjectionPrompt(taskType: string): string {
+  const route = SKILL_ROUTES[taskType];
+  if (!route) return '';
+
+  const auditorsList = route.auditors.map(a => `~/.claude/skills/${a}/SKILL.md`).join('\n   - ');
+  const auditSteps = route.auditors.map((a, i) =>
+    `   ${i + 1}. Read ~/.claude/skills/${a}/SKILL.md\n   ${i + 1}. Run the complete audit checklist from that skill`
+  ).join('\n');
+
+  return `
+
+## ⚠️ MANDATORY SKILL PROTOCOL (DO NOT SKIP) ⚠️
+
+**Detected Task Type:** ${taskType} (${route.description})
+
+This is a quant task that REQUIRES the Builder→Auditor methodology.
+Skipping this protocol leads to bugs, look-ahead bias, and invalid results.
+
+### STEP 1: BUILD (use ${route.builder} skill)
+
+Before writing ANY code, read the builder skill:
+\`\`\`bash
+cat ~/.claude/skills/${route.builder}/SKILL.md
+\`\`\`
+
+Follow its methodology, patterns, and best practices for building this component.
+
+### STEP 2: AUDIT (use ${route.auditors.join(', ')} skills)
+
+After building, you MUST run audits. Read each auditor skill:
+   - ${auditorsList}
+
+Run the COMPLETE audit checklist from each skill. Common checks:
+- Look-ahead bias (using future data)
+- Off-by-one errors in indexing
+- Survivorship bias in data
+- Overfitting to historical data
+- Missing edge case handling
+- Incorrect calculations
+
+### STEP 3: FIX & RE-AUDIT LOOP
+
+If ANY issues are found:
+1. FIX all identified issues
+2. RE-RUN all auditors (full checklist, not just the failing items)
+3. REPEAT until CLEAN
+
+### STEP 4: CONFIRM 2 CONSECUTIVE CLEAN AUDITS
+
+Your response MUST include this audit trail:
+
+\`\`\`
+=== AUDIT TRAIL ===
+ROUND 1: [List issues found OR "CLEAN - No issues"]
+ROUND 2: [List issues found OR "CLEAN - No issues"]
+...continue until 2 consecutive CLEAN...
+
+FINAL STATUS: ✅ CLEAN AUDIT 2/2 CONFIRMED
+=== END AUDIT TRAIL ===
+\`\`\`
+
+### ❌ FAILURE CONDITIONS (will be rejected)
+
+- Returning code without running audits
+- Claiming "looks good" without reading the skill files
+- Only 1 clean audit (need 2 consecutive)
+- Skipping any auditor in the list
+- Partial audit (must complete FULL checklist)
+
+### ✅ SUCCESS CRITERIA
+
+- All auditor skill checklists completed
+- All issues fixed and verified
+- 2 consecutive CLEAN audit rounds
+- Audit trail included in response
+
+**Remember: "If you didn't audit it, it's probably wrong."**
+
+`;
+}
+
 /**
  * Execute a task via Claude Code CLI
  *
@@ -2547,6 +2754,18 @@ ${task}
 ${context}
 \`\`\`
 `;
+    }
+
+    // ====== SKILL INJECTION ======
+    // Detect quant task type and inject mandatory skill protocol
+    const detectedTaskType = detectQuantTaskType(task);
+    if (detectedTaskType) {
+      const skillPrompt = buildSkillInjectionPrompt(detectedTaskType);
+      prompt += skillPrompt;
+      safeLog(`   🎯 Detected quant task type: ${detectedTaskType}`);
+      safeLog(`   📚 Injecting skill protocol: ${SKILL_ROUTES[detectedTaskType].builder} → ${SKILL_ROUTES[detectedTaskType].auditors.join(', ')}`);
+    } else {
+      safeLog('   ℹ️ No quant task type detected - proceeding without skill injection');
     }
 
     prompt += `
@@ -2965,6 +3184,461 @@ end tell
 }
 
 
+// ==================== SUPABASE MEMORY HANDLERS ====================
+
+async function handleSaveMemory(
+  content: string,
+  summary: string,
+  memoryType: string,
+  importance: number,
+  tags?: string[]
+): Promise<ToolResult> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return {
+      success: false,
+      content: '',
+      error: 'Supabase not configured - cannot save memory'
+    };
+  }
+
+  try {
+    // Generate embedding for the content using OpenAI
+    let embedding: number[] | null = null;
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (openaiKey) {
+      const openai = new OpenAI({ apiKey: openaiKey });
+      const embeddingResponse = await openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: content
+      });
+      embedding = embeddingResponse.data[0].embedding;
+    }
+
+    // Insert into memories table
+    const { data, error } = await supabase
+      .from('memories')
+      .insert({
+        content,
+        summary,
+        memory_type: memoryType,
+        importance_score: importance / 5, // Normalize to 0-1
+        embedding,
+        created_at: new Date().toISOString(),
+        // Store tags in a searchable format
+        category: tags?.join(', ') || null
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('[Memory] Save failed:', error);
+      return {
+        success: false,
+        content: '',
+        error: `Failed to save memory: ${error.message}`
+      };
+    }
+
+    console.log('[Memory] Saved successfully:', data.id);
+    return {
+      success: true,
+      content: JSON.stringify({
+        message: 'Memory saved successfully',
+        id: data.id,
+        type: memoryType,
+        importance,
+        tags
+      })
+    };
+  } catch (error) {
+    console.error('[Memory] Save error:', error);
+    return {
+      success: false,
+      content: '',
+      error: error instanceof Error ? error.message : 'Unknown error saving memory'
+    };
+  }
+}
+
+async function handleRecallMemory(
+  query: string,
+  memoryType?: string,
+  limit: number = 10
+): Promise<ToolResult> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return {
+      success: false,
+      content: '',
+      error: 'Supabase not configured - cannot recall memories'
+    };
+  }
+
+  try {
+    // Try semantic search first if we have OpenAI
+    let results: any[] = [];
+    const openaiKey = process.env.OPENAI_API_KEY;
+
+    if (openaiKey) {
+      // Generate query embedding
+      const openai = new OpenAI({ apiKey: openaiKey });
+      const embeddingResponse = await openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: query
+      });
+      const queryEmbedding = embeddingResponse.data[0].embedding;
+
+      // Call the match_memories RPC function if it exists
+      const { data: semanticResults, error: rpcError } = await supabase
+        .rpc('match_memories', {
+          query_embedding: queryEmbedding,
+          match_threshold: 0.5,
+          match_count: limit
+        });
+
+      if (!rpcError && semanticResults) {
+        results = semanticResults;
+      }
+    }
+
+    // Fallback to text search if semantic search didn't return results
+    if (results.length === 0) {
+      let queryBuilder = supabase
+        .from('memories')
+        .select('id, content, summary, memory_type, importance_score, category, created_at')
+        .or(`content.ilike.%${query}%,summary.ilike.%${query}%`)
+        .order('importance_score', { ascending: false })
+        .limit(limit);
+
+      if (memoryType) {
+        queryBuilder = queryBuilder.eq('memory_type', memoryType);
+      }
+
+      const { data, error } = await queryBuilder;
+      if (error) {
+        throw error;
+      }
+      results = data || [];
+    }
+
+    // Format results
+    const formattedResults = results.map((m: any) => ({
+      id: m.id,
+      summary: m.summary,
+      content: m.content?.substring(0, 500) + (m.content?.length > 500 ? '...' : ''),
+      type: m.memory_type,
+      importance: Math.round((m.importance_score || 0) * 5),
+      tags: m.category,
+      created: m.created_at,
+      relevance: m.similarity || null
+    }));
+
+    return {
+      success: true,
+      content: JSON.stringify({
+        query,
+        count: formattedResults.length,
+        memories: formattedResults
+      }, null, 2)
+    };
+  } catch (error) {
+    console.error('[Memory] Recall error:', error);
+    return {
+      success: false,
+      content: '',
+      error: error instanceof Error ? error.message : 'Unknown error recalling memories'
+    };
+  }
+}
+
+
+// ==================== MCP/OBSIDIAN HANDLERS ====================
+
+const QUANT_ENGINE_OBSIDIAN_PREFIX = 'Projects/quant-engine';
+
+async function handleObsidianReadNote(relativePath: string): Promise<ToolResult> {
+  await ensureMCPInitialized();
+  const mcp = getMCPManager();
+  const fullPath = `${QUANT_ENGINE_OBSIDIAN_PREFIX}/${relativePath}`;
+
+  const result = await mcp.obsidianReadNote(fullPath);
+
+  if (result.success) {
+    return {
+      success: true,
+      content: JSON.stringify(result.content, null, 2)
+    };
+  } else {
+    return {
+      success: false,
+      content: '',
+      error: result.error || 'Failed to read note'
+    };
+  }
+}
+
+async function handleObsidianWriteNote(relativePath: string, content: string): Promise<ToolResult> {
+  await ensureMCPInitialized();
+  const mcp = getMCPManager();
+  const fullPath = `${QUANT_ENGINE_OBSIDIAN_PREFIX}/${relativePath}`;
+
+  const result = await mcp.obsidianWriteNote(fullPath, content);
+
+  if (result.success) {
+    return {
+      success: true,
+      content: `Successfully wrote note: ${fullPath}`
+    };
+  } else {
+    return {
+      success: false,
+      content: '',
+      error: result.error || 'Failed to write note'
+    };
+  }
+}
+
+async function handleObsidianSearchNotes(query: string, limit: number = 10): Promise<ToolResult> {
+  await ensureMCPInitialized();
+  const mcp = getMCPManager();
+
+  const result = await mcp.obsidianSearchNotes(query, limit);
+
+  if (result.success) {
+    return {
+      success: true,
+      content: JSON.stringify(result.content, null, 2)
+    };
+  } else {
+    return {
+      success: false,
+      content: '',
+      error: result.error || 'Failed to search notes'
+    };
+  }
+}
+
+async function handleObsidianListDirectory(relativePath: string): Promise<ToolResult> {
+  await ensureMCPInitialized();
+  const mcp = getMCPManager();
+  const fullPath = relativePath === '/'
+    ? QUANT_ENGINE_OBSIDIAN_PREFIX
+    : `${QUANT_ENGINE_OBSIDIAN_PREFIX}/${relativePath}`;
+
+  const result = await mcp.obsidianListDirectory(fullPath);
+
+  if (result.success) {
+    return {
+      success: true,
+      content: JSON.stringify(result.content, null, 2)
+    };
+  } else {
+    return {
+      success: false,
+      content: '',
+      error: result.error || 'Failed to list directory'
+    };
+  }
+}
+
+async function handleObsidianDocumentLearning(
+  category: string,
+  title: string,
+  context: string,
+  details: string,
+  why: string,
+  nextSteps?: string
+): Promise<ToolResult> {
+  await ensureMCPInitialized();
+  const mcp = getMCPManager();
+
+  // Determine folder based on category
+  const categoryFolder = category === 'what-worked' ? 'what-worked'
+    : category === 'what-failed' ? 'what-failed'
+    : 'overfitting-warnings';
+
+  // Create filename from title (kebab-case)
+  const filename = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const fullPath = `${QUANT_ENGINE_OBSIDIAN_PREFIX}/08-Learnings/${categoryFolder}/${filename}.md`;
+
+  // Create structured content
+  const date = new Date().toISOString().split('T')[0];
+  const content = `# ${title}
+
+**Date:** ${date}
+**Category:** ${category}
+
+## Context
+${context}
+
+## ${category === 'what-worked' ? 'What Worked' : category === 'what-failed' ? 'What We Tried' : 'The Trap'}
+${details}
+
+## ${category === 'what-worked' ? 'Why It Worked' : category === 'what-failed' ? 'Why It Failed' : 'How to Detect'}
+${why}
+
+${nextSteps ? `## ${category === 'what-worked' ? 'Replication Conditions' : category === 'what-failed' ? 'Alternative Approach' : 'Prevention'}
+${nextSteps}` : ''}
+`;
+
+  const result = await mcp.obsidianWriteNote(fullPath, content);
+
+  if (result.success) {
+    return {
+      success: true,
+      content: `Learning documented: ${fullPath}`
+    };
+  } else {
+    return {
+      success: false,
+      content: '',
+      error: result.error || 'Failed to document learning'
+    };
+  }
+}
+
+async function handleObsidianDocumentBacktest(args: {
+  strategy_name: string;
+  start_date: string;
+  end_date: string;
+  sharpe_ratio: number;
+  sortino_ratio?: number;
+  max_drawdown: number;
+  win_rate?: number;
+  total_trades?: number;
+  validated?: boolean;
+  notes?: string;
+}): Promise<ToolResult> {
+  await ensureMCPInitialized();
+  const mcp = getMCPManager();
+
+  const date = new Date().toISOString().split('T')[0];
+  const monthFolder = date.slice(0, 7); // YYYY-MM
+  const filename = `${args.strategy_name}_${date}`;
+  const fullPath = `${QUANT_ENGINE_OBSIDIAN_PREFIX}/07-Backtest-Results/${monthFolder}/${filename}.md`;
+
+  const content = `# Backtest: ${args.strategy_name} - ${date}
+
+## Data Range
+- **Start:** ${args.start_date}
+- **End:** ${args.end_date}
+
+## Performance Metrics
+
+| Metric | Value |
+|--------|-------|
+| Sharpe Ratio | ${args.sharpe_ratio.toFixed(2)} |
+${args.sortino_ratio !== undefined ? `| Sortino Ratio | ${args.sortino_ratio.toFixed(2)} |` : ''}
+| Max Drawdown | ${args.max_drawdown.toFixed(1)}% |
+${args.win_rate !== undefined ? `| Win Rate | ${args.win_rate.toFixed(1)}% |` : ''}
+${args.total_trades !== undefined ? `| Total Trades | ${args.total_trades} |` : ''}
+
+## Validation Status
+${args.validated ? '✅ Overfitting validation performed' : '⚠️ NOT YET VALIDATED - Run overfitting-detector before trusting results'}
+
+${args.notes ? `## Notes
+${args.notes}` : ''}
+
+---
+*Generated: ${new Date().toISOString()}*
+`;
+
+  const result = await mcp.obsidianWriteNote(fullPath, content);
+
+  if (result.success) {
+    return {
+      success: true,
+      content: `Backtest documented: ${fullPath}`
+    };
+  } else {
+    return {
+      success: false,
+      content: '',
+      error: result.error || 'Failed to document backtest'
+    };
+  }
+}
+
+// ==================== MCP KNOWLEDGE GRAPH HANDLERS ====================
+
+async function handleKGSearch(query: string): Promise<ToolResult> {
+  await ensureMCPInitialized();
+  const mcp = getMCPManager();
+
+  const result = await mcp.memorySearchNodes(query);
+
+  if (result.success) {
+    return {
+      success: true,
+      content: JSON.stringify(result.content, null, 2)
+    };
+  } else {
+    return {
+      success: false,
+      content: '',
+      error: result.error || 'Failed to search knowledge graph'
+    };
+  }
+}
+
+async function handleKGCreateEntity(
+  name: string,
+  entityType: string,
+  observations: string[]
+): Promise<ToolResult> {
+  await ensureMCPInitialized();
+  const mcp = getMCPManager();
+
+  const result = await mcp.memoryCreateEntities([{
+    name,
+    entityType,
+    observations
+  }]);
+
+  if (result.success) {
+    return {
+      success: true,
+      content: `Entity created: ${name} (${entityType})`
+    };
+  } else {
+    return {
+      success: false,
+      content: '',
+      error: result.error || 'Failed to create entity'
+    };
+  }
+}
+
+async function handleKGCreateRelation(
+  fromEntity: string,
+  toEntity: string,
+  relationType: string
+): Promise<ToolResult> {
+  await ensureMCPInitialized();
+  const mcp = getMCPManager();
+
+  const result = await mcp.memoryCreateRelations([{
+    from: fromEntity,
+    to: toEntity,
+    relationType
+  }]);
+
+  if (result.success) {
+    return {
+      success: true,
+      content: `Relation created: ${fromEntity} --[${relationType}]--> ${toEntity}`
+    };
+  } else {
+    return {
+      success: false,
+      content: '',
+      error: result.error || 'Failed to create relation'
+    };
+  }
+}
+
+
 // ==================== TOOL DISPATCHER ====================
 
 export async function executeTool(
@@ -3124,6 +3798,45 @@ export async function executeTool(
     // Claude Code CLI execution (Gemini → Claude Code bridge)
     case 'execute_via_claude_code':
       return executeViaClaudeCode(args.task, args.context, args.parallel_hint, args.session_id);
+
+    // MCP/Obsidian Knowledge Base tools
+    case 'obsidian_read_note':
+      return handleObsidianReadNote(args.path);
+    case 'obsidian_write_note':
+      return handleObsidianWriteNote(args.path, args.content);
+    case 'obsidian_search_notes':
+      return handleObsidianSearchNotes(args.query, args.limit);
+    case 'obsidian_list_directory':
+      return handleObsidianListDirectory(args.path);
+    case 'obsidian_document_learning':
+      return handleObsidianDocumentLearning(args.category, args.title, args.context, args.details, args.why, args.next_steps);
+    case 'obsidian_document_backtest':
+      return handleObsidianDocumentBacktest(args as {
+        strategy_name: string;
+        start_date: string;
+        end_date: string;
+        sharpe_ratio: number;
+        sortino_ratio?: number;
+        max_drawdown: number;
+        win_rate?: number;
+        total_trades?: number;
+        validated?: boolean;
+        notes?: string;
+      });
+
+    // MCP Knowledge Graph tools
+    case 'kg_search':
+      return handleKGSearch(args.query);
+    case 'kg_create_entity':
+      return handleKGCreateEntity(args.name, args.entity_type, args.observations);
+    case 'kg_create_relation':
+      return handleKGCreateRelation(args.from_entity, args.to_entity, args.relation_type);
+
+    // Supabase Memory tools
+    case 'save_memory':
+      return handleSaveMemory(args.content, args.summary, args.memory_type, args.importance, args.tags);
+    case 'recall_memory':
+      return handleRecallMemory(args.query, args.memory_type, args.limit);
 
     default:
       return { success: false, content: '', error: `Unknown tool: ${name}` };
