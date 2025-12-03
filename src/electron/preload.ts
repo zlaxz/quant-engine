@@ -241,6 +241,23 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.invoke('pattern:get-history', { workspaceId }),
   patternDismiss: (patternId: string) =>
     ipcRenderer.invoke('pattern:dismiss', { patternId }),
+
+  // Pop-out Window Management
+  popoutCreate: (config: {
+    id: string;
+    title: string;
+    visualizationType: string;
+    data: unknown;
+    width?: number;
+    height?: number;
+  }) => ipcRenderer.invoke('popout:create', config),
+  popoutUpdate: (id: string, data: unknown) =>
+    ipcRenderer.invoke('popout:update', { id, data }),
+  popoutClose: (id: string) => ipcRenderer.invoke('popout:close', id),
+  popoutList: () => ipcRenderer.invoke('popout:list'),
+  popoutFocus: (id: string) => ipcRenderer.invoke('popout:focus', id),
+  popoutBroadcast: (type: string, payload: unknown) =>
+    ipcRenderer.invoke('popout:broadcast', { type, payload }),
 });
 
 // The ElectronAPI type is defined in src/types/electron.d.ts as a global type
