@@ -152,6 +152,26 @@ contextBridge.exposeInMainWorld('electron', {
   // Check Claude Code availability
   checkClaudeCodeAvailability: () => ipcRenderer.invoke('claude-code:check-availability'),
 
+  // Claude Code approval flow
+  approveClaudeCodeCommand: (commandId: string) => 
+    ipcRenderer.invoke('claude-code:approve', commandId),
+  rejectClaudeCodeCommand: (commandId: string) => 
+    ipcRenderer.invoke('claude-code:reject', commandId),
+  
+  // Listen for pending Claude Code commands awaiting approval
+  onClaudeCodePending: (callback: (command: {
+    id: string;
+    task: string;
+    context?: string;
+    files?: string[];
+    parallelHint?: string;
+    timestamp: number;
+  }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('claude-code-pending', handler);
+    return () => ipcRenderer.removeListener('claude-code-pending', handler);
+  },
+
   // Decision override
   overrideRoutingDecision: (decisionId: string, overrideTo: string) => 
     ipcRenderer.invoke('override-routing-decision', { decisionId, overrideTo }),

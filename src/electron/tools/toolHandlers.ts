@@ -2494,6 +2494,32 @@ export async function executeViaClaudeCode(
     };
   }
 
+  // ====== USER APPROVAL FLOW ======
+  // Queue command for user approval before execution
+  const { queueCommandForApproval } = await import('../ipc-handlers/claudeCodeHandlers');
+  
+  safeLog('\n' + '⏳'.repeat(30));
+  safeLog('🔔 AWAITING USER APPROVAL FOR CLAUDE CODE EXECUTION');
+  safeLog(`   Task: ${task.slice(0, 100)}${task.length > 100 ? '...' : ''}`);
+  safeLog(`   Parallel hint: ${parallelHint || 'none'}`);
+  safeLog('⏳'.repeat(30));
+  
+  const approved = await queueCommandForApproval(
+    { task, context, files: [], timeout: 300000 },
+    parallelHint
+  );
+  
+  if (!approved) {
+    safeLog('❌ CLAUDE CODE EXECUTION REJECTED BY USER');
+    return {
+      success: false,
+      content: '',
+      error: 'Claude Code execution was rejected by user. Command not sent.'
+    };
+  }
+  
+  safeLog('✅ CLAUDE CODE EXECUTION APPROVED BY USER');
+
   safeLog('\n' + '🔵'.repeat(30));
   safeLog('🚀 EXECUTE VIA CLAUDE CODE CLI (ASYNC)');
   safeLog(`   Task: ${task.slice(0, 100)}${task.length > 100 ? '...' : ''}`);

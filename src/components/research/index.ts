@@ -1,3 +1,5 @@
+export { ClaudeCodePendingPreview, type PendingClaudeCodeCommand } from './ClaudeCodePendingPreview';
+
 /**
  * Research Components - Centralized exports
  */

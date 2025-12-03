@@ -48,10 +48,12 @@ import {
   ClaudeCodeErrorCard,
   ClaudeCodeResultCard,
   ContextualEducationOverlay,
+  ClaudeCodePendingPreview,
   type ErrorDetails,
   type Memory,
   type ClaudeCodeError,
   type PersonalPattern,
+  type PendingClaudeCodeCommand,
 } from '@/components/research';
 import { ClaudeCodeArtifact } from '@/types/api-contract';
 
@@ -88,6 +90,9 @@ const ChatAreaComponent = () => {
   const [personalPattern, setPersonalPattern] = useState<PersonalPattern | null>(null);
   const [currentError, setCurrentError] = useState<ErrorDetails | null>(null);
   const [memoryRecalls, setMemoryRecalls] = useState<Memory[]>([]);
+  
+  // Pending Claude Code commands awaiting user approval
+  const [pendingCommand, setPendingCommand] = useState<PendingClaudeCodeCommand | null>(null);
   
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -243,6 +248,53 @@ const ChatAreaComponent = () => {
 
     return () => unsubClaudeEvents();
   }, [toast]);
+
+  // Listen for pending Claude Code commands awaiting approval
+  useEffect(() => {
+    if (!window.electron?.onClaudeCodePending) return;
+
+    const unsubPending = window.electron.onClaudeCodePending((command) => {
+      setPendingCommand({
+        id: command.id,
+        task: command.task,
+        context: command.context,
+        files: command.files,
+        parallelHint: command.parallelHint as 'none' | 'minor' | 'massive' | undefined,
+        timestamp: command.timestamp,
+      });
+      
+      toast({
+        title: '⚠️ Claude Code Approval Required',
+        description: 'Review the command before execution',
+      });
+    });
+
+    return () => unsubPending();
+  }, [toast]);
+
+  // Handle approve/reject for pending commands
+  const handleApproveCommand = async (commandId: string) => {
+    if (window.electron?.approveClaudeCodeCommand) {
+      await window.electron.approveClaudeCodeCommand(commandId);
+      setPendingCommand(null);
+      toast({
+        title: 'Command Approved',
+        description: 'Executing via Claude Code...',
+      });
+    }
+  };
+
+  const handleRejectCommand = async (commandId: string) => {
+    if (window.electron?.rejectClaudeCodeCommand) {
+      await window.electron.rejectClaudeCodeCommand(commandId);
+      setPendingCommand(null);
+      toast({
+        title: 'Command Rejected',
+        description: 'Claude Code execution cancelled',
+        variant: 'destructive',
+      });
+    }
+  };
 
   // Clear transient UI when starting new user message
   useEffect(() => {
@@ -577,6 +629,17 @@ const ChatAreaComponent = () => {
                 />
               );
             })}
+
+            {/* Pending Claude Code Command - Requires Approval */}
+            {pendingCommand && (
+              <div className="mb-4">
+                <ClaudeCodePendingPreview
+                  command={pendingCommand}
+                  onApprove={handleApproveCommand}
+                  onReject={handleRejectCommand}
+                />
+              </div>
+            )}
 
             {/* Loading State */}
             {isLoading && (
