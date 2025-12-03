@@ -302,7 +302,7 @@ function parseRichContent(content: string) {
 }
 
 // Base text style for terminal-like readability
-const textStyle = "tracking-wide leading-7";
+const textStyle = "font-mono text-[14px] tracking-normal leading-7";
 
 /**
  * Format text with basic markdown-like styling
