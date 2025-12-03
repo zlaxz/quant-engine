@@ -5,7 +5,7 @@
  * NO MOCK DATA - Connects to Python API and Supabase
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useResearchDisplay } from '@/contexts/ResearchDisplayContext';
 import { useVisualizationContext, VisualizationView } from '@/contexts/VisualizationContext';
 import { ArtifactDisplay } from './ArtifactDisplay';
@@ -17,8 +17,19 @@ import { BacktestRunner } from '@/components/dashboard/BacktestRunner';
 import { SystemIntegrity } from '@/components/dashboard/SystemIntegrity';
 import { FindingsPanel } from '@/components/research/FindingsPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Target, Bug, TrendingUp, Play, Shield, Star } from 'lucide-react';
+import { Target, Bug, TrendingUp, Play, Shield, Star, ExternalLink } from 'lucide-react';
+
+// Tab configuration for pop-out
+const TAB_CONFIG: Record<VisualizationView, { id: string; title: string; icon: typeof Star }> = {
+  default: { id: 'findings', title: 'Findings', icon: Star },
+  mission: { id: 'mission-control', title: 'Mission Control', icon: Target },
+  swarm: { id: 'swarm-monitor', title: 'Swarm Monitor', icon: Bug },
+  graduation: { id: 'graduation-pipeline', title: 'Graduation Pipeline', icon: TrendingUp },
+  backtest: { id: 'backtest-runner', title: 'Backtest Runner', icon: Play },
+  integrity: { id: 'system-integrity', title: 'System Integrity', icon: Shield },
+};
 
 export const DualPurposePanel = () => {
   const { currentArtifact, clearArtifact } = useResearchDisplay();
@@ -73,6 +84,16 @@ export const DualPurposePanel = () => {
   }
 
   // Visualization mode with context-aware switching
+  const handlePopout = useCallback((view: VisualizationView) => {
+    const config = TAB_CONFIG[view];
+    window.electron?.popoutCreate?.({
+      id: config.id,
+      title: config.title,
+      visualizationType: view,
+      data: {},
+    });
+  }, []);
+
   return (
     <div className="h-full flex flex-col">
       {/* System Integrity HUD - Always visible */}
@@ -84,32 +105,45 @@ export const DualPurposePanel = () => {
         onValueChange={(v) => setView(v as VisualizationView)}
         className="flex-1 flex flex-col min-h-0"
       >
-        <TabsList className="grid w-full grid-cols-6 h-9 mx-2 mt-2 shrink-0" style={{ width: 'calc(100% - 16px)' }}>
-          <TabsTrigger value="default" className="text-xs gap-1">
-            <Star className="h-3 w-3" />
-            <span className="hidden sm:inline">Findings</span>
-          </TabsTrigger>
-          <TabsTrigger value="mission" className="text-xs gap-1">
-            <Target className="h-3 w-3" />
-            <span className="hidden sm:inline">Mission</span>
-          </TabsTrigger>
-          <TabsTrigger value="swarm" className="text-xs gap-1">
-            <Bug className="h-3 w-3" />
-            <span className="hidden sm:inline">Swarm</span>
-          </TabsTrigger>
-          <TabsTrigger value="graduation" className="text-xs gap-1">
-            <TrendingUp className="h-3 w-3" />
-            <span className="hidden sm:inline">Pipeline</span>
-          </TabsTrigger>
-          <TabsTrigger value="backtest" className="text-xs gap-1">
-            <Play className="h-3 w-3" />
-            <span className="hidden sm:inline">Backtest</span>
-          </TabsTrigger>
-          <TabsTrigger value="integrity" className="text-xs gap-1">
-            <Shield className="h-3 w-3" />
-            <span className="hidden sm:inline">Integrity</span>
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex items-center gap-1 mx-2 mt-2">
+          <TabsList className="grid flex-1 grid-cols-6 h-9 shrink-0">
+            <TabsTrigger value="default" className="text-xs gap-1">
+              <Star className="h-3 w-3" />
+              <span className="hidden sm:inline">Findings</span>
+            </TabsTrigger>
+            <TabsTrigger value="mission" className="text-xs gap-1">
+              <Target className="h-3 w-3" />
+              <span className="hidden sm:inline">Mission</span>
+            </TabsTrigger>
+            <TabsTrigger value="swarm" className="text-xs gap-1">
+              <Bug className="h-3 w-3" />
+              <span className="hidden sm:inline">Swarm</span>
+            </TabsTrigger>
+            <TabsTrigger value="graduation" className="text-xs gap-1">
+              <TrendingUp className="h-3 w-3" />
+              <span className="hidden sm:inline">Pipeline</span>
+            </TabsTrigger>
+            <TabsTrigger value="backtest" className="text-xs gap-1">
+              <Play className="h-3 w-3" />
+              <span className="hidden sm:inline">Backtest</span>
+            </TabsTrigger>
+            <TabsTrigger value="integrity" className="text-xs gap-1">
+              <Shield className="h-3 w-3" />
+              <span className="hidden sm:inline">Integrity</span>
+            </TabsTrigger>
+          </TabsList>
+          
+          {/* Pop-out button for current tab */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            onClick={() => handlePopout(currentView)}
+            title={`Pop out ${TAB_CONFIG[currentView].title}`}
+          >
+            <ExternalLink className="h-4 w-4" />
+          </Button>
+        </div>
 
         <div className="flex-1 overflow-auto p-2 min-h-0">
           <TabsContent value="default" className="h-full mt-0 data-[state=active]:flex data-[state=active]:flex-col">

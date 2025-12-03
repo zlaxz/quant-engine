@@ -14,6 +14,14 @@ import { Button } from '@/components/ui/button';
 import { Maximize2, Minimize2, RefreshCw, Pin, PinOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// Dashboard components for popout
+import { MissionControl } from '@/components/dashboard/MissionControl';
+import { SwarmHiveMonitor } from '@/components/swarm/SwarmHiveMonitor';
+import { GraduationTracker } from '@/components/dashboard/GraduationTracker';
+import { BacktestRunner } from '@/components/dashboard/BacktestRunner';
+import { SystemIntegrity } from '@/components/dashboard/SystemIntegrity';
+import { FindingsPanel } from '@/components/research/FindingsPanel';
+
 interface PopoutData {
   id: string;
   visualizationType: string;
@@ -73,11 +81,24 @@ export default function PopoutVisualization() {
 
   // Render the appropriate visualization based on type
   const renderVisualization = () => {
-    if (!popoutData?.data) return null;
+    if (!popoutData) return null;
 
     const { visualizationType, data } = popoutData;
 
+    // Dashboard component types
     switch (visualizationType) {
+      case 'default':
+        return <FindingsPanel />;
+      case 'mission':
+        return <MissionControl />;
+      case 'swarm':
+        return <SwarmHiveMonitor />;
+      case 'graduation':
+        return <GraduationTracker />;
+      case 'backtest':
+        return <BacktestRunner />;
+      case 'integrity':
+        return <SystemIntegrity />;
       case 'chart':
         return <GenericChart data={data} />;
       case 'table':
@@ -87,14 +108,14 @@ export default function PopoutVisualization() {
       case 'code':
         return <CodeDisplay data={data} />;
       default:
-        // Try to auto-detect
-        if (data.type && data.data) {
+        // Try to auto-detect from data
+        if (data?.type && data?.data) {
           return <GenericChart data={data} />;
         }
-        if (data.columns && data.rows) {
+        if (data?.columns && data?.rows) {
           return <GenericTable data={data} />;
         }
-        if (data.metrics) {
+        if (data?.metrics) {
           return <MetricsDashboard data={data} />;
         }
         return (
