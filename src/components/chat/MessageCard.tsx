@@ -7,10 +7,10 @@
 
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { User, Bot, Terminal, Clock, Brain, Zap, Workflow, ChevronDown, ChevronUp } from 'lucide-react';
+import { User, Bot, Terminal, Clock, Brain, Zap, Workflow, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState, useCallback, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   parseChartDirective,
@@ -20,6 +20,41 @@ import {
   stripDisplayDirectives,
 } from '@/lib/displayDirectiveParser';
 import { GenericChart, GenericTable, MetricsDashboard, CodeDisplay } from '@/components/charts';
+
+// Wrapper component for visualizations with pop-out button
+function VisualizationWrapper({ 
+  title, 
+  type, 
+  data, 
+  onPopout, 
+  children 
+}: { 
+  title: string; 
+  type: string; 
+  data: unknown; 
+  onPopout: (title: string, type: string, data: unknown) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border bg-background overflow-hidden group">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30 border-b">
+        <span className="text-xs font-medium text-muted-foreground truncate">{title}</span>
+        {window.electron && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={() => onPopout(title, type, data)}
+          >
+            <ExternalLink className="h-3 w-3 mr-1" />
+            Pop out
+          </Button>
+        )}
+      </div>
+      <div className="p-3">{children}</div>
+    </div>
+  );
+}
 
 interface MessageCardProps {
   role: 'user' | 'assistant' | 'system';
@@ -353,6 +388,21 @@ export const MessageCard = memo(function MessageCard({ role, content, timestamp,
   const hasRichContent = chart || table || metrics || code || autoVisualizations.length > 0;
   const hasDirectives = content !== cleanText;
 
+  // Handle pop-out window creation
+  const handlePopout = useCallback((title: string, type: string, data: unknown) => {
+    if (!window.electron?.popoutCreate) return;
+    
+    const id = `viz-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    window.electron.popoutCreate({
+      id,
+      title,
+      visualizationType: type,
+      data,
+      width: 700,
+      height: 500,
+    });
+  }, []);
+
   // For assistant messages with known model, use model config; otherwise use role config
   const displayConfig = (role === 'assistant' && modelConfig) ? {
     icon: modelConfig.icon,
@@ -417,38 +467,64 @@ export const MessageCard = memo(function MessageCard({ role, content, timestamp,
         <div className="space-y-4 mb-4">
           {/* Metrics Dashboard */}
           {metrics && (
-            <div className="rounded-lg border bg-background p-3">
+            <VisualizationWrapper
+              title={metrics.title || 'Metrics'}
+              type="metrics"
+              data={metrics}
+              onPopout={handlePopout}
+            >
               <MetricsDashboard data={metrics} />
-            </div>
+            </VisualizationWrapper>
           )}
 
           {/* Chart */}
           {chart && (
-            <div className="rounded-lg border bg-background p-3">
+            <VisualizationWrapper
+              title={chart.title || 'Chart'}
+              type="chart"
+              data={chart}
+              onPopout={handlePopout}
+            >
               <GenericChart data={chart} />
-            </div>
+            </VisualizationWrapper>
           )}
 
           {/* Table */}
           {table && (
-            <div className="rounded-lg border bg-background overflow-hidden">
+            <VisualizationWrapper
+              title={table.title || 'Table'}
+              type="table"
+              data={table}
+              onPopout={handlePopout}
+            >
               <GenericTable data={table} />
-            </div>
+            </VisualizationWrapper>
           )}
 
           {/* Code Display */}
           {code && (
-            <div className="rounded-lg border bg-background overflow-hidden">
+            <VisualizationWrapper
+              title={'Code'}
+              type="code"
+              data={code}
+              onPopout={handlePopout}
+            >
               <CodeDisplay data={code} />
-            </div>
+            </VisualizationWrapper>
           )}
 
           {/* Auto-detected visualizations */}
           {autoVisualizations.map((viz, idx) => (
-            <div key={`auto-${idx}`} className="rounded-lg border bg-background p-3">
+            <VisualizationWrapper
+              key={`auto-${idx}`}
+              title={viz.data.title || `Auto ${viz.type}`}
+              type={viz.type}
+              data={viz.data}
+              onPopout={handlePopout}
+            >
               {viz.type === 'metrics' && <MetricsDashboard data={viz.data} />}
               {viz.type === 'table' && <GenericTable data={viz.data} />}
-            </div>
+            </VisualizationWrapper>
           ))}
         </div>
       )}

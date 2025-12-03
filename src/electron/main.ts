@@ -46,6 +46,7 @@ import { registerDecisionHandlers } from './ipc-handlers/decisionHandlers';
 import { registerClaudeCodeHandlers } from './ipc-handlers/claudeCodeHandlers';
 import { setupCheckpointHandlers } from './ipc-handlers/checkpoints';
 import { setupPatternHandlers } from './ipc-handlers/patterns';
+import { registerPopoutHandlers, setMainWindowRef, closeAllPopouts } from './ipc-handlers/popoutWindows';
 import { setFileSystemRoot, addAllowedPath } from './services/FileSystemService';
 import { MemoryDaemon } from './memory/MemoryDaemon';
 import { RecallEngine } from './memory/RecallEngine';
@@ -395,6 +396,7 @@ app.whenReady().then(() => {
   registerClaudeCodeHandlers();
   setupCheckpointHandlers();
   setupPatternHandlers();
+  registerPopoutHandlers();
 
   // Connect memory services to handlers BEFORE registering handlers
   setMemoryServices(memoryDaemon, recallEngine);
@@ -436,6 +438,11 @@ app.whenReady().then(() => {
     }
     
     createWindow();
+    
+    // Set main window reference for popout positioning
+    if (mainWindow) {
+      setMainWindowRef(mainWindow);
+    }
   }).catch(err => {
     console.error('[Main] Failed to start memory daemon:', err);
     // Fall back to creating window even if daemon fails
@@ -450,6 +457,9 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', async () => {
+  // Close all pop-out windows first
+  closeAllPopouts();
+
   // Stop research daemon (Night Shift)
   stopDaemonOnExit();
 

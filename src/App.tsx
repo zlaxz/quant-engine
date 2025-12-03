@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { ChatProvider } from "@/contexts/ChatContext";
 import { ResearchDisplayProvider } from "@/contexts/ResearchDisplayContext";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
 import Dashboard from "./pages/Dashboard";
@@ -14,6 +14,9 @@ import { FirstLaunchModal } from './components/settings/FirstLaunchModal';
 import { isRunningInElectron } from './lib/electronClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CommandPalette } from '@/components/ui/CommandPalette';
+
+// Lazy load popout page for code splitting
+const PopoutVisualization = lazy(() => import('./pages/PopoutVisualization'));
 
 const queryClient = new QueryClient();
 
@@ -77,6 +80,14 @@ const App = () => {
                   <Route path="/" element={<Index />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route 
+                    path="/popout/:id" 
+                    element={
+                      <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
+                        <PopoutVisualization />
+                      </Suspense>
+                    } 
+                  />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>

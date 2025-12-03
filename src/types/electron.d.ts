@@ -388,6 +388,21 @@ interface ElectronAPI {
     }>
   >;
   patternDismiss: (patternId: string) => Promise<{ success: boolean }>;
+
+  // Pop-out Window Management
+  popoutCreate: (config: {
+    id: string;
+    title: string;
+    visualizationType: string;
+    data: unknown;
+    width?: number;
+    height?: number;
+  }) => Promise<{ success: boolean; id: string }>;
+  popoutUpdate: (id: string, data: unknown) => Promise<{ success: boolean; error?: string }>;
+  popoutClose: (id: string) => Promise<{ success: boolean; error?: string }>;
+  popoutList: () => Promise<string[]>;
+  popoutFocus: (id: string) => Promise<{ success: boolean; error?: string }>;
+  popoutBroadcast: (type: string, payload: unknown) => Promise<{ success: boolean; count: number }>;
 }
 
 declare global {
