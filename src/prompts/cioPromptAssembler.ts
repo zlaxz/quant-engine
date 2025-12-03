@@ -19,10 +19,8 @@ import { CIO_IDENTITY_CORE } from './cioIdentityCore';
 import {
   buildContextInjection,
   extractTopicFromMessage,
-  detectMode,
   cioSessionManager,
   type CIOContext,
-  type SessionState,
   type MemoryContext,
   type MarketState,
   type UserPreferences
@@ -179,7 +177,7 @@ export async function assembleCIOPrompt(
  * Quick prompt assembly for simple cases
  */
 export function assembleCIOPromptSync(
-  mode: CIOMode = 'INTAKE',
+  _mode: CIOMode = 'INTAKE',
   sessionContext?: string
 ): string {
   return `${CIO_IDENTITY_CORE}
