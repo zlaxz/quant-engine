@@ -30,6 +30,17 @@ if (!envLoaded) {
 }
 console.log('[Main] VITE_SUPABASE_URL:', process.env.VITE_SUPABASE_URL ? 'SET' : 'NOT SET');
 
+// Handle EPIPE errors on stdout/stderr (happens when pipe is closed)
+// This catches async errors that try-catch in safeLog cannot catch
+process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') return; // Silently ignore
+  console.error('[Main] stdout error:', err);
+});
+process.stderr.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') return; // Silently ignore
+  console.error('[Main] stderr error:', err);
+});
+
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import fs from 'fs';
 import os from 'os';
