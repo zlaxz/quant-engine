@@ -24,7 +24,7 @@ const stageLabels: Record<string, string> = {
 
 export const StatusStripEnhanced = () => {
   const { state: researchState } = useResearchDisplay();
-  const { state: missionState, toggleExpanded } = useMissionControl();
+  const { state: missionState } = useMissionControl();
   const [elapsedTime, setElapsedTime] = useState<string>('');
 
   useEffect(() => {
@@ -112,7 +112,7 @@ export const StatusStripEnhanced = () => {
         <Badge 
           variant="outline" 
           className="gap-1.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30 animate-pulse cursor-pointer"
-          onClick={toggleExpanded}
+          onClick={handleOpenMissionControl}
         >
           <AlertCircle className="h-3 w-3" />
           {pendingCount} needs approval
