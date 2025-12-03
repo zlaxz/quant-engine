@@ -286,9 +286,9 @@ export const ChatSessionList = () => {
                         "h-4 w-4 shrink-0",
                         selectedSessionId === session.id ? "text-primary" : "text-muted-foreground"
                       )} />
-                      <div className="flex-1 min-w-0 overflow-hidden mr-1">
+                      <div className="flex-1 min-w-0 mr-1">
                         <div className={cn(
-                          "text-sm leading-tight truncate",
+                          "text-sm leading-tight break-words",
                           selectedSessionId === session.id ? "font-medium text-foreground" : "text-foreground/80"
                         )}>
                           {session.title}
