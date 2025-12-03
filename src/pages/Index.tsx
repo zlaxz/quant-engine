@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { HelpCircle, Settings, LayoutDashboard, Command, ListOrdered, Map } from 'lucide-react';
-import { SystemStatus } from '@/components/dashboard/SystemStatus';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useToast } from '@/hooks/use-toast';
 
@@ -74,9 +73,8 @@ const Index = () => {
             <h1 className="text-base font-semibold text-foreground whitespace-nowrap">QuantOS Research IDE</h1>
           </div>
 
-          {/* Center section - status indicators, hidden on small screens */}
+          {/* Center section - empty placeholder for balance */}
           <div className="hidden md:flex items-center gap-2 flex-1 justify-center min-w-0">
-            <SystemStatus />
           </div>
 
           {/* Right section - navigation */}
