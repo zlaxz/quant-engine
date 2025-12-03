@@ -16,7 +16,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { HelpCircle, Settings, LayoutDashboard, Command, ListOrdered, Map } from 'lucide-react';
 import { SystemStatus } from '@/components/dashboard/SystemStatus';
-import { RegimeIndicator } from '@/components/dashboard/RegimeIndicator';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useToast } from '@/hooks/use-toast';
 
@@ -77,7 +76,6 @@ const Index = () => {
 
           {/* Center section - status indicators, hidden on small screens */}
           <div className="hidden md:flex items-center gap-2 flex-1 justify-center min-w-0">
-            <RegimeIndicator />
             <SystemStatus />
           </div>
 

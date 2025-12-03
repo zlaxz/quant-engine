@@ -26,7 +26,6 @@ import { BriefingDeck, type BriefingCard } from '@/components/dashboard/Briefing
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { ShadowPositionMonitor } from '@/components/dashboard/ShadowPositionMonitor';
 import { MorningBriefingViewer } from '@/components/dashboard/MorningBriefingViewer';
-import { RegimeIndicator } from '@/components/dashboard/RegimeIndicator';
 import { DataInventory } from '@/components/dashboard/DataInventory';
 import { StrategyGenomeBrowser } from '@/components/dashboard/StrategyGenomeBrowser';
 import { BacktestRunner } from '@/components/dashboard/BacktestRunner';
@@ -274,9 +273,6 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Regime Indicator */}
-            <RegimeIndicator />
-
             {/* Daemon Status */}
             <div className="flex items-center gap-2 border-l pl-4">
               <div
