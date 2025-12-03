@@ -511,12 +511,9 @@ Let me start with the analysis...
         generationConfig: {
           temperature: 1.0, // Gemini 3 Pro default - DO NOT CHANGE
           // thinking_level: 'high' is default - no need to specify
-          // L2: Uncomment to enable includeThoughts (debug mode only)
-          // When enabled, Gemini returns reasoning summaries between thinking and response
-          // Useful for understanding model decision-making in complex reasoning tasks
-          // NOTE: May increase latency and output length - only enable for debugging
-          // includeThoughts: true,
-        },
+          // Enable thinking mode to show model reasoning
+          includeThoughts: true,
+        } as any,
       });
 
       // Convert messages to Gemini format (excluding system messages)
@@ -552,14 +549,38 @@ Let me start with the analysis...
           let accumulatedText = '';
           
           for await (const chunk of streamResult.stream) {
-            const text = chunk.text();
-            if (text) {
-              accumulatedText += text;
-              _event.sender.send('llm-stream', {
-                type: 'chunk',
-                content: text,
-                timestamp: Date.now()
-              });
+            // Check for thinking content in the chunk
+            const candidate = (chunk as any).candidates?.[0];
+            if (candidate?.content?.parts) {
+              for (const part of candidate.content.parts) {
+                // Gemini returns thinking in parts with thought: true
+                if (part.thought && part.text) {
+                  _event.sender.send('llm-stream', {
+                    type: 'thinking',
+                    content: part.text,
+                    timestamp: Date.now()
+                  });
+                } else if (part.text && !part.thought) {
+                  // Regular text content
+                  accumulatedText += part.text;
+                  _event.sender.send('llm-stream', {
+                    type: 'chunk',
+                    content: part.text,
+                    timestamp: Date.now()
+                  });
+                }
+              }
+            } else {
+              // Fallback: try standard text() method
+              const text = chunk.text();
+              if (text) {
+                accumulatedText += text;
+                _event.sender.send('llm-stream', {
+                  type: 'chunk',
+                  content: text,
+                  timestamp: Date.now()
+                });
+              }
             }
           }
           
