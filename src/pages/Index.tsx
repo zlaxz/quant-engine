@@ -18,6 +18,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { HelpCircle, Settings, LayoutDashboard, Command, ListOrdered, Map } from 'lucide-react';
 import { SystemStatus } from '@/components/dashboard/SystemStatus';
 import { RegimeIndicator } from '@/components/dashboard/RegimeIndicator';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
@@ -124,6 +125,7 @@ const Index = () => {
             >
               <HelpCircle className="h-4 w-4" />
             </Button>
+            <ThemeToggle />
           </div>
         </header>
 
