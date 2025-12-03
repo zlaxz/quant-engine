@@ -4,7 +4,6 @@
 
 import { Brain, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 
 interface ThinkingStreamProps {
@@ -31,7 +30,7 @@ export function ThinkingStream({ content, isActive, className }: ThinkingStreamP
         )}
       </div>
 
-      <ScrollArea className="max-h-96 pr-4">
+      <div className="pr-4">
         <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
           {content.split('\n').filter(line => line.trim()).map((line, idx) => (
             <p key={idx} className="opacity-90">
@@ -42,7 +41,7 @@ export function ThinkingStream({ content, isActive, className }: ThinkingStreamP
             <span className="inline-block w-2 h-4 bg-primary/50 animate-pulse" />
           )}
         </div>
-      </ScrollArea>
+      </div>
     </Card>
   );
 }
