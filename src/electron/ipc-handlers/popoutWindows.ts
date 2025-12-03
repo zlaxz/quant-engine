@@ -106,8 +106,9 @@ export function registerPopoutHandlers() {
     const isDev = process.env.NODE_ENV === 'development';
     const baseUrl = isDev ? 'http://localhost:8080' : `file://${path.join(__dirname, '../../dist/index.html')}`;
     
-    // Use hash routing for the popout route
-    const url = `${baseUrl}#/popout/${encodeURIComponent(id)}`;
+    // Use hash routing - mission-control gets special route, others use generic popout
+    const route = id === 'mission-control' ? '/mission-control' : `/popout/${encodeURIComponent(id)}`;
+    const url = `${baseUrl}#${route}`;
     popoutWindow.loadURL(url);
 
     // Send initial data once loaded
