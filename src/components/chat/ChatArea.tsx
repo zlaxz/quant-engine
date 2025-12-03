@@ -755,21 +755,21 @@ const ChatAreaComponent = () => {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="border-t border-border p-2 min-w-0">
+      <div className="border-t border-border p-3 min-w-0">
         {/* Intent Suggestion */}
         {intentSuggestion && !inputValue.startsWith('/') && (
-          <div className="mb-2 flex items-center gap-2 p-2 bg-blue-500/10 rounded border border-blue-500/20">
-            <span className="text-xs text-blue-400">💡</span>
+          <div className="mb-2 flex items-center gap-2 p-2 bg-primary/10 rounded border border-primary/20">
+            <span className="text-xs text-primary">💡</span>
             <span className="text-xs flex-1">
               <span className="text-muted-foreground">Did you mean:</span>{' '}
-              <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono text-blue-300">
+              <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono text-primary">
                 {intentSuggestion.suggestion}
               </code>
             </span>
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 px-2 text-xs text-blue-400"
+              className="h-6 px-2 text-xs text-primary"
               onClick={() => {
                 setInputValue(intentSuggestion.suggestion);
                 setIntentSuggestion(null);
@@ -814,7 +814,7 @@ const ChatAreaComponent = () => {
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyPress}
               placeholder="Type a message or /command..."
-              className="min-h-[40px] max-h-[200px] resize-none pl-10 pr-10"
+              className="min-h-[120px] max-h-[300px] resize-none pl-10 pr-10 font-mono text-sm"
               disabled={isLoading || !selectedSessionId}
             />
             {/* Command menu trigger inside input */}
