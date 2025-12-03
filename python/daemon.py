@@ -44,11 +44,70 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import re
 
 import random
+import requests
 import numpy as np
 import pandas as pd
 import polars as pl
 from supabase import create_client, Client
 from enum import Enum
+
+
+# ============================================================================
+# TELEGRAM NOTIFICATIONS
+# ============================================================================
+
+def send_telegram_alert(title: str, message: str, priority: str = 'normal') -> bool:
+    """
+    Send push notification to user's phone via Telegram.
+    
+    Reads credentials from environment variables:
+    - TELEGRAM_BOT_TOKEN: Bot token from @BotFather
+    - TELEGRAM_CHAT_ID: User's chat ID from @userinfobot
+    
+    Args:
+        title: Alert title/headline
+        message: Alert body text
+        priority: 'normal', 'high', or 'critical' (adds emoji prefix)
+    
+    Returns:
+        True if sent successfully, False otherwise
+    """
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    
+    if not bot_token or not chat_id:
+        logger.warning("Telegram credentials not set. Skipping alert.")
+        return False
+    
+    # Add priority emoji prefix
+    prefix = {
+        'critical': '🚨 ',
+        'high': '⚠️ ',
+        'normal': '📊 '
+    }.get(priority, '📊 ')
+    
+    # Format message
+    full_message = f"{prefix}<b>{title}</b>\n\n{message}"
+    
+    try:
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        response = requests.post(url, json={
+            "chat_id": chat_id,
+            "text": full_message,
+            "parse_mode": "HTML",
+            "disable_notification": priority == 'normal'
+        }, timeout=10)
+        
+        if response.ok:
+            logger.info(f"Telegram alert sent: {title}")
+            return True
+        else:
+            logger.error(f"Telegram API error: {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Failed to send Telegram alert: {e}")
+        return False
 
 # Red Team Swarm imports (for strategy auditing)
 try:
@@ -949,6 +1008,16 @@ This strategy has demonstrated consistent performance over {metrics.get('trade_c
 
             self.stats['graduations'] += 1
             logger.info(f"🎓 [ShadowTrader] GRADUATION: {strategy.data['name']}")
+            
+            # Send Telegram notification
+            send_telegram_alert(
+                title=f"🎓 GRADUATION: {strategy.data['name']}",
+                message=f"Strategy ready for production!\n\n"
+                        f"• Trades: {metrics.get('trade_count', 0)}\n"
+                        f"• Sharpe: {metrics.get('sharpe', 0):.2f}\n"
+                        f"• Win Rate: {metrics.get('win_rate', 0):.1%}",
+                priority='high'
+            )
 
         except Exception as e:
             logger.error(f"Failed to publish graduation: {e}")
@@ -1584,6 +1653,16 @@ class ResearchDirector:
             }).eq('id', mission.id).execute()
 
             logger.info(f"✅ Mission {mission.name} marked as complete")
+            
+            # Send Telegram notification for mission completion
+            send_telegram_alert(
+                title=f"🎉 MISSION COMPLETE: {mission.name}",
+                message=f"Target achieved!\n\n"
+                        f"• Metric: {mission.target_metric}\n"
+                        f"• Target: {mission.target_value}\n"
+                        f"• Achieved: {final_value:.4f}",
+                priority='critical'
+            )
 
         except Exception as e:
             logger.error(f"Failed to mark mission complete: {e}")
