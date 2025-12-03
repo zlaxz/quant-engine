@@ -263,6 +263,11 @@ interface ElectronAPI {
   }>;
   panicStop: () => Promise<{ success: boolean; error?: string }>;
 
+  // Python Server Management
+  startPythonServer: () => Promise<{ success: boolean; pid?: number; error?: string }>;
+  stopPythonServer: () => Promise<{ success: boolean; error?: string }>;
+  restartPythonServer: () => Promise<{ success: boolean; pid?: number; error?: string }>;
+
   // Daemon log streaming
   onDaemonLog: (callback: (log: string) => void) => () => void;
 

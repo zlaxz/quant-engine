@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { HelpCircle, Settings, LayoutDashboard, Command, ListOrdered, Map } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { PythonServerIndicator } from '@/components/layout/PythonServerIndicator';
 import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
@@ -73,8 +74,9 @@ const Index = () => {
             <h1 className="text-base font-semibold text-foreground whitespace-nowrap">QuantOS Research IDE</h1>
           </div>
 
-          {/* Center section - empty placeholder for balance */}
+          {/* Center section - Python server status */}
           <div className="hidden md:flex items-center gap-2 flex-1 justify-center min-w-0">
+            <PythonServerIndicator />
           </div>
 
           {/* Right section - navigation */}
