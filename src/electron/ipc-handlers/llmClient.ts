@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron';
-import { GoogleGenAI, FunctionCallingConfigMode } from '@google/genai';
+import { GoogleGenAI, FunctionCallingConfigMode, ThinkingLevel } from '@google/genai';
 import OpenAI from 'openai';
 import { ALL_TOOLS } from '../tools/toolDefinitions';
 import { executeTool } from '../tools/toolHandlers';
@@ -15,9 +15,7 @@ import { routeTask } from '../utils/routingDecision';
 // 10X CIO System
 import {
   assembleCIOPromptSync,
-  getCurrentMode,
-  forceMode,
-  cioStateMachine
+  getCurrentMode
 } from '../../prompts/cioPromptAssembler';
 
 // LLM routing config - centralized
@@ -289,18 +287,20 @@ function getDeepSeekClient(): OpenAI | null {
 
 // Convert OpenAI-style tool definitions to DeepSeek format
 function toolsToOpenAIFormat(): OpenAI.Chat.Completions.ChatCompletionTool[] {
-  return ALL_TOOLS.map(tool => ({
-    type: 'function' as const,
-    function: {
-      name: tool.name,
-      description: tool.description || '',
-      parameters: {
-        type: 'object',
-        properties: tool.parameters?.properties || {},
-        required: tool.parameters?.required || []
+  return ALL_TOOLS
+    .filter(tool => tool.name !== undefined)
+    .map(tool => ({
+      type: 'function' as const,
+      function: {
+        name: tool.name!,
+        description: tool.description || '',
+        parameters: {
+          type: 'object',
+          properties: tool.parameters?.properties || {},
+          required: tool.parameters?.required || []
+        }
       }
-    }
-  }));
+    }));
 }
 
 export function registerLlmHandlers() {
@@ -389,8 +389,7 @@ export function registerLlmHandlers() {
         throw new Error('GEMINI_API_KEY not configured. Go to Settings to add your API key.');
       }
 
-      // Extract system message for Gemini's systemInstruction
-      const systemMessage = messages.find(m => m.role === 'system');
+      // Extract system message for Gemini's systemInstruction (not used directly, but part of fullSystemInstruction)
       const nonSystemMessages = messages.filter(m => m.role !== 'system');
 
       // Build system instruction using 10X CIO System
@@ -450,10 +449,10 @@ You are running in an Electron app with FULL tool access. Tools execute IMMEDIAT
         systemInstruction: fullSystemInstruction,
         temperature: 1.0, // Gemini 3 Pro default - DO NOT CHANGE
         // Gemini 3 Pro thinking configuration
-        // thinkingLevel: "low" (fast) or "high" (deep reasoning, default)
+        // thinkingLevel: ThinkingLevel.LOW (fast) or ThinkingLevel.HIGH (deep reasoning, default)
         // includeThoughts: true to stream thought summaries (the visible reasoning)
         thinkingConfig: {
-          thinkingLevel: 'high',  // Max reasoning depth for complex quant analysis
+          thinkingLevel: ThinkingLevel.HIGH,  // Max reasoning depth for complex quant analysis
           includeThoughts: true,  // Stream thought summaries to UI
         },
       };
@@ -474,7 +473,6 @@ You are running in an Electron app with FULL tool access. Tools execute IMMEDIAT
       });
 
       // Tool execution loop - use streaming for all responses
-      let lastResponse: any;
 
       // Helper to stream a message and return response using NEW SDK
       // Uses generateContentStream directly instead of chat.sendMessageStream
@@ -529,9 +527,8 @@ You are running in an Electron app with FULL tool access. Tools execute IMMEDIAT
                 }
               }
             } else {
-              // NEW SDK: try chunk.text property or text() method
-              const text = typeof chunk.text === 'string' ? chunk.text :
-                          (typeof chunk.text === 'function' ? chunk.text() : null);
+              // NEW SDK: try chunk.text property (getter)
+              const text = typeof (chunk as any).text === 'string' ? (chunk as any).text : null;
               if (text) {
                 safeLog('[STREAM] Using text property/method:', text.slice(0, 100));
                 accumulatedText += text;
@@ -561,7 +558,6 @@ You are running in an Electron app with FULL tool access. Tools execute IMMEDIAT
 
       // Initial response with streaming - use properly formatted conversation
       let streamResult = await streamMessage(conversationContents);
-      lastResponse = streamResult.response;
       let accumulatedText = streamResult.fullText;
       let pendingFunctionCalls = streamResult.functionCalls;
 
@@ -800,7 +796,6 @@ You are running in an Electron app with FULL tool access. Tools execute IMMEDIAT
 
         // Stream the next response with FULL conversation history
         streamResult = await streamMessage(conversationContents);
-        lastResponse = streamResult.response;
         accumulatedText += streamResult.fullText;
         pendingFunctionCalls = streamResult.functionCalls;
         iterations++;

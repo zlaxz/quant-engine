@@ -2550,9 +2550,7 @@ function buildSkillInjectionPrompt(taskType: string): string {
   if (!route) return '';
 
   const auditorsList = route.auditors.map(a => `~/.claude/skills/${a}/SKILL.md`).join('\n   - ');
-  const auditSteps = route.auditors.map((a, i) =>
-    `   ${i + 1}. Read ~/.claude/skills/${a}/SKILL.md\n   ${i + 1}. Run the complete audit checklist from that skill`
-  ).join('\n');
+  // Build audit steps for display (referenced in template below via auditorsList)
 
   return `
 
