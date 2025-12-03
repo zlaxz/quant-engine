@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 
 interface MainLayoutProps {
   leftPanel: ReactNode;
@@ -7,16 +8,22 @@ interface MainLayoutProps {
 
 export const MainLayout = ({ leftPanel, rightPanel }: MainLayoutProps) => {
   return (
-    <div className="flex h-full w-full bg-background text-foreground">
-      {/* Left Panel - Chat Area (70%) */}
-      <main className="flex-[7] flex flex-col min-w-0 border-r border-border">
-        {leftPanel}
-      </main>
+    <ResizablePanelGroup direction="horizontal" className="h-full w-full bg-background text-foreground">
+      {/* Left Panel - Chat Area */}
+      <ResizablePanel defaultSize={65} minSize={30} maxSize={85}>
+        <main className="h-full flex flex-col min-w-0 border-r border-border">
+          {leftPanel}
+        </main>
+      </ResizablePanel>
 
-      {/* Right Panel - Split (30%): Visualization (top 60%) + Roadmap (bottom 40%) */}
-      <aside className="flex-[3] flex flex-col bg-panel">
-        {rightPanel}
-      </aside>
-    </div>
+      <ResizableHandle withHandle />
+
+      {/* Right Panel - Visualization + Roadmap */}
+      <ResizablePanel defaultSize={35} minSize={15} maxSize={70}>
+        <aside className="h-full flex flex-col bg-panel">
+          {rightPanel}
+        </aside>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 };
