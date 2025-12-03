@@ -339,6 +339,9 @@ class ThetaTerminalService {
    * Initialize on app start
    */
   async initialize(): Promise<void> {
+    // Reload config now that dotenv has been loaded
+    this.config = this.loadConfig();
+
     console.log('[ThetaTerminal] Initializing...');
     console.log(`[ThetaTerminal] Auto-launch: ${this.config.autoLaunch}`);
     console.log(`[ThetaTerminal] JAR path: ${this.config.jarPath}`);

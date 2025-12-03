@@ -39,7 +39,7 @@ import { createClient } from '@supabase/supabase-js';
 import { registerFileOperationHandlers } from './ipc-handlers/fileOperations';
 import { registerPythonExecutionHandlers } from './ipc-handlers/pythonExecution';
 import { registerLlmHandlers } from './ipc-handlers/llmClient';
-import { registerMemoryHandlers, setMemoryServices, registerAnalysisHandlers } from './ipc-handlers/memoryHandlers';
+import { registerMemoryHandlers, setMemoryServices, registerAnalysisHandlers, cleanupMemoryHandlers } from './ipc-handlers/memoryHandlers';
 import { registerDaemonHandlers, stopDaemonOnExit } from './ipc-handlers/daemonManager';
 import { registerContextHandlers } from './ipc-handlers/contextHandlers';
 import { registerDecisionHandlers } from './ipc-handlers/decisionHandlers';
@@ -58,7 +58,7 @@ import { StaleMemoryInjector } from './memory/staleMemoryInjector';
 import { TriggerRecall } from './memory/triggerRecall';
 import { initClaudeCodeResultWatcher } from './ipc-handlers/claudeCodeResultWatcher';
 import { initializeMemoryScribe, MemoryScribe } from './services/MemoryScribe';
-import { initializeThetaTerminal, shutdownThetaTerminal } from './services/ThetaTerminalService';
+import { initializeThetaTerminal, shutdownThetaTerminal, getThetaTerminalStatus, startThetaTerminal, stopThetaTerminal } from './services/ThetaTerminalService';
 import OpenAI from 'openai';
 
 // __filename and __dirname already defined at top of file for dotenv
@@ -176,6 +176,19 @@ app.whenReady().then(() => {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
     console.warn('Supabase credentials not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env');
   }
+
+  // ThetaData Terminal IPC handlers
+  ipcMain.handle('theta-terminal:status', async () => {
+    return await getThetaTerminalStatus();
+  });
+
+  ipcMain.handle('theta-terminal:start', async () => {
+    return await startThetaTerminal();
+  });
+
+  ipcMain.handle('theta-terminal:stop', async () => {
+    return await stopThetaTerminal();
+  });
 
   // Register project directory IPC handlers
   ipcMain.handle('get-project-directory', () => {
@@ -479,6 +492,9 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', async () => {
+  // Cleanup memory handlers
+  cleanupMemoryHandlers();
+
   // Close all pop-out windows first
   closeAllPopouts();
 

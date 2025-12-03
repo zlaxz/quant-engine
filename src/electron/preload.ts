@@ -242,6 +242,11 @@ contextBridge.exposeInMainWorld('electron', {
   patternDismiss: (patternId: string) =>
     ipcRenderer.invoke('pattern:dismiss', { patternId }),
 
+  // ThetaData Terminal Management
+  getThetaTerminalStatus: () => ipcRenderer.invoke('theta-terminal:status'),
+  startThetaTerminal: () => ipcRenderer.invoke('theta-terminal:start'),
+  stopThetaTerminal: () => ipcRenderer.invoke('theta-terminal:stop'),
+
   // Pop-out Window Management
   popoutCreate: (config: {
     id: string;
