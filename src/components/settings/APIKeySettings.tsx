@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Save } from 'lucide-react';
+import { Eye, EyeOff, Save, RefreshCw, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 export function APIKeySettings() {
@@ -16,6 +16,7 @@ export function APIKeySettings() {
   const [showOpenai, setShowOpenai] = useState(false);
   const [showDeepseek, setShowDeepseek] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     loadAPIKeys();
@@ -23,26 +24,74 @@ export function APIKeySettings() {
 
   const loadAPIKeys = async () => {
     try {
-      // First try to load from Supabase secrets
-      const supabaseKeys = await supabase.functions.invoke('get-api-keys');
-      if (supabaseKeys.data && !supabaseKeys.error) {
-        setGeminiKey(supabaseKeys.data.gemini || '');
-        setOpenaiKey(supabaseKeys.data.openai || '');
-        setDeepseekKey(supabaseKeys.data.deepseek || '');
-        
-        // Save to local electron store if available
-        if (window.electron && 'setAPIKeys' in window.electron) {
-          await window.electron.setAPIKeys({
-            gemini: supabaseKeys.data.gemini || '',
-            openai: supabaseKeys.data.openai || '',
-            deepseek: supabaseKeys.data.deepseek || '',
-          });
+      // First try to load from local Electron store
+      if (window.electron && 'getAPIKeys' in window.electron) {
+        const localKeys = await window.electron.getAPIKeys();
+        if (localKeys?.gemini || localKeys?.openai || localKeys?.deepseek) {
+          setGeminiKey(localKeys.gemini || '');
+          setOpenaiKey(localKeys.openai || '');
+          setDeepseekKey(localKeys.deepseek || '');
+          setLoading(false);
+          return;
         }
       }
+      
+      // If no local keys, try to sync from Supabase
+      await syncFromSupabase();
     } catch (error) {
       console.error('Failed to load API keys:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const syncFromSupabase = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('get-api-keys');
+      
+      if (error) {
+        throw error;
+      }
+      
+      if (data) {
+        const hasKeys = data.gemini || data.openai || data.deepseek;
+        
+        if (hasKeys) {
+          setGeminiKey(data.gemini || '');
+          setOpenaiKey(data.openai || '');
+          setDeepseekKey(data.deepseek || '');
+          
+          // Auto-save to Electron store
+          if (window.electron && 'setAPIKeys' in window.electron) {
+            await window.electron.setAPIKeys({
+              gemini: data.gemini || '',
+              openai: data.openai || '',
+              deepseek: data.deepseek || '',
+            });
+          }
+          
+          toast({
+            title: 'Keys Synced',
+            description: 'API keys imported from Supabase and saved locally.',
+          });
+        } else {
+          toast({
+            title: 'No Keys Found',
+            description: 'No API keys configured in Supabase secrets.',
+            variant: 'destructive',
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to sync from Supabase:', error);
+      toast({
+        title: 'Sync Failed',
+        description: error instanceof Error ? error.message : 'Failed to fetch keys from Supabase',
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -57,7 +106,13 @@ export function APIKeySettings() {
         
         toast({
           title: 'API Keys Saved',
-          description: 'Your API keys have been securely saved.',
+          description: 'Your API keys have been securely saved locally.',
+        });
+      } else {
+        toast({
+          title: 'Not in Electron',
+          description: 'API keys can only be saved in the desktop app.',
+          variant: 'destructive',
         });
       }
     } catch (error) {
@@ -71,7 +126,7 @@ export function APIKeySettings() {
 
   const maskKey = (key: string) => {
     if (!key || key.length < 8) return key;
-    return key.slice(0, 4) + '•'.repeat(key.length - 8) + key.slice(-4);
+    return key.slice(0, 4) + '•'.repeat(Math.min(key.length - 8, 20)) + key.slice(-4);
   };
 
   if (loading) {
@@ -80,9 +135,33 @@ export function APIKeySettings() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-medium">API Keys</h3>
+          <p className="text-sm text-muted-foreground">
+            Manage your LLM provider API keys
+          </p>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={syncFromSupabase}
+          disabled={syncing}
+        >
+          {syncing ? (
+            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-2 h-4 w-4" />
+          )}
+          Sync from Supabase
+        </Button>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Google Gemini API Key</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Google Gemini API Key
+            {geminiKey && <Check className="h-4 w-4 text-green-500" />}
+          </CardTitle>
           <CardDescription>
             Used for PRIMARY tier (main research chat, synthesis)
           </CardDescription>
@@ -113,7 +192,10 @@ export function APIKeySettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>OpenAI API Key</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            OpenAI API Key
+            {openaiKey && <Check className="h-4 w-4 text-green-500" />}
+          </CardTitle>
           <CardDescription>
             Used for SECONDARY tier and embeddings
           </CardDescription>
@@ -144,7 +226,10 @@ export function APIKeySettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>DeepSeek API Key</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            DeepSeek API Key
+            {deepseekKey && <Check className="h-4 w-4 text-green-500" />}
+          </CardTitle>
           <CardDescription>
             Used for SWARM tier (parallel agent modes)
           </CardDescription>
@@ -175,7 +260,7 @@ export function APIKeySettings() {
 
       <Button onClick={handleSave} className="w-full">
         <Save className="mr-2 h-4 w-4" />
-        Save API Keys
+        Save API Keys Locally
       </Button>
     </div>
   );
