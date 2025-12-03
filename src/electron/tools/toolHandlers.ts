@@ -2072,6 +2072,47 @@ export async function getTradeLog(runId: string): Promise<ToolResult> {
   };
 }
 
+export async function downloadMassiveData(
+  ticker: string,
+  date: string,
+  assetType: string = 'stocks_trades'
+): Promise<ToolResult> {
+  try {
+    const response = await fetch('http://localhost:5001/data/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticker: ticker.toUpperCase(),
+        date,
+        type: assetType
+      })
+    });
+
+    const result = await response.json();
+
+    if (!result.success) {
+      return { success: false, content: '', error: result.error || 'Ingest failed' };
+    }
+
+    const stats = result.stats || {};
+    return {
+      success: true,
+      content: `✅ Data downloaded successfully for ${ticker.toUpperCase()} on ${date}\n\n` +
+        `**Stats:**\n` +
+        `- Files processed: ${stats.files_processed || 0}\n` +
+        `- Symbols saved: ${stats.symbols_saved || 0}\n` +
+        `- Total rows: ${stats.total_rows || 0}\n\n` +
+        `Data saved to local Parquet files and ready for backtesting.`
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      content: '',
+      error: `Failed to download data: ${error.message}. Is the Python server running on port 5001?`
+    };
+  }
+}
+
 // ==================== BACKUP CLEANUP ====================
 
 export async function cleanupBackups(
@@ -4082,6 +4123,8 @@ Warnings: ${greeks.warnings?.join(', ') || 'None'}
       return dataQualityCheck(args.symbol, args.start_date, args.end_date);
     case 'get_trade_log':
       return getTradeLog(args.run_id);
+    case 'download_massive_data':
+      return downloadMassiveData(args.ticker, args.date, args.asset_type);
 
     // Agent spawning
     case 'spawn_agent':

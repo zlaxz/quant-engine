@@ -90,7 +90,35 @@ recall_memory("volatility surface analysis")
 | **Options Parquet** | \`/Volumes/VelocityData/processed/options_daily/SPY/\` | 2022-2025 |
 | **Stock Parquet** | \`/Volumes/VelocityData/processed/stock_daily/SPY/\` | 2023-2025 |
 | **Minute Data** | \`/Volumes/VelocityData/processed/minute_data/SPY/\` | 502 files |
-| **Massive.com** | \`download_from_massive.py\` | On-demand fetch |
+| **Massive.com** | \`download_massive_data\` tool | On-demand fetch |
+
+---
+
+## 📥 DOWNLOAD NEW DATA (Massive.com)
+
+I have DIRECT access to download market data via \`download_massive_data\`:
+
+\`\`\`
+download_massive_data({
+  ticker: "AAPL",
+  date: "2024-11-01",
+  asset_type: "options_trades"  // or stocks_trades, stocks_quotes, options_quotes
+})
+\`\`\`
+
+**WHEN TO DOWNLOAD:**
+1. **Missing History:** If backtest fails with "No Parquet files found" → download immediately
+2. **New Ticker:** User asks about a stock not in standard list → download last 30 days
+3. **Deep Dive:** Need tick-level data for microstructure analysis → download specific dates
+
+**CONSTRAINTS:**
+- Downloads one day at a time (for date ranges, call multiple times OR use \`execute_via_claude_code\` for bulk)
+- Data is validated by "Dirty Water Filter" (rejects poisoned data, cleans dirty data)
+- Storage: 8TB available, space is cheap
+
+**DO NOT:**
+- Ask permission to download data - just do it when needed
+- Download speculatively - only when analysis requires it
 
 ---
 

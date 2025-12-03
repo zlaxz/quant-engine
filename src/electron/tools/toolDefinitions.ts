@@ -683,6 +683,37 @@ export const DATA_TOOLS: FunctionDeclaration[] = [
       },
       required: ['run_id']
     }
+  },
+  {
+    name: 'download_massive_data',
+    description: `Download high-resolution market data (Tick/Minute) from Massive.com to the local 8TB drive.
+
+USE WHEN:
+- Backtest fails with "No Parquet files found" for a date range
+- Analyzing a new ticker not in our standard list
+- Need tick-level data for microstructure analysis
+
+CONSTRAINTS:
+- Downloads one day at a time (for date ranges, call multiple times or use execute_via_claude_code for bulk)
+- Data is filtered and validated by the "Dirty Water Filter" before saving`,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        ticker: {
+          type: Type.STRING,
+          description: 'Symbol to download (e.g., "SPY", "AAPL", "NVDA")'
+        },
+        date: {
+          type: Type.STRING,
+          description: 'Date to download in YYYY-MM-DD format'
+        },
+        asset_type: {
+          type: Type.STRING,
+          description: 'Type of data: "stocks_trades", "stocks_quotes", "options_trades", or "options_quotes". Defaults to "stocks_trades"'
+        }
+      },
+      required: ['ticker', 'date']
+    }
   }
 ];
 

@@ -60,7 +60,8 @@ def health():
             'GET  /plugins',
             'POST /plugins/reload',
             'GET  /analysis/<plugin_name>',
-            'GET  /integrity'
+            'GET  /integrity',
+            'POST /data/ingest'
         ]
     })
 
@@ -408,6 +409,67 @@ def run_analysis(plugin_name):
 
 
 # =============================================================================
+# DATA INGESTION ENDPOINTS
+# =============================================================================
+
+@app.route('/data/ingest', methods=['POST'])
+def ingest_data():
+    """
+    POST /data/ingest - Download market data from Massive.com.
+
+    Request body:
+        {
+            "ticker": "SPY",
+            "date": "2024-11-01",
+            "type": "options_trades"  // stocks_trades, stocks_quotes, options_trades, options_quotes
+        }
+
+    Triggers the MassiveIngestor to stream-filter and save data locally as Parquet.
+    """
+    try:
+        from data_ingestor import MassiveIngestor
+
+        data = request.get_json() or {}
+        ticker = data.get('ticker')
+        date_str = data.get('date')
+        data_type = data.get('type', 'stocks_trades')
+
+        # Validation
+        if not ticker:
+            return jsonify({'success': False, 'error': 'Missing ticker'}), 400
+        if not date_str:
+            return jsonify({'success': False, 'error': 'Missing date'}), 400
+
+        valid_types = ['stocks_trades', 'stocks_quotes', 'options_trades', 'options_quotes']
+        if data_type not in valid_types:
+            return jsonify({'success': False, 'error': f'Invalid type. Must be one of: {valid_types}'}), 400
+
+        print(f"[Data Ingest] {ticker} {date_str} ({data_type})")
+
+        target_date = datetime.strptime(date_str, '%Y-%m-%d')
+
+        # Initialize ingestor with env vars
+        ingestor = MassiveIngestor(
+            massive_key=os.environ.get('MASSIVE_KEY'),
+            data_dir=os.environ.get('DATA_DIR', '/Volumes/VelocityData/massive'),
+            tickers=[ticker]
+        )
+
+        # Download the data
+        stats = ingestor.download_day(target_date, data_type, tickers=[ticker])
+
+        return jsonify({
+            'success': True,
+            'message': f'Ingested {ticker} for {date_str}',
+            'stats': stats
+        })
+
+    except Exception as e:
+        print(f"[Data Ingest] Error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# =============================================================================
 # MAIN
 # =============================================================================
 
@@ -432,6 +494,8 @@ def run_server(port: int = 5000, debug: bool = False):
     print("  GET  /analysis/<name>               - Run analysis plugin")
     print("\nSystem Integrity:")
     print("  GET  /integrity                     - Safety systems dashboard")
+    print("\nData Ingestion:")
+    print("  POST /data/ingest                   - Download from Massive.com")
     print("\nScenarios for /simulate:")
     print("  - vix_shock: params.vix_increase (percentage)")
     print("  - price_drop: params.drop_pct (percentage)")
