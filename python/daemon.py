@@ -459,6 +459,7 @@ class DaemonConfig:
     execute_interval: int = 600   # 10 minutes
     publish_interval: int = 86400 # 24 hours (daily)
     discovery_interval: int = 1800  # 30 minutes - autonomous market scanning
+    gamma_publish_interval: int = 300  # 5 minutes - publish gamma intelligence to UI
 
     # Briefing settings
     publish_hour: int = 6  # 6 AM local time
@@ -2397,6 +2398,7 @@ class ResearchDirector:
         self.last_execute_time = datetime.min
         self.last_publish_time = datetime.min
         self.last_discovery_time = datetime.min  # Autonomous market scanning
+        self.last_gamma_publish_time = datetime.min  # Gamma intelligence publishing
         self.daily_briefings_published = 0
         self.stats = {
             'mutations_harvested': 0,
@@ -3354,6 +3356,98 @@ Return ONLY the JSON object, no other text."""
             return {'action': 'error', 'error': str(e)}
 
     # ========================================================================
+    # 0.6 GAMMA PUBLISHER - Push gamma intelligence to UI
+    # ========================================================================
+
+    async def publish_gamma_intelligence(self) -> Dict[str, Any]:
+        """
+        Calculate and publish gamma intelligence to Supabase for UI consumption.
+
+        This bridges Python calculations to the React GammaIntelligenceMonitor
+        component via Supabase realtime subscriptions.
+
+        Flow:
+        1. Get options data for SPY (and other symbols)
+        2. Calculate gamma exposure using GammaCalculator
+        3. Publish to dealer_positioning and gamma_walls tables
+        4. React UI automatically updates via subscription
+
+        Returns:
+            Dict with symbols published and any errors
+        """
+        logger.info("📊 [Gamma Publisher] Publishing gamma intelligence to UI...")
+
+        try:
+            # Import publisher and calculator
+            from engine.data.publisher import SupabasePublisher
+            from engine.features.gamma_calc import GammaCalculator
+
+            publisher = SupabasePublisher(
+                url=self.config.supabase_url,
+                key=self.config.supabase_key
+            )
+            calculator = GammaCalculator()
+
+            symbols_published = []
+            errors = []
+
+            # For now, just publish regime data since we may not have live options data
+            # When ThetaData is available, we'll add full gamma calculations
+            try:
+                # Get current VIX and SPY levels from regime monitor
+                regime_state = self.regime_monitor.get_current_state() if hasattr(self, 'regime_monitor') else None
+
+                if regime_state:
+                    # Determine VIX regime
+                    vix_level = regime_state.get('vix', 20.0)
+                    if vix_level < 15:
+                        vix_regime = 'SUBOPTIMAL'  # Complacency
+                    elif vix_level <= 28:
+                        vix_regime = 'OPTIMAL'
+                    elif vix_level <= 35:
+                        vix_regime = 'SUBOPTIMAL'
+                    else:
+                        vix_regime = 'PAUSE'
+
+                    # Publish regime
+                    publisher.publish_regime(
+                        vix_level=vix_level,
+                        vix_regime=vix_regime,
+                        spy_price=regime_state.get('spy_price'),
+                        spy_trend=regime_state.get('trend'),
+                        position_multiplier=regime_state.get('position_multiplier', 1.0)
+                    )
+                    symbols_published.append('REGIME')
+                    logger.info(f"   ✅ Published regime: VIX {vix_level:.1f} ({vix_regime})")
+
+            except Exception as e:
+                logger.warning(f"   Could not publish regime: {e}")
+                errors.append(f"regime: {e}")
+
+            # TODO: Add gamma calculation when options data is available
+            # This would look like:
+            # for symbol in ['SPY', 'QQQ']:
+            #     options_df = await self.get_options_chain(symbol)
+            #     if options_df is not None:
+            #         gamma_exp = calculator.calculate_gex(options_df, spot_price)
+            #         publisher.publish_from_gamma_exposure(symbol, gamma_exp, spot_price)
+            #         symbols_published.append(symbol)
+
+            return {
+                'action': 'published',
+                'symbols': symbols_published,
+                'errors': errors if errors else None
+            }
+
+        except ImportError as e:
+            logger.warning(f"   Gamma publisher not available: {e}")
+            return {'action': 'skip', 'reason': str(e)}
+        except Exception as e:
+            logger.error(f"   Gamma publish error: {e}")
+            traceback.print_exc()
+            return {'action': 'error', 'error': str(e)}
+
+    # ========================================================================
     # 1. THE RECRUITER - Replenish Strategy Pool (Legacy - now uses missions)
     # ========================================================================
 
@@ -4005,6 +4099,11 @@ Convexity Score: {metadata.get('convexity_score', 'N/A')}
                 if DISCOVERY_AVAILABLE and (now - self.last_discovery_time).total_seconds() >= self.config.discovery_interval:
                     await self.run_discovery_phase()
                     self.last_discovery_time = now
+
+                # 0.5. GAMMA PUBLISHER - Push gamma intelligence to UI (every 5 min)
+                if (now - self.last_gamma_publish_time).total_seconds() >= self.config.gamma_publish_interval:
+                    await self.publish_gamma_intelligence()
+                    self.last_gamma_publish_time = now
 
                 # 1. Mission Control - check every recruit_interval (goal-seeking loop)
                 if (now - self.last_recruit_time).total_seconds() >= self.config.recruit_interval:
