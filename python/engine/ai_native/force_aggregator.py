@@ -512,9 +512,10 @@ class ForceAggregator:
                     critical_slowing_down=is_slowing_down
                 )
 
-                raw_metrics['hmm_regime'] = current_regime
-                raw_metrics['regime_probability'] = regime_prob
-                raw_metrics['hazard_rate'] = hazard_rate
+                # FA11: Wrap numpy types for consistency
+                raw_metrics['hmm_regime'] = int(current_regime)
+                raw_metrics['regime_probability'] = float(np.clip(regime_prob, 0.0, 1.0))
+                raw_metrics['hazard_rate'] = float(hazard_rate)
 
                 if is_slowing_down:
                     warnings.append("Critical slowing down detected - regime transition may be imminent")
@@ -591,8 +592,9 @@ class ForceAggregator:
                 interpretation=f"Volatility {vol_dynamics.vol_regime}"
             ))
 
-            raw_metrics['realized_vol'] = vol_dynamics.realized_vol
-            raw_metrics['vol_velocity'] = vol_dynamics.vol_velocity
+            # FA10: Wrap in float() for type consistency
+            raw_metrics['realized_vol'] = float(vol_dynamics.realized_vol)
+            raw_metrics['vol_velocity'] = float(vol_dynamics.vol_velocity) if not np.isnan(vol_dynamics.vol_velocity) else 0.0
 
             if vol_dynamics.vol_regime == 'expanding':
                 observations.append("Volatility expanding")
@@ -612,19 +614,27 @@ class ForceAggregator:
         elif raw_metrics.get('entropy_velocity', 0) > 0.01:
             entropy_signal = "rising"
 
-        # Flow signal
-        flow_signal = "normal"
-        if raw_metrics.get('vpin', 0.4) > 0.7:
-            flow_signal = "toxic"
-        elif raw_metrics.get('vpin', 0.4) < 0.3:
-            flow_signal = "benign"
+        # FA12: Flow signal - return "unknown" if VPIN not calculated
+        flow_signal = "unknown"
+        if 'vpin' in raw_metrics:
+            vpin_val = raw_metrics['vpin']
+            if vpin_val > 0.7:
+                flow_signal = "toxic"
+            elif vpin_val < 0.3:
+                flow_signal = "benign"
+            else:
+                flow_signal = "normal"
 
-        # Correlation signal
-        correlation_signal = "normal"
-        if raw_metrics.get('absorption_ratio', 0.7) > 0.85:
-            correlation_signal = "concentrated"
-        elif raw_metrics.get('absorption_ratio', 0.7) < 0.5:
-            correlation_signal = "dispersed"
+        # FA13: Correlation signal - return "unknown" if AR not calculated
+        correlation_signal = "unknown"
+        if 'absorption_ratio' in raw_metrics:
+            ar_val = raw_metrics['absorption_ratio']
+            if ar_val > 0.85:
+                correlation_signal = "concentrated"
+            elif ar_val < 0.5:
+                correlation_signal = "dispersed"
+            else:
+                correlation_signal = "normal"
 
         # Morphology signal
         morphology_signal = raw_metrics.get('shape_class', 'b')
@@ -648,6 +658,8 @@ class ForceAggregator:
         ]
         valid_risk = [v for v in risk_components if v is not None and not np.isnan(v) and not np.isinf(v)]
         risk_score = float(np.mean(valid_risk)) if valid_risk else 0.5
+        # FA14: Clip risk score to valid probability range
+        risk_score = float(np.clip(risk_score, 0.0, 1.0))
 
         transition_components = [
             regime_state.hazard_rate,
