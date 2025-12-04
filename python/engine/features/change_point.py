@@ -383,8 +383,12 @@ def pelt_detect(
     change_points = cp[n]
 
     # CP6: Verify 0 should never be in change points (indicates upstream bug)
+    # CP_R5_1: Use warnings.warn() instead of undefined logger
     if change_points and change_points[0] == 0:
-        logger.warning("PELT algorithm produced 0 as change point - algorithm bug detected!")
+        warnings.warn(
+            "PELT algorithm produced 0 as change point - algorithm bug detected!",
+            RuntimeWarning
+        )
         change_points = change_points[1:]  # Remove as defensive measure
 
     # Compute segment statistics
@@ -454,6 +458,16 @@ class BOCPD:
             CP9 FIX: Maximum run length to track (truncates to save memory).
             Defaults to 5/hazard to capture 99.3% of probability mass.
         """
+        # CP_R5_3: Validate prior parameters to prevent division by zero
+        if hazard <= 0 or hazard > 1:
+            raise ValueError(f"hazard must be in (0, 1], got {hazard}")
+        if prior_kappa <= 0:
+            raise ValueError(f"prior_kappa must be > 0, got {prior_kappa}")
+        if prior_alpha <= 0:
+            raise ValueError(f"prior_alpha must be > 0, got {prior_alpha}")
+        if prior_beta <= 0:
+            raise ValueError(f"prior_beta must be > 0, got {prior_beta}")
+
         self.hazard = hazard
 
         # CP9 FIX: Limit run length to prevent O(n²) memory

@@ -323,6 +323,40 @@ class ForceAggregator:
         else:
             return ForceStrength.EXTREME_POSITIVE
 
+    def _safe_velocity(self, values: np.ndarray, window: int = 5) -> float:
+        """
+        Compute velocity with robust validation.
+
+        FA17 + FA18: Check finiteness of BOTH input AND output.
+        np.diff() can produce Inf even with finite inputs (e.g., [1e100, 1e-100]).
+
+        Args:
+            values: Time series values
+            window: Lookback window for velocity calculation
+
+        Returns:
+            Velocity (rate of change), or 0.0 if insufficient/invalid data
+        """
+        if len(values) < window:
+            return 0.0
+
+        recent = values[-window:]
+
+        # Check input finiteness
+        if not np.any(np.isfinite(recent)):
+            return 0.0
+
+        # Compute diff
+        diffs = np.diff(recent)
+
+        # FA17: Check OUTPUT finiteness (diff can produce Inf from finite inputs)
+        finite_diffs = diffs[np.isfinite(diffs)]
+
+        if len(finite_diffs) == 0:
+            return 0.0
+
+        return float(np.mean(finite_diffs))
+
     def compute_forces(
         self,
         df: pd.DataFrame,
@@ -408,8 +442,8 @@ class ForceAggregator:
                         strength=self._value_to_strength(
                             vpin_val, (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
                         ),
-                        # FA8: Check for finite values before nanmean
-                        velocity=float(np.nanmean(np.diff(vpin_values[-5:]))) if len(vpin_values) >= 5 and np.any(np.isfinite(vpin_values[-5:])) else 0.0,
+                        # FA8 + FA17: Check finiteness of both input AND output
+                        velocity=self._safe_velocity(vpin_values),
                         interpretation=f"Order flow toxicity {'elevated' if vpin_val > 0.5 else 'normal'}"
                     ))
 
@@ -447,7 +481,8 @@ class ForceAggregator:
                                 strength=self._value_to_strength(
                                     ar_val, (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9)
                                 ),
-                                velocity=float(np.nanmean(np.diff(ar[-5:]))) if (len(ar) >= 5 and np.any(~np.isnan(ar[-5:]))) else 0.0,
+                                # FA18: Use consistent safe_velocity method (not weak ~np.isnan check)
+                                velocity=self._safe_velocity(ar),
                                 interpretation=f"Systemic risk {'elevated' if ar_val > 0.8 else 'normal'}"
                             ))
 
@@ -668,6 +703,8 @@ class ForceAggregator:
         ]
         valid_transition = [v for v in transition_components if not np.isnan(v) and not np.isinf(v)]
         transition_score = float(np.mean(valid_transition)) if valid_transition else 0.0
+        # FA20: Clip transition score to valid probability range (like risk_score)
+        transition_score = float(np.clip(transition_score, 0.0, 1.0))
 
         # FA7: Sanitize output dicts (NOT lists or strings - FA1/FA2 fix)
         return MarketPhysicsState(

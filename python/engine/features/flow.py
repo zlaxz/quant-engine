@@ -322,6 +322,7 @@ def calculate_vpin(
     imbalances = []
     bucket_midpoints = []
     start = 0
+    total_bucketed_volume = 0.0
 
     for i, end in enumerate(bucket_indices):
         if end > start and end <= len(volumes):
@@ -329,10 +330,29 @@ def calculate_vpin(
             sell_v = np.sum(sell_volumes[start:end])
             imbalances.append(abs(buy_v - sell_v))
             bucket_midpoints.append((start + end) // 2)
+            total_bucketed_volume += buy_v + sell_v
             start = end
+
+    # FL12: Verify all volume was bucketed (detect gaps from searchsorted)
+    if start < len(volumes):
+        # Remaining trades not bucketed - add final partial bucket
+        buy_v = np.sum(buy_volumes[start:])
+        sell_v = np.sum(sell_volumes[start:])
+        if buy_v + sell_v > 0:
+            imbalances.append(abs(buy_v - sell_v))
+            bucket_midpoints.append((start + len(volumes)) // 2)
+            total_bucketed_volume += buy_v + sell_v
 
     imbalances = np.array(imbalances)
     bucket_midpoints = np.array(bucket_midpoints)
+
+    # Validate coverage
+    volume_coverage = total_bucketed_volume / total_vol if total_vol > 0 else 0
+    if volume_coverage < 0.99:  # Allow 1% tolerance for numerical precision
+        logger.warning(
+            f"VPIN bucketing incomplete: only {volume_coverage:.1%} of volume bucketed. "
+            f"This may indicate bucket_size ({bucket_size}) is too large relative to trade volumes."
+        )
 
     if len(imbalances) < n_buckets:
         logger.warning(f"Only {len(imbalances)} buckets created, less than {n_buckets} requested")
@@ -429,9 +449,10 @@ def rolling_vpin(
         if idx < len(df):
             result.iloc[idx] = vpin_val
 
-    # FL2: Use bfill instead of ffill to avoid lookahead bias
-    # (ffill propagates future values into the past)
-    result = result.bfill()
+    # FL2 + FL16: Use ffill (forward fill) to avoid lookahead bias
+    # ffill propagates PAST values forward (safe)
+    # bfill propagates FUTURE values backward (lookahead!)
+    result = result.ffill()
 
     return result
 
