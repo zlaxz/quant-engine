@@ -284,6 +284,10 @@ class ForceAggregator:
 
     def _compute_percentile(self, name: str, value: float) -> float:
         """Compute percentile rank based on historical values."""
+        # FA_R6_4: Handle NaN values early (np.array <= NaN returns all False)
+        if not np.isfinite(value):
+            return 50.0  # Neutral percentile for invalid values
+
         if name not in self.history:
             self.history[name] = []
 
@@ -294,7 +298,7 @@ class ForceAggregator:
             self.history[name] = self.history[name][-252:]
 
         # Compute percentile rank (what % of historical values are <= current value)
-        valid_history = [v for v in self.history[name] if not np.isnan(v)]
+        valid_history = [v for v in self.history[name] if np.isfinite(v)]
         if len(valid_history) <= 1:
             return 50.0
 
@@ -398,6 +402,9 @@ class ForceAggregator:
             )
 
             entropy_val = entropy_result.current_entropy
+            # FA_R6_3: Validate value is finite before creating ForceVector
+            if not np.isfinite(entropy_val):
+                entropy_val = 2.5  # Default to mid-range entropy
             # FA7: Wrap in float() for type consistency
             entropy_vel = float(entropy_result.entropy_velocity) if not np.isnan(entropy_result.entropy_velocity) else 0.0
 
@@ -510,6 +517,16 @@ class ForceAggregator:
 
                 # Get regime state
                 current_regime = hmm_result.most_likely_regime[-1]
+
+                # FA_R6_1: Validate regime index is within bounds
+                n_regimes = hmm_result.regime_probabilities.shape[1]
+                if current_regime < 0 or current_regime >= n_regimes:
+                    logger.warning(
+                        f"Invalid regime index {current_regime} (n_regimes={n_regimes}). "
+                        "Defaulting to regime 0."
+                    )
+                    current_regime = 0
+
                 # FA5: Clip probability to [0,1] - HMMs can have slight numerical issues
                 regime_prob = float(np.clip(
                     hmm_result.regime_probabilities[-1, current_regime], 0.0, 1.0
@@ -688,8 +705,15 @@ class ForceAggregator:
         bullish_force_score = np.clip(bullish_force_score, -1, 1)
         bullish_force_score = np.clip(bullish_force_score * 2, -1, 1)
 
-        # FA22: Clip hazard_rate to valid probability range
-        safe_hazard = float(np.clip(regime_state.hazard_rate, 0.0, 1.0)) if regime_state else 0.01
+        # FA22 + FA_R6_2: Clip hazard_rate and handle NaN (np.clip doesn't fix NaN!)
+        if regime_state:
+            safe_hazard = regime_state.hazard_rate
+            if np.isnan(safe_hazard) or np.isinf(safe_hazard):
+                safe_hazard = 0.05  # Default for invalid hazard
+            else:
+                safe_hazard = float(np.clip(safe_hazard, 0.0, 1.0))
+        else:
+            safe_hazard = 0.01
 
         risk_components = [
             raw_metrics.get('vpin', 0.4),

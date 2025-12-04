@@ -328,9 +328,14 @@ def calculate_vpin(
         if end > start and end <= len(volumes):
             buy_v = np.sum(buy_volumes[start:end])
             sell_v = np.sum(sell_volumes[start:end])
-            imbalances.append(abs(buy_v - sell_v))
-            bucket_midpoints.append((start + end) // 2)
-            total_bucketed_volume += buy_v + sell_v
+            bucket_vol = buy_v + sell_v
+
+            # FL_R6_1: Skip zero-volume buckets (can occur with duplicate searchsorted indices)
+            if bucket_vol > 0:
+                imbalances.append(abs(buy_v - sell_v))
+                bucket_midpoints.append((start + end) // 2)
+                total_bucketed_volume += bucket_vol
+
             start = end
 
     # FL12: Verify all volume was bucketed (detect gaps from searchsorted)
@@ -449,10 +454,11 @@ def rolling_vpin(
         if idx < len(df):
             result.iloc[idx] = vpin_val
 
-    # FL2 + FL16: Use ffill (forward fill) to avoid lookahead bias
-    # ffill propagates PAST values forward (safe)
-    # bfill propagates FUTURE values backward (lookahead!)
-    result = result.ffill()
+    # FL_R6_2: DO NOT FILL - both ffill and bfill create lookahead bias
+    # Reason: VPIN is computed over ENTIRE dataset upfront (line 440-442),
+    # then mapped to indices. ANY fill propagates values computed with future data.
+    # Correct approach: Leave NaN, let caller decide how to handle gaps.
+    # Alternative: Rewrite calculate_vpin to use expanding window (not implemented).
 
     return result
 
