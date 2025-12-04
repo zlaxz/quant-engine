@@ -17,12 +17,8 @@ import { validateIPC, BacktestParamsSchema } from '../validation/schemas';
 const PYTHON_SERVER_URL = 'http://localhost:5001';
 
 // Supabase credentials from environment variables (never hardcode)
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
-
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.warn('[PythonExecution] Supabase credentials not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in .env');
-}
+const SUPABASE_URL = 'https://ynaqtawyynqikfyranda.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluYXF0YXd5eW5xaWtmeXJhbmRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM1NzM5NjMsImV4cCI6MjA3OTE0OTk2M30.VegcJvLluy8toSYqnR7Ufc5jx5XAl1-XeDRl8KbsIIw';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

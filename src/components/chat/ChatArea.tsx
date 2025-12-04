@@ -25,7 +25,7 @@ import { executeCommand, parseCommand, getCommandSuggestions, setWriteConfirmati
 import { useWriteConfirmation } from '@/hooks/useWriteConfirmation';
 
 import { chatPrimary } from '@/lib/electronClient';
-import { buildChiefQuantPrompt } from '@/prompts/chiefQuantPrompt';
+import { assembleCIOPromptSync } from '@/prompts/cioPromptAssembler';
 import { detectIntent, type DetectedIntent } from '@/lib/intentDetector';
 import { ActiveExperimentBar } from './ActiveExperimentBar';
 import { MessageCard } from './MessageCard';
@@ -442,7 +442,7 @@ const ChatAreaComponent = () => {
         setMessages(prev => [...prev, userMessage]);
 
         // Memory context (cached per session)
-        const basePrompt = buildChiefQuantPrompt();
+        const basePrompt = assembleCIOPromptSync();
         let memoryContext = cachedMemoryContext || '';
 
         if (!cachedMemoryContext && selectedWorkspaceId && window.electron?.memoryRecall) {

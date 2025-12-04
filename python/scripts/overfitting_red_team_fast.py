@@ -276,7 +276,7 @@ class OverfittingRedTeam:
                 permuted_sharpes.append(sharpe)
                 permuted_pnls.append(pnl)
 
-            except:
+            except Exception:
                 permuted_sharpes.append(0)
                 permuted_pnls.append(0)
 

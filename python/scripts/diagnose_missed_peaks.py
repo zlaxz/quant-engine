@@ -93,7 +93,7 @@ def analyze_missed_peaks():
         print(f"\nAnalyzing {name}...")
         try:
             profile = cls(score_threshold=0.5) # Standard threshold
-        except:
+        except Exception:
             continue
             
         config = SimulationConfig(max_days_in_trade=120, max_loss_pct=0.50)

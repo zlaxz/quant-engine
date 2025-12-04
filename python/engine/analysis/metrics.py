@@ -58,12 +58,16 @@ class PerformanceMetrics:
         """
         pnl = portfolio['portfolio_pnl']
 
+        # BUG FIX: max_drawdown_pct needs portfolio VALUE, not cumulative P&L
+        # cumulative_pnl starts at 0 (first day's P&L), portfolio value = starting_capital + cumulative_pnl
+        portfolio_value = self.starting_capital + portfolio['cumulative_pnl']
+
         metrics = {
             'sharpe_ratio': self.sharpe_ratio(pnl),
             'sortino_ratio': self.sortino_ratio(pnl),
             'calmar_ratio': self.calmar_ratio(pnl, portfolio['cumulative_pnl']),
             'max_drawdown': self.max_drawdown(portfolio['cumulative_pnl']),
-            'max_drawdown_pct': self.max_drawdown_pct(portfolio['cumulative_pnl']),
+            'max_drawdown_pct': self.max_drawdown_pct(portfolio_value),
             'win_rate': self.win_rate(pnl),
             'profit_factor': self.profit_factor(pnl),
             'total_return': portfolio['cumulative_pnl'].iloc[-1],

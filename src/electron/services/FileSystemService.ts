@@ -285,6 +285,7 @@ export class FileSystemService {
     if (resolved.error) return { error: resolved.error };
 
     const MAX_RESULTS = 50;
+    const SEARCH_TIMEOUT_MS = 30000; // 30 second timeout
 
     return new Promise((resolve) => {
       // Build grep arguments array (prevents shell injection)
@@ -306,6 +307,14 @@ export class FileSystemService {
 
       let stdout = '';
       let stderr = '';
+      let timedOut = false;
+
+      // Timeout handler - kill grep if it takes too long
+      const timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        grep.kill('SIGTERM');
+        console.warn(`[FileSystemService] Search timed out after ${SEARCH_TIMEOUT_MS / 1000}s`);
+      }, SEARCH_TIMEOUT_MS);
 
       grep.stdout.on('data', (data) => {
         stdout += data.toString();
@@ -316,6 +325,12 @@ export class FileSystemService {
       });
 
       grep.on('close', (code) => {
+        clearTimeout(timeoutHandle);
+
+        if (timedOut) {
+          resolve({ error: `Search timed out after ${SEARCH_TIMEOUT_MS / 1000} seconds` });
+          return;
+        }
         // grep returns 1 for no matches (not an error)
         if (code === 1 || !stdout.trim()) {
           resolve({ matches: [] });
@@ -355,6 +370,7 @@ export class FileSystemService {
       });
 
       grep.on('error', (err) => {
+        clearTimeout(timeoutHandle);
         resolve({ error: `Search error: ${err.message}` });
       });
     });

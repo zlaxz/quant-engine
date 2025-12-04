@@ -28,6 +28,7 @@ Usage:
 """
 
 import logging
+import numpy as np
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
@@ -203,6 +204,20 @@ class RiskManager:
         # Calculate risk per share/contract
         risk_per_unit = abs(price - stop_loss)
 
+        # NaN check on price inputs - critical for position sizing
+        if np.isnan(price) or np.isnan(stop_loss) or np.isnan(risk_per_unit):
+            logger.error(f"NaN detected in position sizing: price={price}, stop={stop_loss}")
+            return PositionSizeResult(
+                quantity=0,
+                notional_value=0,
+                risk_amount=0,
+                risk_percent=0,
+                multiplier=multiplier,
+                asset_type=asset_type,
+                was_limited=True,
+                limit_reason="NaN in price data"
+            )
+
         if risk_per_unit <= 0:
             logger.warning(f"Invalid stop loss: price={price}, stop={stop_loss}")
             return PositionSizeResult(
@@ -244,7 +259,12 @@ class RiskManager:
         if position_value > max_position_value:
             was_limited = True
             limit_reason = f"Exceeded max position value (${max_position_value:,.2f})"
-            quantity = int(max_position_value / (price * multiplier))
+            # Guard against division by zero (price=0 or multiplier=0)
+            if price * multiplier > 0:
+                quantity = int(max_position_value / (price * multiplier))
+            else:
+                quantity = 0
+                limit_reason = "Zero price or multiplier"
             logger.warning(f"Position limited: {limit_reason}")
 
         # Recalculate actual risk with final quantity

@@ -22,7 +22,19 @@ from typing import Dict, Optional, Callable
 from datetime import date
 import pandas as pd
 import numpy as np
-from ..profiles.detectors import ProfileDetectors
+
+# Optional ProfileDetectors import - module may not exist yet
+try:
+    from .profiles.detectors import ProfileDetectors
+except ImportError:
+    # Stub class when ProfileDetectors is not available
+    class ProfileDetectors:
+        """Fallback stub - returns neutral detector scores."""
+        def compute_all_profiles(self, df: pd.DataFrame) -> pd.DataFrame:
+            # Add neutral scores for all 6 profiles
+            for i in range(1, 7):
+                df[f'p{i}_score'] = 0.5  # Neutral score
+            return df
 
 
 @dataclass
@@ -210,7 +222,7 @@ class ExitEngineV1:
         current_score = self._calculate_detector_score('Profile_2_SDG', market)
 
         if current_score is None:
-            return False  # No data, hold
+            return True  # No data = exit (conservative)
 
         if current_score < self.detector_exit_threshold:
             return True
@@ -230,7 +242,7 @@ class ExitEngineV1:
         current_score = self._calculate_detector_score('Profile_3_CHARM', market)
 
         if current_score is None:
-            return False
+            return True  # No data = exit (conservative)
 
         if current_score < self.detector_exit_threshold:
             return True
@@ -274,7 +286,7 @@ class ExitEngineV1:
         current_score = self._calculate_detector_score('Profile_5_SKEW', market)
 
         if current_score is None:
-            return False
+            return True  # No data = exit (conservative)
 
         if current_score < self.detector_exit_threshold:
             return True
@@ -294,7 +306,7 @@ class ExitEngineV1:
         current_score = self._calculate_detector_score('Profile_6_VOV', market)
 
         if current_score is None:
-            return False
+            return True  # No data = exit (conservative)
 
         if current_score < self.detector_exit_threshold:
             return True

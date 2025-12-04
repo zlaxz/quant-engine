@@ -124,6 +124,7 @@ class QuoteTick:
         mid_price: Calculated mid price
         spread: Bid-ask spread
         security_type: STOCK or OPTION
+        greeks: Option Greeks (if available from ThetaData)
     """
     symbol: str
     bid_price: float
@@ -142,6 +143,19 @@ class QuoteTick:
     expiration: Optional[date] = None
     strike: Optional[float] = None
     right: Optional[str] = None
+
+    # Greeks (options only, populated when available)
+    delta: Optional[float] = None
+    gamma: Optional[float] = None
+    theta: Optional[float] = None
+    vega: Optional[float] = None
+    rho: Optional[float] = None
+    implied_volatility: Optional[float] = None
+    # Second-order Greeks (ThetaData Pro)
+    vanna: Optional[float] = None
+    charm: Optional[float] = None
+    vomma: Optional[float] = None
+    veta: Optional[float] = None
 
     @property
     def mid_price(self) -> float:
@@ -168,6 +182,31 @@ class QuoteTick:
     @property
     def is_option(self) -> bool:
         return self.security_type == SecurityType.OPTION
+
+    @property
+    def has_greeks(self) -> bool:
+        """Check if any Greeks are populated."""
+        return any([
+            self.delta is not None,
+            self.gamma is not None,
+            self.theta is not None,
+            self.vega is not None,
+        ])
+
+    def get_greeks_dict(self) -> Dict[str, Optional[float]]:
+        """Return Greeks as a dictionary for easy access."""
+        return {
+            'delta': self.delta,
+            'gamma': self.gamma,
+            'theta': self.theta,
+            'vega': self.vega,
+            'rho': self.rho,
+            'iv': self.implied_volatility,
+            'vanna': self.vanna,
+            'charm': self.charm,
+            'vomma': self.vomma,
+            'veta': self.veta,
+        }
 
 
 @dataclass
@@ -205,6 +244,9 @@ class ThetaDataClient:
     DEFAULT_HOST = "127.0.0.1"
     DEFAULT_PORT = 25520
     WEBSOCKET_PATH = "/v1/events"
+
+    # Staleness threshold - reject quotes older than this
+    MAX_QUOTE_AGE_SECONDS = 30
 
     def __init__(
         self,
@@ -561,9 +603,18 @@ class ThetaDataClient:
 
     def _parse_timestamp(self, ms_of_day: int, date_int: int) -> datetime:
         """Convert ThetaData timestamp format to datetime."""
+        # Validate date components
         year = date_int // 10000
         month = (date_int % 10000) // 100
         day = date_int % 100
+
+        # Basic validation
+        if year < 2000 or year > 2099 or month < 1 or month > 12 or day < 1 or day > 31:
+            raise ValueError(f"Invalid date components: {date_int} -> {year}-{month}-{day}")
+
+        # Validate time components
+        if ms_of_day < 0 or ms_of_day > 86400000:  # More than 24 hours
+            raise ValueError(f"Invalid ms_of_day: {ms_of_day}")
 
         hours = ms_of_day // 3600000
         minutes = (ms_of_day % 3600000) // 60000
@@ -571,6 +622,14 @@ class ThetaDataClient:
         ms = ms_of_day % 1000
 
         return datetime(year, month, day, hours, minutes, seconds, ms * 1000)
+
+    def _is_stale(self, tick_timestamp: datetime) -> bool:
+        """Check if a tick is too old to use for trading."""
+        age = (datetime.now() - tick_timestamp).total_seconds()
+        if age > self.MAX_QUOTE_AGE_SECONDS:
+            logger.warning(f"Stale tick rejected: {age:.1f}s old (max {self.MAX_QUOTE_AGE_SECONDS}s)")
+            return True
+        return False
 
     def _parse_trade(self, msg: Dict[str, Any]) -> Optional[TradeTick]:
         """Parse a trade message into TradeTick."""
@@ -629,6 +688,26 @@ class ThetaDataClient:
             else:
                 symbol = root
 
+            # Extract Greeks (ThetaData sends in nested 'greeks' object or flat keys)
+            # Handle both formats: msg['greeks']['delta'] OR quote['delta']
+            greeks_obj = msg.get('greeks', {})
+
+            # Helper to get Greek value from multiple possible locations
+            def get_greek(name: str) -> Optional[float]:
+                # Try nested greeks object first
+                val = greeks_obj.get(name)
+                if val is not None:
+                    return float(val)
+                # Try flat in quote object
+                val = quote.get(name)
+                if val is not None:
+                    return float(val)
+                # Try flat at message level
+                val = msg.get(name)
+                if val is not None:
+                    return float(val)
+                return None
+
             return QuoteTick(
                 symbol=symbol,
                 bid_price=quote.get('bid', 0.0),
@@ -647,7 +726,19 @@ class ThetaDataClient:
                 root=root if sec_type == SecurityType.OPTION else None,
                 expiration=date(exp // 10000, (exp % 10000) // 100, exp % 100) if sec_type == SecurityType.OPTION else None,
                 strike=strike if sec_type == SecurityType.OPTION else None,
-                right=right if sec_type == SecurityType.OPTION else None
+                right=right if sec_type == SecurityType.OPTION else None,
+                # First-order Greeks
+                delta=get_greek('delta'),
+                gamma=get_greek('gamma'),
+                theta=get_greek('theta'),
+                vega=get_greek('vega'),
+                rho=get_greek('rho'),
+                implied_volatility=get_greek('implied_volatility') or get_greek('iv'),
+                # Second-order Greeks (ThetaData Pro)
+                vanna=get_greek('vanna'),
+                charm=get_greek('charm'),
+                vomma=get_greek('vomma'),
+                veta=get_greek('veta'),
             )
 
         except Exception as e:
@@ -684,14 +775,22 @@ class ThetaDataClient:
             # Parse data messages
             if msg_type == 'TRADE':
                 tick = self._parse_trade(msg)
-                if tick and self.on_trade:
-                    self.on_trade(tick)
+                if tick:
+                    # Reject stale ticks
+                    if self._is_stale(tick.timestamp):
+                        return None
+                    if self.on_trade:
+                        self.on_trade(tick)
                 return tick
 
             elif msg_type == 'QUOTE':
                 tick = self._parse_quote(msg)
-                if tick and self.on_quote:
-                    self.on_quote(tick)
+                if tick:
+                    # Reject stale ticks
+                    if self._is_stale(tick.timestamp):
+                        return None
+                    if self.on_quote:
+                        self.on_quote(tick)
                 return tick
 
             return None

@@ -16,8 +16,12 @@ import re
 from typing import Optional, Dict, List
 import warnings
 import yfinance as yf
+from zoneinfo import ZoneInfo
 
 warnings.filterwarnings('ignore')
+
+# Market timezone - all timestamps should be in US/Eastern
+MARKET_TZ = ZoneInfo("America/New_York")
 
 
 DEFAULT_POLYGON_ROOT = "/Volumes/VelocityData/polygon_downloads/us_options_opra/day_aggs_v1"
@@ -82,6 +86,32 @@ class OptionsDataLoader:
         self._options_cache = {}
         self._stock_day_cache: Dict[date, Dict[str, float]] = {}
         self._vix_cache = None
+
+        # Cache size limit to prevent memory bloat (100 entries max per cache)
+        self._max_cache_entries = 100
+
+    def clear_cache(self, cache_type: Optional[str] = None):
+        """Clear cached data to free memory or force reload.
+
+        Args:
+            cache_type: Specific cache to clear ('spy', 'options', 'stock', 'vix')
+                       If None, clears all caches.
+        """
+        if cache_type is None or cache_type == 'spy':
+            self._spy_cache = {}
+        if cache_type is None or cache_type == 'options':
+            self._options_cache = {}
+        if cache_type is None or cache_type == 'stock':
+            self._stock_day_cache = {}
+        if cache_type is None or cache_type == 'vix':
+            self._vix_cache = None
+
+    def _enforce_cache_limit(self, cache: dict):
+        """Evict oldest entries if cache exceeds limit (simple FIFO)."""
+        while len(cache) > self._max_cache_entries:
+            # Remove first (oldest) key
+            oldest_key = next(iter(cache))
+            del cache[oldest_key]
 
     def _parse_option_ticker(self, ticker: str) -> Optional[Dict]:
         """
@@ -213,8 +243,9 @@ class OptionsDataLoader:
 
         df = df[[c for c in columns if c in df.columns]].copy()
 
-        # Cache result
+        # Cache result with size limit enforcement
         self._options_cache[cache_key] = df.copy()
+        self._enforce_cache_limit(self._options_cache)
 
         return df
 
@@ -290,6 +321,7 @@ class OptionsDataLoader:
 
         spy = pd.DataFrame(rows)
         self._spy_cache[cache_key] = spy.copy()
+        self._enforce_cache_limit(self._spy_cache)
         return spy
 
     def get_data_coverage(self) -> Dict[str, List[str]]:
@@ -343,6 +375,7 @@ class OptionsDataLoader:
         }
 
         self._stock_day_cache[trade_day] = day_record
+        self._enforce_cache_limit(self._stock_day_cache)
         return day_record
 
     def load_vix(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
@@ -374,8 +407,15 @@ class OptionsDataLoader:
             raise ValueError(f"No VIX data available for {start_date.date()} to {end_date.date()}")
 
         # Normalize to match SPY format
+        # yfinance returns timezone-aware timestamps - convert to US/Eastern before extracting date
         vix_df = vix_df.reset_index()
-        vix_df['date'] = pd.to_datetime(vix_df['Date']).dt.date
+        vix_ts = pd.to_datetime(vix_df['Date'])
+        # Convert to US/Eastern if timezone-aware, otherwise localize
+        if vix_ts.dt.tz is not None:
+            vix_ts = vix_ts.dt.tz_convert(MARKET_TZ)
+        else:
+            vix_ts = vix_ts.dt.tz_localize(MARKET_TZ)
+        vix_df['date'] = vix_ts.dt.date
         vix_df = vix_df.rename(columns={'Close': 'vix_close'})
         vix_df = vix_df[['date', 'vix_close']].copy()
 
@@ -531,8 +571,13 @@ def load_spy_data(
 
     # Add profile scores if requested
     if include_profiles:
-        from profiles.detectors import ProfileDetectors
-        detector = ProfileDetectors()
-        df = detector.compute_all_profiles(df)
+        try:
+            from engine.trading.profiles.detectors import ProfileDetectors
+            detector = ProfileDetectors()
+            df = detector.compute_all_profiles(df)
+        except ImportError:
+            # ProfileDetectors not available - add neutral scores
+            for i in range(1, 7):
+                df[f'p{i}_score'] = 0.5
 
     return df

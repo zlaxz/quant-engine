@@ -51,7 +51,7 @@ import { registerFileOperationHandlers } from './ipc-handlers/fileOperations';
 import { registerPythonExecutionHandlers } from './ipc-handlers/pythonExecution';
 import { registerLlmHandlers } from './ipc-handlers/llmClient';
 import { registerMemoryHandlers, setMemoryServices, registerAnalysisHandlers, cleanupMemoryHandlers } from './ipc-handlers/memoryHandlers';
-import { registerDaemonHandlers, stopDaemonOnExit } from './ipc-handlers/daemonManager';
+import { registerDaemonHandlers, stopDaemonOnExit, startDaemon } from './ipc-handlers/daemonManager';
 import { registerContextHandlers } from './ipc-handlers/contextHandlers';
 import { registerDecisionHandlers } from './ipc-handlers/decisionHandlers';
 import { registerClaudeCodeHandlers } from './ipc-handlers/claudeCodeHandlers';
@@ -481,6 +481,19 @@ app.whenReady().then(() => {
       );
     } else {
       console.log('[Validation] ✅ Python environment ready');
+
+      // Start Research Daemon (Night Shift) - autonomous mission runner
+      try {
+        const daemonResult = await startDaemon();
+        if (daemonResult.success) {
+          console.log(`[Main] Research Daemon (Night Shift) started - PID: ${daemonResult.pid}`);
+        } else {
+          console.warn('[Main] Research Daemon failed to start:', daemonResult.error);
+        }
+      } catch (daemonError) {
+        console.error('[Main] Research Daemon error:', daemonError);
+        // Non-fatal - app continues without autonomous research
+      }
     }
     
     createWindow();

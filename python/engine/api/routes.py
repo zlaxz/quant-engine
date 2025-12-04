@@ -14,8 +14,16 @@ This module provides:
 import json
 import pandas as pd
 import numpy as np
+import logging
 from datetime import datetime, timedelta, date
 from typing import Dict, List, Optional, Any
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Import from engine package (relative imports)
 from ..analysis.regime_engine import RegimeEngine
@@ -198,6 +206,7 @@ class QuantEngineAPI:
             }
 
         except Exception as e:
+            logger.error(f"Error in get_regime_heatmap: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e)
@@ -475,6 +484,7 @@ class QuantEngineAPI:
             }
 
         except Exception as e:
+            logger.error(f"Error in run_simulation: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e)
@@ -653,6 +663,7 @@ class QuantEngineAPI:
             }
 
         except Exception as e:
+            logger.error(f"Error in run_backtest: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e)
@@ -713,6 +724,7 @@ class QuantEngineAPI:
             }
 
         except Exception as e:
+            logger.error(f"Error in run_backtest_on_noise: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e)

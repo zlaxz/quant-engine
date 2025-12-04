@@ -46,7 +46,7 @@ def audit_profile_calculations():
             spy_data = loader.load_spy_ohlcv(date_str)
             if spy_data is not None:
                 dfs.append(spy_data)
-        except:
+        except Exception:
             pass
 
     if not dfs:

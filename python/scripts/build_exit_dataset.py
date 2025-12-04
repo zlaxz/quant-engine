@@ -58,10 +58,20 @@ def process_trade_path(trade_id, profile, entry_data, path_data, exit_data):
             'RV20': 0.0,
             'slope_MA20': 0.0,
             
-            # Targets
-            'is_peak': 1 if day_idx == day_of_peak else 0,
-            'days_until_peak': day_of_peak - day_idx,
-            'future_pnl_change': peak_pnl - day_snapshot['mtm_pnl'] # Potential remaining
+            # Targets - CRITICAL: Must NOT use future information!
+            # OLD (BROKEN - look-ahead bias):
+            #   'days_until_peak': day_of_peak - day_idx  # USES FUTURE INFO
+            #   'future_pnl_change': peak_pnl - day_snapshot['mtm_pnl']  # USES FUTURE INFO
+            #
+            # NEW (CORRECT - backward-looking only):
+            # Target: Should we have exited YESTERDAY? (hindsight labeling for supervised learning)
+            # We can only know if yesterday was optimal AFTER seeing today's outcome.
+            'was_local_peak': 1 if day_idx > 0 and day_snapshot.get('peak_so_far', 0) >= peak_pnl * 0.99 else 0,
+            'pnl_declining': 1 if day_idx > 0 and day_snapshot['mtm_pnl'] < day_snapshot.get('peak_so_far', 0) else 0,
+            'dd_from_peak_pct': day_snapshot['dd_from_peak'] / max(abs(day_snapshot.get('peak_so_far', 1)), 0.01),
+            # Binary target: Exit signal (1 if this was a good exit point in hindsight)
+            # Defined as: We're past the peak AND drawdown exceeds 20% of peak profit
+            'should_exit': 1 if day_idx >= day_of_peak and day_snapshot['dd_from_peak'] < -0.2 * max(peak_pnl, 0.01) else 0
         }
         
         # Extract market conditions if available

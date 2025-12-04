@@ -5,6 +5,7 @@ Provides fast access to real options bid/ask/mid/close prices from Polygon data.
 """
 
 import os
+import logging
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -12,6 +13,8 @@ from datetime import datetime, date
 from typing import Optional, Dict, Tuple
 import gzip
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
 
 # Import execution model for realistic spread calculation
 # Delay import to avoid circular dependency
@@ -99,13 +102,15 @@ class PolygonOptionsLoader:
         # Parse expiry date
         try:
             expiry = datetime.strptime(date_str, '%y%m%d').date()
-        except:
+        except ValueError as e:
+            logger.debug(f"Failed to parse expiry date '{date_str}': {e}")
             return None
 
         # Parse strike (divide by 1000)
         try:
             strike = float(strike_str) / 1000.0
-        except:
+        except (ValueError, TypeError) as e:
+            logger.debug(f"Failed to parse strike '{strike_str}': {e}")
             return None
 
         return {

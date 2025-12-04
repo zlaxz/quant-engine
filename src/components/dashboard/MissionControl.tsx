@@ -23,9 +23,12 @@ import {
   TrendingUp,
   Activity,
   MessageSquare,
+  Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
+import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 
 // Types matching the missions table schema
 interface Mission {
@@ -191,6 +194,40 @@ function MissionControlComponent() {
       console.error('[MissionControl] Abandon failed:', err);
     }
   }, [activeMission]);
+
+  const [directiveInput, setDirectiveInput] = useState('');
+
+  const sendDirective = useCallback(async () => {
+    if (!connected || !directiveInput.trim()) return;
+
+    const toastId = toast.loading('Sending directive...');
+
+    try {
+      // Basic parsing for now: assume directive is the mission objective
+      const { error: insertError } = await supabase
+        .from('missions')
+        .insert({
+          name: `Manual Mission: ${directiveInput.substring(0, 50)}`,
+          objective: directiveInput,
+          target_metric: 'sharpe', // Default
+          target_value: 1.0, // Default
+          target_operator: 'gte', // Default
+          priority: 5, // Default
+        });
+
+      if (insertError) throw insertError;
+
+      toast.success('Directive sent successfully!', { id: toastId });
+      setDirectiveInput('');
+      fetchActiveMission(); // Refresh missions
+    } catch (err) {
+      console.error('[MissionControl] Send directive failed:', err);
+      toast.error('Failed to send directive', {
+        id: toastId,
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }, [connected, directiveInput, fetchActiveMission]);
 
   // Calculate progress
   const calculateProgress = useCallback(() => {
@@ -425,6 +462,30 @@ function MissionControlComponent() {
             </div>
           </div>
         )}
+
+        {/* Manual Directive Input */}
+        <div className="pt-4 border-t border-gray-800 space-y-2">
+          <p className="text-xs text-muted-foreground font-medium">Send Manual Directive:</p>
+          <div className="flex gap-2">
+            <Input
+              placeholder="e.g., 'Start mission for 2.5 Sharpe'"
+              value={directiveInput}
+              onChange={(e) => setDirectiveInput(e.target.value)}
+              className="flex-1 bg-gray-800/50 border-gray-700 text-green-300 placeholder:text-gray-500"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') sendDirective();
+              }}
+            />
+            <Button
+              size="icon"
+              onClick={sendDirective}
+              disabled={!directiveInput.trim()}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

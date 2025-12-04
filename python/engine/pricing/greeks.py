@@ -18,7 +18,56 @@ Assumptions:
 
 import numpy as np
 from scipy.stats import norm
-from typing import Literal
+from typing import Literal, Tuple
+
+# Minimum values to prevent numerical instability
+MIN_SIGMA = 1e-6  # Minimum volatility (0.0001%)
+MIN_PRICE = 1e-6  # Minimum price ($0.000001)
+MIN_TIME = 1e-10  # Minimum time to prevent division issues
+
+
+def _validate_inputs(S: float, K: float, T: float, sigma: float) -> Tuple[bool, str]:
+    """
+    Validate Black-Scholes inputs.
+
+    Returns:
+        (is_valid, error_message)
+    """
+    if S <= 0:
+        return False, f"Spot price must be positive, got {S}"
+    if K <= 0:
+        return False, f"Strike must be positive, got {K}"
+    if T < 0:
+        return False, f"Time to expiration must be non-negative, got {T}"
+    if sigma < 0:
+        return False, f"Volatility must be non-negative, got {sigma}"
+    return True, ""
+
+
+def _safe_d1(S: float, K: float, T: float, r: float, sigma: float) -> float:
+    """
+    Calculate d1 with edge case handling.
+
+    Handles:
+    - sigma=0: Return +/- infinity based on moneyness (or 0 for ATM)
+    - T=0: Return 0
+    - S=0 or K=0: Caught by validation
+    """
+    if T <= MIN_TIME:
+        return 0.0
+
+    if sigma < MIN_SIGMA:
+        # With zero volatility, option is deterministic
+        # Deep ITM -> d1 = +inf, Deep OTM -> d1 = -inf, ATM -> d1 = 0
+        intrinsic = S - K  # For calls; puts would be K - S
+        if intrinsic > MIN_PRICE:
+            return 10.0  # Cap at 10 to avoid inf issues
+        elif intrinsic < -MIN_PRICE:
+            return -10.0
+        else:
+            return 0.0
+
+    return (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
 
 
 def _calculate_d1(S: float, K: float, T: float, r: float, sigma: float) -> float:
@@ -45,11 +94,8 @@ def _calculate_d1(S: float, K: float, T: float, r: float, sigma: float) -> float
     float
         d1 value
     """
-    if T <= 0:
-        # At expiration, option is at intrinsic value
-        return 0.0
-
-    return (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    # Delegate to safe version which handles T=0 and sigma=0 edge cases
+    return _safe_d1(S, K, T, r, sigma)
 
 
 def _calculate_d2(S: float, K: float, T: float, r: float, sigma: float) -> float:
@@ -152,9 +198,14 @@ def calculate_gamma(S: float, K: float, T: float, r: float, sigma: float) -> flo
     float
         Option gamma
     """
-    if T <= 0:
-        # At expiration, gamma = 0 (delta is discontinuous)
+    # Guard against T=0 and near-expiry explosion (sqrt(T) in denominator)
+    if T <= MIN_TIME:
+        # At/near expiration, gamma = 0 (delta is discontinuous)
         return 0.0
+
+    # Guard against sigma=0 division
+    if sigma < MIN_SIGMA:
+        return 0.0  # Zero vol = deterministic payoff, no gamma
 
     d1 = _calculate_d1(S, K, T, r, sigma)
     return norm.pdf(d1) / (S * sigma * np.sqrt(T))
@@ -171,8 +222,8 @@ def calculate_vega(S: float, K: float, T: float, r: float, sigma: float) -> floa
 
     where n(x) is the standard normal PDF.
 
-    Note: Vega is typically quoted per 1% change in volatility.
-    This function returns vega per 1 unit change (multiply by 0.01 for 1%).
+    Note: This returns raw mathematical vega (per 1 unit = 100% change in σ).
+    If σ moves from 0.20 to 0.21 (1%), multiply vega by 0.01 to get the P&L.
 
     Parameters:
     -----------
@@ -190,16 +241,16 @@ def calculate_vega(S: float, K: float, T: float, r: float, sigma: float) -> floa
     Returns:
     --------
     float
-        Option vega (per 1 unit change in volatility)
+        Option vega (raw - per 1 unit/100% change in volatility)
     """
     if T <= 0:
         # At expiration, vega = 0 (no time value)
         return 0.0
 
     d1 = _calculate_d1(S, K, T, r, sigma)
-    # FIXED Round 8: Vega per 1% volatility change (0.01 scaling factor)
-    # Standard: Vega = S × N'(d1) × √T × 0.01
-    return S * norm.pdf(d1) * np.sqrt(T) * 0.01
+    # Raw mathematical vega: S × N'(d1) × √T
+    # This is per 1 unit (100%) change in σ - caller scales as needed
+    return S * norm.pdf(d1) * np.sqrt(T)
 
 
 def calculate_theta(
@@ -241,8 +292,9 @@ def calculate_theta(
     float
         Option theta (per year)
     """
-    if T <= 0:
-        # At expiration, theta is undefined (no time value left)
+    # Guard against T=0 and near-expiry explosion (sqrt(T) in denominator)
+    if T <= MIN_TIME:
+        # At/near expiration, theta is undefined (no time value left)
         return 0.0
 
     d1 = _calculate_d1(S, K, T, r, sigma)
@@ -299,9 +351,14 @@ def calculate_charm(
     float
         Option charm (per year)
     """
-    if T <= 0:
-        # At expiration, charm is undefined (delta is discontinuous)
+    # Guard against T=0 and near-expiry explosion (sqrt(T) and T in denominators)
+    if T <= MIN_TIME:
+        # At/near expiration, charm is undefined (delta is discontinuous)
         return 0.0
+
+    # Guard against sigma=0 division
+    if sigma < MIN_SIGMA:
+        return 0.0  # Zero vol = deterministic, no delta decay
 
     d1 = _calculate_d1(S, K, T, r, sigma)
     d2 = _calculate_d2(S, K, T, r, sigma)
@@ -356,9 +413,14 @@ def calculate_vanna(S: float, K: float, T: float, r: float, sigma: float) -> flo
     float
         Option vanna
     """
-    if T <= 0:
-        # At expiration, vanna = 0 (no volatility sensitivity)
+    # Guard against T=0 and near-expiry explosion (sqrt(T) in denominator)
+    if T <= MIN_TIME:
+        # At/near expiration, vanna = 0 (no volatility sensitivity)
         return 0.0
+
+    # Guard against sigma=0 division
+    if sigma < MIN_SIGMA:
+        return 0.0  # Zero vol = deterministic, no vanna
 
     d1 = _calculate_d1(S, K, T, r, sigma)
 
@@ -373,6 +435,56 @@ def calculate_vanna(S: float, K: float, T: float, r: float, sigma: float) -> flo
     return vanna
 
 
+def calculate_price(
+    S: float,
+    K: float,
+    T: float,
+    r: float,
+    sigma: float,
+    option_type: Literal['call', 'put']
+) -> float:
+    """
+    Calculate option price using Black-Scholes model.
+
+    Call = S * N(d1) - K * exp(-r*T) * N(d2)
+    Put = K * exp(-r*T) * N(-d2) - S * N(-d1)
+
+    Parameters:
+    -----------
+    S : float
+        Current underlying price
+    K : float
+        Strike price
+    T : float
+        Time to expiration in years
+    r : float
+        Risk-free interest rate (annualized)
+    sigma : float
+        Implied volatility (annualized)
+    option_type : str
+        'call' or 'put'
+
+    Returns:
+    --------
+    float
+        Theoretical option price
+    """
+    if T <= 0:
+        # At expiration, price is intrinsic value
+        if option_type == 'call':
+            return max(0.0, S - K)
+        else:
+            return max(0.0, K - S)
+
+    d1 = _calculate_d1(S, K, T, r, sigma)
+    d2 = _calculate_d2(S, K, T, r, sigma)
+
+    if option_type == 'call':
+        return S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+    else:
+        return K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+
+
 def calculate_all_greeks(
     S: float,
     K: float,
@@ -382,16 +494,17 @@ def calculate_all_greeks(
     option_type: Literal['call', 'put']
 ) -> dict:
     """
-    Calculate all Greeks for an option in one call.
+    Calculate price and all Greeks for an option in one call.
 
     Parameters: Same as individual Greek functions
 
     Returns:
     --------
     dict
-        Dictionary with keys: 'delta', 'gamma', 'vega', 'theta', 'charm', 'vanna'
+        Dictionary with keys: 'price', 'delta', 'gamma', 'vega', 'theta', 'charm', 'vanna'
     """
     return {
+        'price': calculate_price(S, K, T, r, sigma, option_type),
         'delta': calculate_delta(S, K, T, r, sigma, option_type),
         'gamma': calculate_gamma(S, K, T, r, sigma),
         'vega': calculate_vega(S, K, T, r, sigma),

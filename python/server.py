@@ -20,8 +20,13 @@ Endpoints:
 """
 
 import os
+from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request
+
+# Load environment variables from .env file
+load_dotenv()
+
 from flask_cors import CORS
 
 # Import business logic from routes module
@@ -144,10 +149,13 @@ def run_backtest():
         print(f"[Backtest] Received request: {data.get('strategy_key', 'unknown')} (mode={mode})")
 
         strategy_key = data.get('strategy_key', 'profile_1')
+
+        # Accept both flat structure (from TypeScript) and nested 'params' (legacy)
         params = data.get('params', {})
-        start_date = params.get('startDate', '2023-01-01')
-        end_date = params.get('endDate', '2023-12-31')
-        capital = params.get('capital', 100000)
+        # Flat snake_case keys from TypeScript take priority
+        start_date = data.get('start_date') or params.get('startDate', '2023-01-01')
+        end_date = data.get('end_date') or params.get('endDate', '2023-12-31')
+        capital = data.get('capital') or params.get('capital', 100000)
 
         # ========== WHITE NOISE PROTOCOL ==========
         # If sanity_check mode, generate random data to test for overfitting
@@ -219,7 +227,8 @@ If no risk: {{"risk_level": "LOW"}}"""
                     if risk.get('risk_level') == 'HIGH':
                         print(f"⚠️  PREDICTIVE INTERVENTION: High risk for {strategy_key}")
                         print(f"    Mechanism: {risk.get('mechanism')}")
-                except: pass
+                except (json_lib.JSONDecodeError, ValueError) as e:
+                    print(f"  [Interceptor] Failed to parse risk check: {e}")
         except Exception as e:
             print(f"[Interceptor] Check failed: {e}")
         # ========== END INTERCEPTOR ==========
@@ -364,6 +373,21 @@ def get_integrity():
     api = get_api()
     result = api.get_integrity_status()
     return jsonify(result)
+
+
+@app.route('/config/execution', methods=['GET'])
+def get_execution_config():
+    """
+    GET /config/execution - Execution timing configuration.
+
+    Returns current execution timing settings for the HUD.
+    use_next_open=True means we wait for market open, avoiding after-hours fills.
+    """
+    return jsonify({
+        'execution_timing': 'next_open',
+        'use_next_open': True,
+        'description': 'Orders execute at next market open to avoid after-hours slippage'
+    })
 
 
 @app.route('/analysis/<plugin_name>', methods=['GET'])
@@ -693,7 +717,7 @@ def health_theta():
 # MAIN
 # =============================================================================
 
-def run_server(port: int = 5000, debug: bool = False):
+def run_server(port: int = 5001, debug: bool = False):
     """Start the quant engine Flask server."""
     print("=" * 60)
     print(f"Quant Engine HTTP Server v{ENGINE_VERSION}")

@@ -3272,20 +3272,11 @@ Return ONLY the JSON object, no other text."""
         logger.info("🔭 [Discovery] Running autonomous market scan...")
 
         try:
-            # Step 1: Check if we already have active missions
-            mission = await self.get_active_mission()
-            if mission:
-                logger.info(f"   Active mission exists: {mission.name} - skipping discovery")
-                return {
-                    'action': 'skip',
-                    'reason': 'active_mission_exists',
-                    'mission': mission.name
-                }
-
-            # Step 2: Scan market for opportunities
+            # Always scan for opportunities - multiple missions can coexist
+            # Step 1: Scan market for opportunities
             scanner = MorphologyScanner(
                 data_dir=self.config.data_dir,
-                min_confidence=0.6
+                min_confidence=0.5  # Lower threshold to catch more opportunities
             )
             opportunities = scanner.scan()
 

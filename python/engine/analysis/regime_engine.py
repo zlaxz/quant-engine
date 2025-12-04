@@ -35,16 +35,25 @@ class RegimeEngine:
         if len(history_df) < self.trend_window:
             return REGIME_UNDEFINED
         current_price = history_df['close'].iloc[-1]
-        
+
+        # NaN check on price data
+        if pd.isna(current_price):
+            raise ValueError("NaN detected in close price - cannot classify regime")
+
         # Flash Crash Protection
         window_high = history_df['close'].tail(self.trend_window).max()
         drawdown = (current_price - window_high) / window_high
         if drawdown < -0.01: return REGIME_VOL_EXPANSION
-            
+
         sma = history_df['close'].tail(self.trend_window).mean()
         is_uptrend = current_price > sma
-        
+
         raw_iv = history_df['iv'].iloc[-1]
+
+        # NaN check on IV data
+        if pd.isna(raw_iv):
+            raise ValueError("NaN detected in IV data - cannot classify regime")
+
         current_iv = raw_iv / 100.0 if raw_iv > 5.0 else raw_iv
         is_high_vol = current_iv > 0.20
         
@@ -79,7 +88,16 @@ class RegimeEngine:
             REGIME_SIDEWAYS
         ]
         df['regime'] = np.select(conditions, choices, default=REGIME_UNDEFINED)
-        return df.dropna()
+
+        # Log warning if significant data dropped (but don't silently fail)
+        rows_before = len(df)
+        df = df.dropna()
+        rows_after = len(df)
+        if rows_before > 0 and (rows_before - rows_after) / rows_before > 0.1:
+            import logging
+            logging.warning(f"RegimeEngine dropped {rows_before - rows_after} rows ({100*(rows_before-rows_after)/rows_before:.1f}%) due to NaN values")
+
+        return df
 
     def generate_api_response(self, labeled_df: pd.DataFrame) -> Dict[str, Any]:
         """

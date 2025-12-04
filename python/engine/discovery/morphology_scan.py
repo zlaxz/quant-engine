@@ -78,8 +78,8 @@ class MorphologyScanner:
     generates hypotheses that become missions for the daemon to pursue.
     """
 
-    # Default symbols to scan
-    DEFAULT_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'AAPL', 'NVDA', 'TSLA', 'MSFT', 'META', 'AMZN', 'GOOGL']
+    # Default symbols to scan - ETFs available in VelocityData
+    DEFAULT_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'DIA', 'GLD', 'TLT', 'XLF', 'XLK', 'XLE', 'VXX']
 
     # Regime thresholds
     HIGH_IV_THRESHOLD = 0.25      # IV > 25% = high vol environment
@@ -117,9 +117,12 @@ class MorphologyScanner:
         Load price and IV data for a symbol.
 
         Looks for Parquet files in the data directory.
+        Supports multiple formats:
+        - Single file: {symbol}_daily.parquet
+        - Directory of date files: stock/{symbol}/*.parquet
         """
         try:
-            # Try various path patterns
+            # Try various path patterns for single-file formats
             patterns = [
                 os.path.join(self.data_dir, f"{symbol}_daily.parquet"),
                 os.path.join(self.data_dir, f"daily/{symbol}.parquet"),
@@ -130,16 +133,48 @@ class MorphologyScanner:
             for path in patterns:
                 if os.path.exists(path):
                     df = pd.read_parquet(path)
-                    # Ensure we have required columns
                     if 'close' in df.columns:
-                        # Calculate IV if not present
                         if 'iv' not in df.columns and 'implied_volatility' in df.columns:
                             df['iv'] = df['implied_volatility']
                         elif 'iv' not in df.columns:
-                            # Estimate IV from realized volatility
                             df['iv'] = df['close'].pct_change().rolling(20).std() * np.sqrt(252)
-
                         return df.tail(days)
+
+            # Try date-based directory format: stock/{symbol}/*.parquet (minute bars)
+            date_dir = os.path.join(self.data_dir, 'stock', symbol)
+            if os.path.isdir(date_dir):
+                parquet_files = sorted([
+                    f for f in os.listdir(date_dir)
+                    if f.endswith('.parquet')
+                ])[-days:]  # Get last N days
+
+                if parquet_files:
+                    daily_data = []
+                    for f in parquet_files:
+                        try:
+                            day_df = pd.read_parquet(os.path.join(date_dir, f))
+                            date_str = f.replace('.parquet', '')
+
+                            # Aggregate minute bars to daily OHLC
+                            daily_row = {
+                                'date': pd.to_datetime(date_str),
+                                'open': day_df['open'].iloc[0] if 'open' in day_df.columns else day_df['close'].iloc[0],
+                                'high': day_df['high'].max() if 'high' in day_df.columns else day_df['close'].max(),
+                                'low': day_df['low'].min() if 'low' in day_df.columns else day_df['close'].min(),
+                                'close': day_df['close'].iloc[-1],
+                                'volume': day_df['volume'].sum() if 'volume' in day_df.columns else 0
+                            }
+                            daily_data.append(daily_row)
+                        except Exception:
+                            continue
+
+                    if daily_data:
+                        df = pd.DataFrame(daily_data).sort_values('date')
+
+                        if 'close' in df.columns:
+                            # Calculate realized volatility as IV proxy
+                            df['iv'] = df['close'].pct_change().rolling(20).std() * np.sqrt(252)
+                            return df.tail(days)
 
             logger.debug(f"No data found for {symbol}")
             return None

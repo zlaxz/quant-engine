@@ -35,14 +35,90 @@ Usage:
 """
 
 import os
+import time
 import requests
 import logging
 from datetime import date, datetime
 from typing import Optional, Dict, List, Any, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Circuit Breaker for Connection Resilience
+# =============================================================================
+
+class CircuitBreaker:
+    """
+    Simple circuit breaker to prevent hammering a dead service.
+
+    States:
+    - CLOSED: Normal operation, requests go through
+    - OPEN: Service is down, fail fast without trying
+    - HALF_OPEN: Testing if service recovered
+    """
+
+    def __init__(
+        self,
+        failure_threshold: int = 5,
+        recovery_timeout: float = 30.0,
+        half_open_max_calls: int = 1,
+    ):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.half_open_max_calls = half_open_max_calls
+
+        self._failure_count = 0
+        self._last_failure_time: Optional[float] = None
+        self._state = "CLOSED"
+        self._half_open_calls = 0
+
+    @property
+    def state(self) -> str:
+        """Get current circuit state, auto-transitioning OPEN -> HALF_OPEN if timeout elapsed."""
+        if self._state == "OPEN":
+            if self._last_failure_time and (time.time() - self._last_failure_time) >= self.recovery_timeout:
+                self._state = "HALF_OPEN"
+                self._half_open_calls = 0
+        return self._state
+
+    def can_execute(self) -> bool:
+        """Check if a request can be executed."""
+        state = self.state
+        if state == "CLOSED":
+            return True
+        if state == "HALF_OPEN":
+            return self._half_open_calls < self.half_open_max_calls
+        return False  # OPEN
+
+    def record_success(self) -> None:
+        """Record a successful request."""
+        self._failure_count = 0
+        self._state = "CLOSED"
+        self._half_open_calls = 0
+
+    def record_failure(self) -> None:
+        """Record a failed request."""
+        self._failure_count += 1
+        self._last_failure_time = time.time()
+
+        if self._state == "HALF_OPEN":
+            # Failed during recovery test - back to OPEN
+            self._state = "OPEN"
+        elif self._failure_count >= self.failure_threshold:
+            self._state = "OPEN"
+            logger.warning(f"Circuit breaker OPEN after {self._failure_count} failures")
+
+    def reset(self) -> None:
+        """Reset circuit breaker to initial state."""
+        self._failure_count = 0
+        self._last_failure_time = None
+        self._state = "CLOSED"
+        self._half_open_calls = 0
 
 
 # =============================================================================
@@ -128,6 +204,11 @@ class ThetaClient:
     - Live Greeks (all orders)
     - Option chain snapshots
     - Historical Greeks data
+
+    Features:
+    - Connection pooling via requests.Session
+    - Automatic retry with exponential backoff
+    - Circuit breaker to fail fast when service is down
     """
 
     # Default ports for Theta Terminal
@@ -141,6 +222,8 @@ class ThetaClient:
         v2_port: Optional[int] = None,
         v3_port: Optional[int] = None,
         timeout: int = 30,
+        max_retries: int = 3,
+        backoff_factor: float = 0.5,
     ):
         """
         Initialize ThetaData client.
@@ -150,6 +233,8 @@ class ThetaClient:
             v2_port: Port for v2 API (historical)
             v3_port: Port for v3 API (snapshots)
             timeout: Request timeout in seconds
+            max_retries: Maximum retry attempts for failed requests
+            backoff_factor: Exponential backoff factor between retries
         """
         self.host = host
         self.v2_port = v2_port or int(os.environ.get('THETADATA_HTTP_PORT', self.DEFAULT_V2_PORT))
@@ -160,9 +245,85 @@ class ThetaClient:
         self.v2_base = f"http://{host}:{self.v2_port}/v2"
         self.v3_base = f"http://{host}:{self.v3_port}/v3"
 
+        # Connection pooling with retry logic
+        self._session = requests.Session()
+        retry_strategy = Retry(
+            total=max_retries,
+            backoff_factor=backoff_factor,
+            status_forcelist=[408, 429, 500, 502, 503, 504],
+            allowed_methods=["GET"],
+        )
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=10,
+            pool_maxsize=20,
+        )
+        self._session.mount("http://", adapter)
+        self._session.mount("https://", adapter)
+
+        # Circuit breaker for fail-fast behavior
+        self._circuit_breaker = CircuitBreaker(
+            failure_threshold=5,
+            recovery_timeout=30.0,
+        )
+
         logger.info(f"ThetaClient initialized")
         logger.info(f"  v2 API: {self.v2_base}")
         logger.info(f"  v3 API: {self.v3_base}")
+        logger.info(f"  Retry: {max_retries}x with {backoff_factor}s backoff")
+
+    def _request(
+        self,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[int] = None,
+    ) -> Optional[requests.Response]:
+        """
+        Make a GET request with circuit breaker protection.
+
+        Args:
+            url: Full URL to request
+            params: Query parameters
+            timeout: Request timeout (uses default if None)
+
+        Returns:
+            Response object or None if circuit is open or request failed
+        """
+        if not self._circuit_breaker.can_execute():
+            logger.debug(f"Circuit breaker OPEN - skipping request to {url}")
+            return None
+
+        try:
+            response = self._session.get(
+                url,
+                params=params,
+                timeout=timeout or self.timeout,
+            )
+            self._circuit_breaker.record_success()
+            return response
+
+        except requests.exceptions.ConnectionError as e:
+            logger.warning(f"Connection error to {url}: {e}")
+            self._circuit_breaker.record_failure()
+            return None
+        except requests.exceptions.Timeout as e:
+            logger.warning(f"Timeout on {url}: {e}")
+            self._circuit_breaker.record_failure()
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed for {url}: {e}")
+            self._circuit_breaker.record_failure()
+            return None
+
+    def close(self) -> None:
+        """Close the session and release connection pool."""
+        self._session.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     # -------------------------------------------------------------------------
     # Health Check
@@ -177,19 +338,20 @@ class ThetaClient:
         """
         try:
             # Try a snapshot request - will return "No data found" if working but market closed
-            response = requests.get(
+            response = self._request(
                 f"{self.v3_base}/option/snapshot/greeks/all",
                 params={'symbol': 'SPY', 'expiration': '*'},
                 timeout=5
             )
+            if response is None:
+                return ThetaTerminalStatus.DISCONNECTED
+
             # 200 = working, 410 = deprecated (v2), 404 = endpoint not found
             if response.status_code in [200, 404]:
                 # Even "No data found" response means terminal is connected
                 return ThetaTerminalStatus.CONNECTED
             return ThetaTerminalStatus.ERROR
 
-        except requests.exceptions.ConnectionError:
-            return ThetaTerminalStatus.DISCONNECTED
         except Exception as e:
             logger.error(f"Terminal status check failed: {e}")
             return ThetaTerminalStatus.ERROR
@@ -241,8 +403,11 @@ class ThetaClient:
                 'right': right_str,
             }
 
-            response = requests.get(url, params=params, timeout=self.timeout)
+            response = self._request(url, params=params)
 
+            if response is None:
+                logger.warning("Greeks request failed: no response")
+                return None
             if not response.ok:
                 logger.warning(f"Greeks request failed: {response.status_code}")
                 return None
@@ -255,20 +420,45 @@ class ThetaClient:
 
             greeks_data = data['response']
 
+            # Extract and validate prices
+            bid = greeks_data.get('bid', 0.0)
+            ask = greeks_data.get('ask', 0.0)
+            underlying = greeks_data.get('underlying_price', 0.0)
+            iv = greeks_data.get('implied_volatility', 0.0)
+            delta = greeks_data.get('delta', 0.0)
+
+            # Price validation - reject garbage data
+            if bid < 0 or ask < 0:
+                logger.warning(f"Negative bid/ask rejected: bid={bid}, ask={ask}")
+                return None
+            if bid > 0 and ask > 0 and bid > ask:
+                logger.warning(f"Inverted market rejected: bid={bid} > ask={ask}")
+                return None
+            if underlying <= 0:
+                logger.warning(f"Invalid underlying price: {underlying}")
+                return None
+            if iv < 0 or iv > 5.0:  # IV > 500% is nonsense
+                logger.warning(f"Invalid IV rejected: {iv}")
+                return None
+            # Delta bounds check (allow slight tolerance for rounding)
+            if delta < -1.05 or delta > 1.05:
+                logger.warning(f"Invalid delta rejected: {delta}")
+                return None
+
             greeks = OptionGreeks(
                 # 1st Order
-                delta=greeks_data.get('delta', 0.0),
+                delta=delta,
                 gamma=greeks_data.get('gamma', 0.0),
                 theta=greeks_data.get('theta', 0.0),
                 vega=greeks_data.get('vega', 0.0),
                 rho=greeks_data.get('rho', 0.0),
 
                 # Market data
-                implied_volatility=greeks_data.get('implied_volatility', 0.0),
-                underlying_price=greeks_data.get('underlying_price', 0.0),
-                bid=greeks_data.get('bid', 0.0),
-                ask=greeks_data.get('ask', 0.0),
-                mid=(greeks_data.get('bid', 0.0) + greeks_data.get('ask', 0.0)) / 2,
+                implied_volatility=iv,
+                underlying_price=underlying,
+                bid=bid,
+                ask=ask,
+                mid=(bid + ask) / 2 if bid > 0 and ask > 0 else max(bid, ask),
             )
 
             # 2nd Order Greeks (from separate endpoint if needed)
@@ -314,9 +504,9 @@ class ThetaClient:
                 'ivl': 0,  # Latest tick
             }
 
-            response = requests.get(url, params=params, timeout=self.timeout)
+            response = self._request(url, params=params)
 
-            if not response.ok:
+            if response is None or not response.ok:
                 return None
 
             data = response.json()
@@ -378,8 +568,11 @@ class ThetaClient:
                 'expiration': exp_str,
             }
 
-            response = requests.get(url, params=params, timeout=self.timeout)
+            response = self._request(url, params=params)
 
+            if response is None:
+                logger.warning("Chain snapshot failed: no response")
+                return []
             if not response.ok:
                 logger.warning(f"Chain snapshot failed: {response.status_code}")
                 return []
@@ -518,8 +711,11 @@ class ThetaClient:
                 'ivl': interval_ms,
             }
 
-            response = requests.get(url, params=params, timeout=self.timeout)
+            response = self._request(url, params=params)
 
+            if response is None:
+                logger.warning("Greeks history failed: no response")
+                return []
             if not response.ok:
                 logger.warning(f"Greeks history failed: {response.status_code}")
                 return []
@@ -595,9 +791,9 @@ class ThetaClient:
                 'right': right_str,
             }
 
-            response = requests.get(url, params=params, timeout=self.timeout)
+            response = self._request(url, params=params)
 
-            if not response.ok:
+            if response is None or not response.ok:
                 return None
 
             data = response.json()
@@ -640,9 +836,19 @@ def get_theta_client() -> ThetaClient:
 
 
 def reset_theta_client() -> None:
-    """Reset the singleton client (for testing)."""
+    """Reset the singleton client (for testing or reconnection)."""
     global _theta_client
+    if _theta_client is not None:
+        _theta_client.close()  # Release connection pool
     _theta_client = None
+
+
+def reset_circuit_breaker() -> None:
+    """Reset the circuit breaker without recreating the client."""
+    global _theta_client
+    if _theta_client is not None:
+        _theta_client._circuit_breaker.reset()
+        logger.info("Circuit breaker reset")
 
 
 # =============================================================================

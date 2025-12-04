@@ -1,325 +1,307 @@
 """
 Execution model for realistic bid-ask spreads, slippage, and transaction costs.
+UNIFIED MODEL: Combines sophisticated spread modeling with simulator execution logic.
 
 Models:
-- Bid-ask spreads as function of moneyness, DTE, volatility
-- Execution slippage
+- Bid-ask spreads as function of moneyness, DTE, volatility, time-of-day
+- Execution slippage (size-based)
+- Partial fills based on liquidity
 - Delta hedging costs (ES futures)
 """
 
 import numpy as np
 import pandas as pd
-from typing import Tuple
+from typing import Tuple, Dict, Optional
 
 
-class ExecutionModel:
-    """Realistic execution cost model for SPY options."""
+class UnifiedExecutionModel:
+    """
+    Unified execution cost model for SPY options and ES futures.
+    Handles spreads, slippage, partial fills, and commission calculations.
+    """
 
     def __init__(
         self,
-        base_spread_atm: float = 0.20,  # Base ATM spread ($) - BUG FIX Round 7: was 0.03, too low
-        base_spread_otm: float = 0.30,  # Base OTM spread ($) - BUG FIX Round 7: was 0.05, too low
-        spread_multiplier_vol: float = 2.0,  # Spread widening in high vol (2-3x)
-        slippage_small: float = 0.10,  # 10% of spread for 1-10 contracts (BUG FIX 2025-11-18)
-        slippage_medium: float = 0.25,  # 25% of spread for 11-50 contracts
-        slippage_large: float = 0.50,  # 50% of spread for 50+ contracts
-        es_commission: float = 2.50,  # ES futures commission per round-trip
-        es_spread: float = 12.50,  # ES bid-ask spread (0.25 points = $12.50) - BUG FIX 2025-11-18
-        option_commission: float = 0.65,  # Options commission per contract
-        sec_fee_rate: float = 0.00182  # SEC fee per $1000 principal (for short sales)
+        # Spread Configuration
+        base_spread_atm: float = 0.20,          # $0.20 ATM base spread (SPY typical)
+        base_spread_otm: float = 0.30,          # $0.30 OTM base spread
+        spread_multiplier_vol: float = 2.0,     # Max vol multiplier
+        
+        # Size-Based Slippage (percentage of half-spread)
+        slippage_small: float = 0.10,           # 1-10 contracts
+        slippage_medium: float = 0.25,          # 11-50 contracts
+        slippage_large: float = 0.50,           # 50+ contracts
+        
+        # Time-of-Day Spread Multipliers (ET market hours)
+        time_of_day_open: float = 1.5,          # 9:30-10:00 ET
+        time_of_day_midday: float = 1.0,        # 10:00-15:00 ET
+        time_of_day_close: float = 1.3,         # 15:00-16:00 ET
+        
+        # Partial Fill Configuration
+        max_volume_participation: float = 0.10, # Max 10% of daily volume
+        min_fill_probability: float = 0.3,      # Minimum fill probability
+        fill_volatility_factor: float = 1.5,    # Fill uncertainty in high vol
+        
+        # Commission & Fees
+        option_commission: float = 0.65,        # Per contract
+        min_commission: float = 1.00,           # Minimum per trade
+        es_commission: float = 2.50,            # ES futures round-trip
+        es_spread: float = 12.50,               # ES bid-ask spread
+        
+        # Regulatory Fees
+        sec_fee_rate: float = 0.00182,          # SEC fee per $1000 principal
+        occ_fee: float = 0.055,                 # OCC fee per contract
+        finra_fee: float = 0.00205,             # FINRA TAFC fee per contract (short sales)
     ):
-        """
-        Initialize execution model.
-
-        Parameters:
-        -----------
-        base_spread_atm : float
-            Base bid-ask spread for ATM straddles (dollars)
-        base_spread_otm : float
-            Base bid-ask spread for OTM options (dollars)
-        spread_multiplier_vol : float
-            Spread widening multiplier during high volatility
-        slippage_pct : float
-            Additional slippage as percentage of mid price
-        es_commission : float
-            ES futures commission per round-trip (dollars)
-        es_slippage : float
-            ES futures slippage per contract (dollars)
-        option_commission : float
-            Commission per option contract (dollars)
-        sec_fee_rate : float
-            SEC fee per contract for short sales (dollars)
-        """
         self.base_spread_atm = base_spread_atm
         self.base_spread_otm = base_spread_otm
         self.spread_multiplier_vol = spread_multiplier_vol
-        # BUG FIX (2025-11-18): Size-based slippage instead of fixed percentage
+        
         self.slippage_small = slippage_small
         self.slippage_medium = slippage_medium
         self.slippage_large = slippage_large
-        self.es_commission = es_commission
-        self.es_spread = es_spread  # BUG FIX: ES bid-ask spread included
+        
+        self.time_of_day_open = time_of_day_open
+        self.time_of_day_midday = time_of_day_midday
+        self.time_of_day_close = time_of_day_close
+        
+        self.max_volume_participation = max_volume_participation
+        self.min_fill_probability = min_fill_probability
+        self.fill_volatility_factor = fill_volatility_factor
+        
         self.option_commission = option_commission
+        self.min_commission = min_commission
+        self.es_commission = es_commission
+        self.es_spread = es_spread
+        
         self.sec_fee_rate = sec_fee_rate
+        self.occ_fee = occ_fee
+        self.finra_fee = finra_fee
+
+    def _get_time_of_day_factor(self, hour: int, minute: int = 0) -> float:
+        """Return spread multiplier based on market microstructure patterns."""
+        # Convert to ET market hours (9:30-16:00)
+        market_minutes = (hour - 9) * 60 + (minute - 30) if hour >= 9 else -1
+        
+        if market_minutes < 0 or market_minutes > 390:  # Outside market hours
+            return 2.0  # Much wider outside trading hours
+        
+        if market_minutes <= 30:  # 9:30-10:00 ET
+            return self.time_of_day_open
+        
+        if market_minutes >= 330:  # 15:00-16:00 ET
+            return self.time_of_day_close
+        
+        return self.time_of_day_midday  # 10:00-15:00 ET
 
     def get_spread(
         self,
         mid_price: float,
-        moneyness: float,
-        dte: int,
+        moneyness: float,        # abs(strike - spot) / spot
+        dte: int,                # days to expiration
         vix_level: float = 20.0,
-        is_strangle: bool = False
+        is_strangle: bool = False,
+        hour_of_day: int = 12,   # 0-23, ET hour
     ) -> float:
         """
         Calculate bid-ask spread for an option.
-
-        Parameters:
-        -----------
-        mid_price : float
-            Mid price of the option
-        moneyness : float
-            Abs(strike - spot) / spot (0 = ATM, higher = OTM)
-        dte : int
-            Days to expiration
-        vix_level : float
-            Current VIX level (for spread widening)
-        is_strangle : bool
-            Whether this is a strangle (tighter spread than straddle)
-
-        Returns:
-        --------
-        spread : float
-            Bid-ask spread in dollars
         """
-        # Base spread depends on structure
+        # Base spread (strangle tighter than straddle)
         base = self.base_spread_otm if is_strangle else self.base_spread_atm
-
-        # BUG FIX (2025-11-18): Final audit - linear scaling more realistic
-        # Strategy-logic-auditor found: Power function causes OTM narrower than ATM
-        # Using linear scaling: moneyness 0.1 → 1.5x, moneyness 0.2 → 2.0x
-        moneyness_factor = 1.0 + moneyness * 5.0  # Linear widening
-
-        # Adjust for DTE (wider spreads for short DTE)
+        
+        # Moneyness factor: linear widening (OTM = wider)
+        moneyness_factor = 1.0 + moneyness * 5.0
+        
+        # DTE factor: wider for short-dated options
         dte_factor = 1.0
         if dte < 7:
-            dte_factor = 1.3  # 30% wider for weekly options
+            dte_factor = 1.3     # 30% wider for weekly
         elif dte < 14:
-            dte_factor = 1.15  # 15% wider for 2-week options
-
-        # Adjust for volatility (continuous scaling, not threshold-based)
-        # BUG FIX (2025-11-18): Final audit - VIX thresholds miss 45% of vol moves
-        # Continuous: VIX 15→1.0x, VIX 25→1.5x, VIX 35+→2.0x
+            dte_factor = 1.15    # 15% wider for 2-week
+        
+        # Volatility factor: continuous scaling with VIX
         vol_factor = 1.0 + max(0, (vix_level - 15.0) / 20.0)
-        vol_factor = min(3.0, vol_factor)  # Cap at 3x
+        vol_factor = min(3.0, vol_factor)
+        
+        # Time-of-day factor (ET market hours 9:30-16:00)
+        time_factor = self._get_time_of_day_factor(hour_of_day)
+        
+        # Structure factor (strangle vs straddle already in base)
+        structure_factor = 0.9 if is_strangle else 1.0
+        
+        spread = base * moneyness_factor * dte_factor * vol_factor * time_factor * structure_factor
+        return max(spread, 0.01)  # Minimum 1 cent spread
 
-        # Final spread
-        spread = base * moneyness_factor * dte_factor * vol_factor
-
-        # BUG FIX Round 7: Removed min_spread override that was masking all scaling factors
-        # With increased base spreads (0.20 ATM, 0.30 OTM), calculated spread always exceeds
-        # reasonable minimums. The override was preventing vol/moneyness/DTE scaling from working.
-        # Examples of spread calculation with new bases:
-        #   ATM, VIX 15: $0.20 * 1.0 * 1.0 * 1.0 = $0.20
-        #   ATM, VIX 45: $0.20 * 1.0 * 1.0 * 2.5 = $0.50 (vol scaling works!)
-        #   OTM 15%, VIX 20: $0.30 * 1.75 * 1.0 * 1.25 = $0.66 (moneyness scaling works!)
-        return spread
+    def get_fill_quantity(
+        self,
+        order_size: int,          # Absolute quantity desired
+        daily_volume: int,        # Today's volume for this option
+        open_interest: int,       # Current open interest
+        vix_level: float = 20.0,
+        hour_of_day: int = 12,
+    ) -> Tuple[int, float]:
+        """
+        Calculate realistic fill quantity and fill probability.
+        Returns (filled_quantity, fill_confidence).
+        """
+        if daily_volume == 0 or open_interest < 100:
+            return 0, 0.0  # No liquidity
+        
+        # Maximum participation rate (avoid moving market)
+        max_participation = self.max_volume_participation
+        max_fill = int(daily_volume * max_participation)
+        if max_fill == 0:
+            max_fill = 1 # Allow at least 1 contract if volume exists
+        
+        # Base fill probability based on size relative to volume
+        size_ratio = order_size / daily_volume
+        base_prob = min(1.0, 1.0 / (1.0 + size_ratio * 10))
+        
+        # Adjust for volatility (harder to fill in high vol)
+        vol_adjustment = 1.0 / (1.0 + max(0, vix_level - 20.0) / 30.0)
+        
+        # Adjust for time of day (better fills midday)
+        time_factor = self._get_time_of_day_factor(hour_of_day)
+        time_adjustment = 1.0 / time_factor  # Inverse: wider spreads = lower fill probability
+        
+        # Final fill probability
+        fill_prob = base_prob * vol_adjustment * time_adjustment
+        fill_prob = max(self.min_fill_probability, fill_prob)
+        
+        # Determine fill quantity (deterministic for backtest reproducibility)
+        # In a live sim, we might use np.random.random() <= fill_prob
+        # Here we'll just cap the size based on max_fill
+        filled = min(order_size, max_fill)
+        
+        return int(filled), fill_prob
 
     def get_execution_price(
         self,
         mid_price: float,
-        side: str,  # 'buy' or 'sell'
+        side: str,                # 'buy' or 'sell'
         moneyness: float,
         dte: int,
         vix_level: float = 20.0,
         is_strangle: bool = False,
-        quantity: int = 1  # BUG FIX (2025-11-18): Agent #6b - size-based slippage
+        quantity: int = 1,        # Order size (for size-based slippage)
+        filled_quantity: int = None,  # Actual fill quantity (if partial)
+        hour_of_day: int = 12,
     ) -> float:
         """
-        Get realistic execution price including bid-ask spread and slippage.
-
-        BUG FIX (2025-11-18): Added size-based slippage - zero slippage is unrealistic
-
-        Parameters:
-        -----------
-        mid_price : float
-            Mid price of the option
-        side : str
-            'buy' or 'sell'
-        moneyness : float
-            Abs(strike - spot) / spot
-        dte : int
-            Days to expiration
-        vix_level : float
-            Current VIX level
-        is_strangle : bool
-            Whether this is a strangle
-        quantity : int
-            Order size (for size-based slippage)
-
-        Returns:
-        --------
-        exec_price : float
-            Execution price (mid ± half spread ± slippage)
+        Get realistic execution price including all adjustments.
         """
-        spread = self.get_spread(mid_price, moneyness, dte, vix_level, is_strangle)
+        # Calculate base spread
+        spread = self.get_spread(mid_price, moneyness, dte, vix_level, 
+                                is_strangle, hour_of_day)
         half_spread = spread / 2.0
-
-        # Size-based slippage as % of half-spread
-        abs_qty = abs(quantity)
+        
+        # Size-based slippage (use filled quantity if partial fill)
+        qty_for_slippage = filled_quantity if filled_quantity is not None else abs(quantity)
+        abs_qty = abs(qty_for_slippage)
+        
         if abs_qty <= 10:
             slippage_pct = self.slippage_small
         elif abs_qty <= 50:
             slippage_pct = self.slippage_medium
         else:
             slippage_pct = self.slippage_large
-
+        
         slippage = half_spread * slippage_pct
-
+        
+        # Directional adjustment
         if side == 'buy':
-            # Pay ask + slippage
             return mid_price + half_spread + slippage
         elif side == 'sell':
-            # Receive bid - slippage
             return max(0.01, mid_price - half_spread - slippage)
         else:
-            raise ValueError(f"Invalid side: {side}. Must be 'buy' or 'sell'")
-
-    def get_delta_hedge_cost(self, contracts: float, es_mid_price: float = 4500.0) -> float:
-        """
-        Calculate cost of delta hedging with ES futures.
-
-        BUG FIX (2025-11-18): Agent #6b found - missing ES bid-ask spread ($12.50 per round trip)
-
-        Parameters:
-        -----------
-        contracts : float
-            Number of ES futures contracts (can be fractional, will round)
-        es_mid_price : float
-            ES mid price (for market impact on large orders, currently unused)
-
-        Returns:
-        --------
-        cost : float
-            Total cost of hedging (commission + ES spread + market impact)
-        """
-        # Round to nearest contract, but zero out if < 0.5 contracts
-        if abs(contracts) < 0.5:
-            return 0.0
-
-        actual_contracts = abs(round(contracts))
-
-        # ES typical spread: 0.25 points = $12.50 per contract (one-way)
-        # We pay half-spread on entry
-        es_half_spread = self.es_spread / 2.0
-
-        # Base costs: commission + half spread (one-way)
-        cost_per_contract = self.es_commission + es_half_spread
-
-        # Market impact for larger orders
-        impact_multiplier = 1.0
-        if actual_contracts > 10:
-            impact_multiplier = 1.1  # 10% additional cost for >10 contracts
-        elif actual_contracts > 50:
-            impact_multiplier = 1.25  # 25% additional cost for >50 contracts
-
-        return actual_contracts * cost_per_contract * impact_multiplier
-
-    def apply_spread_to_price(
-        self,
-        mid_price: float,
-        quantity: int,  # Positive = long, negative = short
-        moneyness: float,
-        dte: int,
-        vix_level: float = 20.0,
-        is_strangle: bool = False
-    ) -> float:
-        """
-        Apply bid-ask spread to get execution price based on quantity sign.
-
-        Parameters:
-        -----------
-        mid_price : float
-            Mid price
-        quantity : int
-            Quantity (sign determines buy/sell)
-        moneyness : float
-            Moneyness
-        dte : int
-            Days to expiration
-        vix_level : float
-            VIX level
-        is_strangle : bool
-            Whether strangle
-
-        Returns:
-        --------
-        exec_price : float
-            Execution price
-        """
-        side = 'buy' if quantity > 0 else 'sell'
-        return self.get_execution_price(
-            mid_price, side, moneyness, dte, vix_level, is_strangle
-        )
+            raise ValueError(f"Invalid side: {side}")
 
     def get_commission_cost(self, num_contracts: int, is_short: bool = False, premium: float = 0.0) -> float:
         """
         Calculate total commission and fees for options trade.
-
-        BUG FIX (2025-11-18): Agent #6b found - missing OCC and FINRA fees ($0.06+/contract)
-
-        Parameters:
-        -----------
-        num_contracts : int
-            Number of contracts traded (absolute value)
-        is_short : bool
-            Whether this is a short sale (incurs SEC fees)
-        premium : float
-            Option premium (for SEC fee calculation which is per $1000 of principal)
-
-        Returns:
-        --------
-        total_cost : float
-            Total commission + fees (always positive)
         """
         num_contracts = abs(num_contracts)
-
+        
         # Base commission
         commission = num_contracts * self.option_commission
-
-        # SEC fee is actually $0.00182 per $1000 of principal (NOT per contract)
+        
+        # SEC fee (per $1000 of principal on sells)
         sec_fees = 0.0
         if is_short and premium > 0:
             principal = num_contracts * 100 * premium
-            sec_fees = principal * (0.00182 / 1000.0)
+            sec_fees = principal * (self.sec_fee_rate / 1000.0)
+        
+        # OCC fees
+        occ_fees = num_contracts * self.occ_fee
+        
+        # FINRA fees
+        finra_fees = num_contracts * self.finra_fee if is_short else 0.0
+        
+        total = commission + sec_fees + occ_fees + finra_fees
+        
+        # Apply minimum per trade if applicable (simplified, usually per order)
+        return max(total, self.min_commission)
 
-        # OCC fees ($0.055 per contract) - MISSING in original
-        occ_fees = num_contracts * 0.055
+    def execute_order(
+        self,
+        mid_price: float,
+        side: str,
+        quantity: int,
+        moneyness: float,
+        dte: int,
+        daily_volume: int,
+        open_interest: int,
+        vix_level: float = 20.0,
+        is_strangle: bool = False,
+        hour_of_day: int = 12,
+    ) -> Dict:
+        """
+        Complete order execution simulation.
+        Returns dict with execution details.
+        """
+        # 1. Determine fill quantity
+        filled_qty, fill_prob = self.get_fill_quantity(
+            abs(quantity), daily_volume, open_interest, 
+            vix_level, hour_of_day
+        )
+        
+        if filled_qty == 0:
+            return {
+                'filled': False,
+                'filled_quantity': 0,
+                'execution_price': None,
+                'slippage': None,
+                'commission': 0.0,
+                'fill_confidence': fill_prob
+            }
+        
+        # 2. Calculate execution price
+        exec_price = self.get_execution_price(
+            mid_price, side, moneyness, dte, vix_level,
+            is_strangle, quantity, filled_qty, hour_of_day
+        )
+        
+        # 3. Calculate commission and fees
+        is_short = side == 'sell'
+        commission = self.get_commission_cost(filled_qty, is_short, exec_price)
+        
+        # 4. Calculate total cost
+        total_cost = exec_price * filled_qty * 100 + commission
+        
+        return {
+            'filled': True,
+            'filled_quantity': filled_qty,
+            'execution_price': exec_price,
+            'slippage': abs(exec_price - mid_price),
+            'commission': commission,
+            'total_cost': total_cost,
+            'fill_confidence': fill_prob,
+            'remaining_quantity': abs(quantity) - filled_qty
+        }
 
-        # FINRA TAFC fee ($0.00205 per contract for short sales) - MISSING in original
-        finra_fees = num_contracts * 0.00205 if is_short else 0.0
-
-        return commission + sec_fees + occ_fees + finra_fees
-
+# Backward compatibility alias
+ExecutionModel = UnifiedExecutionModel
 
 def calculate_moneyness(strike: float, spot: float) -> float:
     """Calculate moneyness as abs(strike - spot) / spot."""
     return abs(strike - spot) / spot
-
-
-def get_vix_proxy(rv_20: float) -> float:
-    """
-    Simple VIX proxy from 20-day realized vol.
-
-    Typical relationship: VIX ≈ RV * sqrt(252) * 100 * 1.2 (IV premium)
-
-    Parameters:
-    -----------
-    rv_20 : float
-        20-day realized volatility (annualized, as decimal)
-
-    Returns:
-    --------
-    vix_proxy : float
-        VIX proxy (e.g., 20.0 for 20% implied vol)
-    """
-    return rv_20 * 100 * 1.2  # RV to IV with 20% premium

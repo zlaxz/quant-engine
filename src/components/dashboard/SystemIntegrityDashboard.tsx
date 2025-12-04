@@ -30,11 +30,13 @@ import {
   AlertCircle,
   Pause,
   Timer,
+  Zap,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 // ============================================================================
 // Types
@@ -278,6 +280,41 @@ export function SystemIntegrityDashboard({
     return () => clearInterval(interval);
   }, [fetchIntegrity, autoRefreshMs]);
 
+  const runWhiteNoiseTest = async () => {
+    setLoading(true);
+    const toastId = toast.loading('Running White Noise Protocol...');
+
+    try {
+      const response = await fetch('http://localhost:5000/backtest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'sanity_check',
+          strategy_key: 'profile_1',
+          capital: 100000,
+        }),
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('White Noise Check Passed', {
+          id: toastId,
+          description: `Sharpe on noise: ${data.sharpe_on_noise?.toFixed(2) ?? '0.00'} (Expected ~0)`,
+        });
+      } else {
+        toast.error('White Noise Check Failed', {
+          id: toastId,
+          description: data.error || 'Overfit detected',
+        });
+        fetchIntegrity();
+      }
+    } catch (err) {
+      toast.error('Failed to run test', { id: toastId });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRefresh = () => {
     fetchIntegrity();
     onRefresh?.();
@@ -348,6 +385,16 @@ export function SystemIntegrityDashboard({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={runWhiteNoiseTest}
+              disabled={loading}
+              className="h-8 text-xs border-purple-500/50 text-purple-400 hover:bg-purple-500/10"
+            >
+              <Zap className="w-3 h-3 mr-1" />
+              Test
+            </Button>
             <Badge className={cn('font-mono', config.badgeClass)}>
               {overallStatus}
             </Badge>

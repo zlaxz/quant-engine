@@ -110,7 +110,11 @@ def compute_ma_slopes(df: pd.DataFrame, lookback: int = 5) -> pd.DataFrame:
     for col in ['MA20', 'MA50']:
         if col in df.columns:
             ma_prev = df[col].shift(lookback)
-            slope = (df[col] - ma_prev) / ma_prev
+            # Guard against division by zero/NaN
+            with np.errstate(divide='ignore', invalid='ignore'):
+                slope = (df[col] - ma_prev) / ma_prev
+            # Replace inf with NaN for consistent handling
+            slope = slope.replace([np.inf, -np.inf], np.nan)
             df[f'slope_{col}'] = slope
 
     return df
@@ -126,22 +130,29 @@ def compute_price_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
     df = df.copy()
 
-    # Distance from moving averages
-    if 'MA20' in df.columns:
-        df['price_to_MA20'] = df['close'] / df['MA20'] - 1.0
+    # Use np.errstate to handle division by zero/NaN gracefully
+    with np.errstate(divide='ignore', invalid='ignore'):
+        # Distance from moving averages
+        if 'MA20' in df.columns:
+            df['price_to_MA20'] = df['close'] / df['MA20'] - 1.0
 
-    if 'MA50' in df.columns:
-        df['price_to_MA50'] = df['close'] / df['MA50'] - 1.0
+        if 'MA50' in df.columns:
+            df['price_to_MA50'] = df['close'] / df['MA50'] - 1.0
 
-    # N-day returns
-    df['return_5d'] = df['close'] / df['close'].shift(5) - 1.0
-    df['return_10d'] = df['close'] / df['close'].shift(10) - 1.0
-    df['return_20d'] = df['close'] / df['close'].shift(20) - 1.0
+        # N-day returns
+        df['return_5d'] = df['close'] / df['close'].shift(5) - 1.0
+        df['return_10d'] = df['close'] / df['close'].shift(10) - 1.0
+        df['return_20d'] = df['close'] / df['close'].shift(20) - 1.0
 
-    # 10-day range (for compression detection)
-    high_10d = df['high'].rolling(10).max()
-    low_10d = df['low'].rolling(10).min()
-    df['range_10d'] = (high_10d - low_10d) / df['close']
+        # 10-day range (for compression detection)
+        high_10d = df['high'].rolling(10).max()
+        low_10d = df['low'].rolling(10).min()
+        df['range_10d'] = (high_10d - low_10d) / df['close']
+
+    # Replace any inf values with NaN for consistent handling
+    for col in ['price_to_MA20', 'price_to_MA50', 'return_5d', 'return_10d', 'return_20d', 'range_10d']:
+        if col in df.columns:
+            df[col] = df[col].replace([np.inf, -np.inf], np.nan)
 
     return df
 

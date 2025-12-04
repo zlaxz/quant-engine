@@ -66,6 +66,12 @@ export class MemoryScribe {
   private missionChannel: RealtimeChannel | null = null;
   private isWatching = false;
 
+  // Reconnection state
+  private reconnectAttempts = 0;
+  private readonly MAX_RECONNECT_ATTEMPTS = 5;
+  private readonly RECONNECT_DELAY_MS = 5000;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+
   constructor(vaultPath: string = '/Users/zstoc/ObsidianVault') {
     this.mcp = getMCPManager(vaultPath);
   }
@@ -123,6 +129,7 @@ export class MemoryScribe {
         )
         .subscribe((status) => {
           console.log(`[Scribe] Strategy channel status: ${status}`);
+          this.handleChannelStatus(status, 'strategy');
         });
 
       // Subscribe to missions updates
@@ -139,6 +146,7 @@ export class MemoryScribe {
         )
         .subscribe((status) => {
           console.log(`[Scribe] Mission channel status: ${status}`);
+          this.handleChannelStatus(status, 'mission');
         });
 
       this.isWatching = true;
@@ -152,9 +160,64 @@ export class MemoryScribe {
   }
 
   /**
+   * Handle channel status changes for reconnection logic
+   */
+  private handleChannelStatus(status: string, channelType: string): void {
+    if (status === 'SUBSCRIBED') {
+      // Reset reconnect attempts on successful subscription
+      this.reconnectAttempts = 0;
+      console.log(`[Scribe] ${channelType} channel subscribed successfully`);
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      console.error(`[Scribe] ${channelType} channel error: ${status}`);
+      this.scheduleReconnect();
+    }
+  }
+
+  /**
+   * Schedule a reconnection attempt
+   */
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) {
+      return; // Already scheduled
+    }
+
+    if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+      console.error(`[Scribe] Max reconnect attempts (${this.MAX_RECONNECT_ATTEMPTS}) reached. Manual intervention required.`);
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = this.RECONNECT_DELAY_MS * this.reconnectAttempts; // Exponential backoff
+
+    console.log(`[Scribe] Scheduling reconnect attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${delay / 1000}s`);
+
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      console.log('[Scribe] Attempting reconnection...');
+
+      // Stop and restart watching
+      await this.stopWatching();
+      const success = await this.startWatching();
+
+      if (success) {
+        console.log('[Scribe] Reconnection successful');
+      } else {
+        console.error('[Scribe] Reconnection failed');
+        this.scheduleReconnect(); // Try again
+      }
+    }, delay);
+  }
+
+  /**
    * Stop watching for database events
    */
   async stopWatching(): Promise<void> {
+    // Clear any pending reconnect
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     if (this.strategyChannel) {
       await this.supabase?.removeChannel(this.strategyChannel);
       this.strategyChannel = null;

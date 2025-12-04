@@ -27,9 +27,13 @@ import {
   Cpu,
   Zap,
   MessageSquare,
+  PlusCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 // Types
 interface SwarmTask {
@@ -184,6 +188,42 @@ function SwarmHiveMonitorComponent() {
   const [activeJobs, setActiveJobs] = useState<SwarmJob[]>([]);
   const [activeTasks, setActiveTasks] = useState<SwarmTask[]>([]);
   const [findings, setFindings] = useState<AgentFinding[]>([]);
+
+  const [swarmObjectiveInput, setSwarmObjectiveInput] = useState('');
+  const [launchingSwarm, setLaunchingSwarm] = useState(false);
+
+  const launchSwarm = useCallback(async () => {
+    if (!connected || !swarmObjectiveInput.trim()) return;
+
+    setLaunchingSwarm(true);
+    const toastId = toast.loading('Launching swarm...');
+
+    try {
+      const { error: insertError } = await supabase
+        .from('swarm_jobs')
+        .insert({
+          objective: swarmObjectiveInput,
+          mode: 'research', // Default mode for now
+          agent_count: 50, // Default to 50 agents
+          status: 'pending',
+          created_by: 'Gemini CLI', // Or dynamic user ID
+        });
+
+      if (insertError) throw insertError;
+
+      toast.success('Swarm launched successfully!', { id: toastId });
+      setSwarmObjectiveInput('');
+      fetchSwarmData(); // Refresh swarm monitor
+    } catch (err) {
+      console.error('[SwarmHive] Launch swarm failed:', err);
+      toast.error('Failed to launch swarm', {
+        id: toastId,
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setLaunchingSwarm(false);
+    }
+  }, [connected, swarmObjectiveInput, fetchSwarmData]);
 
   // Stats
   const [stats, setStats] = useState({
@@ -405,6 +445,37 @@ function SwarmHiveMonitorComponent() {
             <AlertDescription className="text-xs">{error}</AlertDescription>
           </Alert>
         )}
+
+        {/* Swarm Launch Input */}
+        <div className="p-4 border-b border-gray-800 flex-shrink-0">
+          <div className="flex items-center gap-2 mb-2">
+            <PlusCircle className="h-4 w-4 text-cyan-400" />
+            <span className="text-sm font-medium text-cyan-400">Launch New Swarm</span>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Objective: e.g., 'Audit code for security vulnerabilities'"
+              value={swarmObjectiveInput}
+              onChange={(e) => setSwarmObjectiveInput(e.target.value)}
+              className="flex-1 bg-gray-800/50 border-gray-700 text-cyan-300 placeholder:text-gray-500"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') launchSwarm();
+              }}
+            />
+            <Button
+              onClick={launchSwarm}
+              disabled={!swarmObjectiveInput.trim() || launchingSwarm}
+              className="bg-cyan-600 hover:bg-cyan-700 text-white"
+            >
+              {launchingSwarm ? (
+                <Activity className="h-4 w-4 animate-spin" />
+              ) : (
+                <Zap className="h-4 w-4" />
+              )}
+              <span className="ml-2 hidden sm:inline">Launch</span>
+            </Button>
+          </div>
+        </div>
 
         <div className="flex-1 flex min-h-0">
           {/* Agent Grid */}

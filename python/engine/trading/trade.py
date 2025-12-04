@@ -17,6 +17,26 @@ from .utils import normalize_date
 
 CONTRACT_MULTIPLIER = 100  # SPY options represent 100 shares per contract
 
+# Trade ID registry to ensure uniqueness
+_trade_id_registry: set = set()
+
+
+def validate_trade_id(trade_id: str) -> bool:
+    """Check if trade ID is unique and register it.
+
+    Returns True if ID is new/valid, False if duplicate.
+    """
+    if trade_id in _trade_id_registry:
+        return False
+    _trade_id_registry.add(trade_id)
+    return True
+
+
+def clear_trade_id_registry():
+    """Clear the registry (for testing or new simulation runs)."""
+    global _trade_id_registry
+    _trade_id_registry = set()
+
 
 @dataclass
 class TradeLeg:
@@ -125,22 +145,54 @@ class Trade:
         self.exit_prices = exit_prices
         self.exit_reason = reason
 
-        # Calculate P&L per leg: qty × (exit - entry)
         pnl_legs = 0.0
-        for i, exit_price in exit_prices.items():
-            entry_price = self.entry_prices[i]
-            leg_qty = self.legs[i].quantity
-            pnl_legs += leg_qty * (exit_price - entry_price) * CONTRACT_MULTIPLIER
+        exit_proceeds_calc = 0.0
 
-        # For backward compatibility, also calculate exit_proceeds
-        # exit_proceeds = cash inflow (negative for long closing, positive for short closing)
-        self.exit_proceeds = sum(
-            -self.legs[i].quantity * price * CONTRACT_MULTIPLIER
-            for i, price in exit_prices.items()
-        )
+        if not self.legs:
+            # Legacy/Simple Trade Support
+            pos_size = getattr(self, 'position_size', 0)
+            entry_price = getattr(self, 'entry_price', 0.0)
+            exit_price = exit_prices.get(0, 0.0)
+            
+            pnl_legs = pos_size * (exit_price - entry_price) * CONTRACT_MULTIPLIER
+            exit_proceeds_calc = pos_size * exit_price * CONTRACT_MULTIPLIER
+        else:
+            # Calculate P&L per leg: qty × (exit - entry)
+            for i, exit_price in exit_prices.items():
+                entry_price = self.entry_prices[i]
+                leg_qty = self.legs[i].quantity
+                pnl_legs += leg_qty * (exit_price - entry_price) * CONTRACT_MULTIPLIER
+                
+                # Calculate Proceeds: qty * exit_price
+                # Long (qty>0) -> Sell -> Positive Cash Flow (Receive)
+                # Short (qty<0) -> Buy -> Negative Cash Flow (Pay)
+                exit_proceeds_calc += leg_qty * exit_price * CONTRACT_MULTIPLIER
+
+        self.exit_proceeds = exit_proceeds_calc
 
         # Realized P&L = leg P&L - all costs (commissions + hedging)
         self.realized_pnl = pnl_legs - self.entry_commission - self.exit_commission - self.cumulative_hedge_cost
+
+    @property
+    def return_pct(self) -> float:
+        """Calculate percentage return on the trade.
+
+        Returns:
+        --------
+        float
+            Return as decimal (e.g., 0.25 = 25% profit, -0.10 = 10% loss)
+            Returns 0.0 if entry_cost is zero (avoid division by zero)
+
+        Note:
+        - For credit trades (negative entry_cost), we divide by abs(entry_cost)
+          to get meaningful percentage
+        - Result is net of all commissions and hedge costs
+        """
+        if self.entry_cost == 0:
+            return 0.0
+        # Use abs(entry_cost) since entry_cost sign varies by trade type
+        # (positive for debits/longs, negative for credits/shorts)
+        return self.realized_pnl / abs(self.entry_cost)
 
     def mark_to_market(
         self,

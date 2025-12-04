@@ -48,7 +48,8 @@ def main():
                 }).dropna()
                 resampled.columns = ['close', 'iv']
                 full_history.append(resampled)
-        except:
+        except Exception as e:
+            print(f"[WARN] Failed to load data: {e}", file=sys.stderr)
             continue
             
     if not full_history:

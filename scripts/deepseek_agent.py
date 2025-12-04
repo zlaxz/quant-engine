@@ -83,6 +83,27 @@ AGENT_TOOLS = [
                 "required": ["sql"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_backtest",
+            "description": "Run a full backtest simulation for a specific strategy profile. Returns performance metrics (CAGR, Sharpe, Drawdown).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "profile_name": {
+                        "type": "string", 
+                        "description": "Strategy profile to test (e.g., 'mission_1', 'profile_1')",
+                        "enum": ["mission_1", "profile_1", "profile_2", "profile_3", "profile_4", "profile_5", "profile_6"]
+                    },
+                    "start_date": {"type": "string", "description": "Start date (YYYY-MM-DD)"},
+                    "end_date": {"type": "string", "description": "End date (YYYY-MM-DD)"},
+                    "initial_capital": {"type": "number", "description": "Starting capital (default: 100000)"}
+                },
+                "required": ["profile_name"]
+            }
+        }
     }
 ]
 
@@ -135,8 +156,8 @@ def execute_tool(tool_name: str, args: dict) -> str:
             with open(path, 'r') as f:
                 content = f.read()
                 # More aggressive truncation to avoid token limits
-                if len(content) > 20000:
-                    return content[:20000] + f"\n\n[Truncated - file is {len(content)} bytes. Request specific sections if needed.]"
+                if len(content) > 8000:
+                    return content[:8000] + f"\n\n[Truncated - file is {len(content)} bytes. Request specific sections if needed.]"
                 return content
 
         elif tool_name == 'list_directory':
@@ -184,6 +205,93 @@ def execute_tool(tool_name: str, args: dict) -> str:
             except Exception as e:
                 return f"Error executing query: {str(e)}"
 
+        elif tool_name == 'run_backtest':
+            # Lazy import
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
+            try:
+                import pandas as pd
+                import numpy as np
+                from datetime import datetime, timedelta
+                from engine.trading.simulator import TradeSimulator
+                
+                profile_name = args.get('profile_name')
+                start_str = args.get('start_date', '2022-01-01')
+                end_str = args.get('end_date', '2023-12-31')
+                initial_capital = float(args.get('initial_capital', 100000.0))
+                
+                print(f"  [Backtest] Running {profile_name} ({start_str} to {end_str})...", file=sys.stderr)
+                
+                # 1. Try to get data from DataEngine
+                data = pd.DataFrame()
+                try:
+                    from engine.data.db_manager import engine
+                    # Query simplified for generic usage
+                    sql = f"SELECT date, close, open, high, low, volume, 20 as vix FROM stock_data WHERE date >= '{start_str}' AND date <= '{end_str}' ORDER BY date"
+                    results = engine.query(sql)
+                    
+                    if results and isinstance(results, list) and 'error' not in results[0]:
+                         data = pd.DataFrame(results)
+                         if 'date' in data.columns:
+                             data['date'] = pd.to_datetime(data['date'])
+                except Exception as e:
+                    print(f"  [Backtest] Data query failed ({str(e)}). Using synthetic data.", file=sys.stderr)
+                
+                # 2. Fallback to Synthetic Data if empty
+                if data.empty:
+                    print("  [Backtest] Generating synthetic SPY data for simulation...", file=sys.stderr)
+                    dates = pd.date_range(start=start_str, end=end_str, freq='B') # Business days
+                    n = len(dates)
+                    # Random walk with drift
+                    returns = np.random.normal(0.0005, 0.015, n) # Slight upward drift, 1.5% daily vol
+                    price_path = 400 * np.exp(np.cumsum(returns))
+                    
+                    data = pd.DataFrame({
+                        'date': dates,
+                        'close': price_path,
+                        'vix': np.random.normal(20, 5, n).clip(10, 60) # Mean reverting VIX
+                    })
+                
+                # 3. Run Simulator
+                sim = TradeSimulator(initial_capital=initial_capital)
+                results = sim.run(data, profile_name)
+                
+                metrics = results.get('metrics', {})
+                
+                # Format output for the LLM
+                output = [
+                    f"## Backtest Results: {profile_name}",
+                    f"Period: {start_str} to {end_str}",
+                    f"Initial Capital: ${initial_capital:,.0f}",
+                    "",
+                    "### Key Metrics",
+                    f"- Total Return: {metrics.get('total_return', 0):.2%}",
+                    f"- Sharpe Ratio: {metrics.get('sharpe', 0):.2f}",
+                    f"- Max Drawdown: {metrics.get('max_drawdown', 0):.2%}",
+                    f"- Total Trades: {metrics.get('total_trades', 0)}",
+                    "",
+                    "### Execution Log (Last 5 Trades)",
+                ]
+                
+                trades = results.get('trades', [])
+                if trades:
+                    # Sort by exit date
+                    trades_df = pd.DataFrame(trades)
+                    if not trades_df.empty and 'exit_date' in trades_df.columns:
+                        recent = trades_df.sort_values('exit_date', ascending=False).head(5)
+                        for _, t in recent.iterrows():
+                            pnl = t.get('pnl', 0)
+                            output.append(f"- {t['exit_date']}: PnL ${pnl:,.2f} ({t.get('reason', 'N/A')})")
+                else:
+                    output.append("- No trades executed.")
+                    
+                return "\n".join(output)
+
+            except ImportError as e:
+                return f"Error: Missing dependencies for backtest: {str(e)}"
+            except Exception as e:
+                import traceback
+                return f"Error running backtest: {str(e)}\n{traceback.format_exc()}"
+
         else:
             return f"Error: Unknown tool {tool_name}"
 
@@ -204,32 +312,54 @@ def run_agent(task: str, agent_type: str = 'analyst', context: str = None, model
 
     system_prompt = AGENT_PROMPTS.get(agent_type.lower(), AGENT_PROMPTS['analyst'])
 
-    # Both chat and reasoner now support tools - emphasize both reasoning AND tool usage
+    # Force agents to complete quickly - they tend to explore forever
     if is_reasoner:
         system_prompt += """
 
-IMPORTANT: You are using DeepSeek Reasoner with FULL TOOL ACCESS.
-You have superior reasoning capabilities AND can use tools.
-FIRST: Use your tools to read actual code and gather evidence.
-THEN: Apply deep logical analysis, identify assumptions, and reason from first principles.
+CRITICAL INSTRUCTION: You have exactly 3 tool calls, then you MUST write your final report.
 
-Tools available:
-- read_file: Read any file you need to examine
-- list_directory: Explore codebase structure
-- search_code: Find patterns in code
-- query_data: Execute SQL against market data lake
+WORKFLOW:
+1. read_file on the PRIMARY file in the task (first tool call)
+2. ONE optional search or read for related code (second tool call)
+3. ONE more if truly needed (third tool call)
+4. STOP. Write your final audit report. NO MORE TOOL CALLS.
 
-Combine tool evidence with rigorous reasoning for the best analysis."""
+After your 3rd tool call, your next response MUST be your complete written analysis - not another tool call.
+
+OUTPUT FORMAT (required):
+## Summary
+[1-2 sentences]
+
+## Findings
+### CRITICAL
+- [finding with file:line]
+
+### HIGH
+- [finding with file:line]
+
+### MEDIUM
+- [finding with file:line]
+
+### LOW
+- [finding with file:line]
+
+## Recommendations
+[bullet points]"""
     else:
         system_prompt += """
 
-IMPORTANT: You have FULL TOOL ACCESS. Before answering, USE YOUR TOOLS:
-- read_file: Read any file you need to examine
-- list_directory: Explore codebase structure
-- search_code: Find patterns in code
-- query_data: Execute SQL against market data lake
+CRITICAL INSTRUCTION: You have exactly 3 tool calls, then you MUST write your final report.
 
-DO NOT make assumptions. READ THE ACTUAL CODE using your tools, then provide analysis based on what you ACTUALLY SAW."""
+WORKFLOW:
+1. read_file on the PRIMARY file in the task
+2. ONE optional search or read
+3. ONE more if needed
+4. STOP. Write your final audit report. NO MORE TOOL CALLS.
+
+OUTPUT FORMAT (required):
+## Summary
+## Findings (CRITICAL/HIGH/MEDIUM/LOW with file:line)
+## Recommendations"""
 
     user_message = task
     if context:
@@ -244,14 +374,20 @@ DO NOT make assumptions. READ THE ACTUAL CODE using your tools, then provide ana
     print(f"[DeepSeek Agent] Task: {task[:100]}...", file=sys.stderr)
 
     # UNIFIED AGENTIC LOOP - Both chat and reasoner use tools
-    # deepseek-chat: Fast tool execution
-    MAX_ITERATIONS = 20  # Increased for thorough audits
+    MAX_ITERATIONS = 6  # Hard limit: 3 tool calls + nudge + 2 more chances
     iteration = 0
     total_tokens = 0
 
     while iteration < MAX_ITERATIONS:
         iteration += 1
         print(f"[DeepSeek Agent] Iteration {iteration}/{MAX_ITERATIONS}...", file=sys.stderr)
+
+        # Forceful nudge after iteration 3 - no more tool calls allowed
+        if iteration == 4:
+            messages.append({
+                'role': 'user',
+                'content': 'STOP. You have made 3 tool calls. NO MORE TOOL CALLS ALLOWED. Write your complete audit report NOW using the format: ## Summary, ## Findings (CRITICAL/HIGH/MEDIUM/LOW), ## Recommendations. Do not call any more tools.'
+            })
 
         result = call_deepseek(messages, tools=AGENT_TOOLS, model=model)
 

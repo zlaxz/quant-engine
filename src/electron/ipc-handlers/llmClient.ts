@@ -344,8 +344,14 @@ export function registerLlmHandlers() {
     let routingDecisionId: string | null = null;
 
     try {
+      // Pre-filter empty content messages before validation
+      // This handles cases where tool results or streaming left empty content
+      const filteredMessages = Array.isArray(messagesRaw)
+        ? messagesRaw.filter((m: any) => m?.content && String(m.content).trim().length > 0)
+        : messagesRaw;
+
       // Validate messages at IPC boundary
-      const messages = validateIPC(ChatMessagesSchema, messagesRaw, 'chat messages');
+      const messages = validateIPC(ChatMessagesSchema, filteredMessages, 'chat messages');
 
       // Make routing decision for transparency
       const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';

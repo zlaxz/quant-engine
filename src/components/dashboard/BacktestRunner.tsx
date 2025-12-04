@@ -209,6 +209,29 @@ function BacktestRunnerComponent() {
     }));
   }, []);
 
+  const handleStrategyChange = useCallback((v: string) => {
+    setConfig((prev) => ({ ...prev, strategyId: v }));
+  }, []);
+
+  const handleStartDateChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setConfig((prev) => ({ ...prev, startDate: e.target.value }));
+  }, []);
+
+  const handleEndDateChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setConfig((prev) => ({ ...prev, endDate: e.target.value }));
+  }, []);
+
+  const handleCapitalChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setConfig((prev) => ({
+      ...prev,
+      initialCapital: parseInt(e.target.value) || 0,
+    }));
+  }, []);
+
+  const handleSlippageChange = useCallback((v: 'zero' | 'realistic' | 'conservative') => {
+    setConfig((prev) => ({ ...prev, slippageModel: v }));
+  }, []);
+
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-2 flex-shrink-0">
@@ -225,7 +248,7 @@ function BacktestRunnerComponent() {
               <Label>Strategy</Label>
               <Select
                 value={config.strategyId}
-                onValueChange={(v) => setConfig((prev) => ({ ...prev, strategyId: v }))}
+                onValueChange={handleStrategyChange}
                 disabled={running}
               >
                 <SelectTrigger>
@@ -248,9 +271,7 @@ function BacktestRunnerComponent() {
                 <Input
                   type="date"
                   value={config.startDate}
-                  onChange={(e) =>
-                    setConfig((prev) => ({ ...prev, startDate: e.target.value }))
-                  }
+                  onChange={handleStartDateChange}
                   disabled={running}
                 />
               </div>
@@ -259,9 +280,7 @@ function BacktestRunnerComponent() {
                 <Input
                   type="date"
                   value={config.endDate}
-                  onChange={(e) =>
-                    setConfig((prev) => ({ ...prev, endDate: e.target.value }))
-                  }
+                  onChange={handleEndDateChange}
                   disabled={running}
                 />
               </div>
@@ -273,12 +292,7 @@ function BacktestRunnerComponent() {
               <Input
                 type="number"
                 value={config.initialCapital}
-                onChange={(e) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    initialCapital: parseInt(e.target.value) || 0,
-                  }))
-                }
+                onChange={handleCapitalChange}
                 disabled={running}
               />
             </div>
@@ -288,9 +302,7 @@ function BacktestRunnerComponent() {
               <Label>Slippage Model</Label>
               <Select
                 value={config.slippageModel}
-                onValueChange={(v: 'zero' | 'realistic' | 'conservative') =>
-                  setConfig((prev) => ({ ...prev, slippageModel: v }))
-                }
+                onValueChange={handleSlippageChange}
                 disabled={running}
               >
                 <SelectTrigger>
