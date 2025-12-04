@@ -97,12 +97,24 @@ class StructureDNA:
     wing_width_pct: float = 0.10         # Distance to wing strikes (condors/butterflies)
     back_month_offset: int = 30          # Additional DTE for calendar/diagonal back leg
 
-    # Entry conditions
+    # Entry conditions (Stock Regimes)
     entry_regimes: List[int] = field(default_factory=lambda: [0, 1, 2, 3])
+    
+    # Entry conditions (Stock Volatility)
     min_iv_rank: float = 0.0             # Minimum IV rank (0-1)
     max_iv_rank: float = 1.0             # Maximum IV rank
     min_vix: float = 0.0                 # Minimum VIX level
     max_vix: float = 100.0               # Maximum VIX level
+
+    # Entry conditions (Options Market State)
+    min_atm_cost: float = 0.0            # Min ATM Straddle Cost % (e.g. 0.01 = 1%)
+    max_atm_cost: float = 1.0            # Max ATM Straddle Cost %
+    min_skew: float = -1.0               # Min 25D Skew (Put - Call)
+    max_skew: float = 1.0                # Max 25D Skew
+    min_term_struct: float = -1.0        # Min Term Structure (Back - Front IV)
+    max_term_struct: float = 1.0         # Max Term Structure
+    min_vol_pcr: float = 0.0             # Min Volume Put/Call Ratio
+    max_vol_pcr: float = 100.0           # Max Volume PCR
 
     # Exit conditions
     profit_target_pct: float = 0.50      # Exit at 50% profit
@@ -211,6 +223,14 @@ class StructureDNA:
             'max_iv_rank': self.max_iv_rank,
             'min_vix': self.min_vix,
             'max_vix': self.max_vix,
+            'min_atm_cost': self.min_atm_cost,
+            'max_atm_cost': self.max_atm_cost,
+            'min_skew': self.min_skew,
+            'max_skew': self.max_skew,
+            'min_term_struct': self.min_term_struct,
+            'max_term_struct': self.max_term_struct,
+            'min_vol_pcr': self.min_vol_pcr,
+            'max_vol_pcr': self.max_vol_pcr,
             'profit_target_pct': self.profit_target_pct,
             'stop_loss_pct': self.stop_loss_pct,
             'dte_exit_threshold': self.dte_exit_threshold,
@@ -234,6 +254,14 @@ class StructureDNA:
             max_iv_rank=d.get('max_iv_rank', 1.0),
             min_vix=d.get('min_vix', 0.0),
             max_vix=d.get('max_vix', 100.0),
+            min_atm_cost=d.get('min_atm_cost', 0.0),
+            max_atm_cost=d.get('max_atm_cost', 1.0),
+            min_skew=d.get('min_skew', -1.0),
+            max_skew=d.get('max_skew', 1.0),
+            min_term_struct=d.get('min_term_struct', -1.0),
+            max_term_struct=d.get('max_term_struct', 1.0),
+            min_vol_pcr=d.get('min_vol_pcr', 0.0),
+            max_vol_pcr=d.get('max_vol_pcr', 100.0),
             profit_target_pct=d.get('profit_target_pct', 0.50),
             stop_loss_pct=d.get('stop_loss_pct', 1.00),
             dte_exit_threshold=d.get('dte_exit_threshold', 7),
@@ -259,6 +287,13 @@ def create_random_dna() -> StructureDNA:
         entry_regimes=random.sample([0, 1, 2, 3], k=random.randint(1, 4)),
         min_iv_rank=random.uniform(0.0, 0.5),
         max_iv_rank=random.uniform(0.5, 1.0),
+        # Random options filters (relaxed by default)
+        min_atm_cost=random.choice([0.0, random.uniform(0.0, 0.02)]),
+        max_atm_cost=random.choice([1.0, random.uniform(0.02, 0.10)]),
+        min_skew=random.choice([-1.0, random.uniform(-0.1, 0.0)]),
+        max_skew=random.choice([1.0, random.uniform(0.0, 0.1)]),
+        min_term_struct=random.choice([-1.0, random.uniform(-0.05, 0.0)]),
+        max_term_struct=random.choice([1.0, random.uniform(0.0, 0.05)]),
         profit_target_pct=random.uniform(0.20, 1.00),
         stop_loss_pct=random.uniform(0.50, 2.00),
         dte_exit_threshold=random.choice([3, 5, 7, 10, 14]),
@@ -316,6 +351,28 @@ def mutate_dna(dna: StructureDNA, mutation_rate: float = 0.1) -> StructureDNA:
         new.min_iv_rank = np.clip(new.min_iv_rank + random.gauss(0, 0.1), 0, 0.9)
     if random.random() < mutation_rate:
         new.max_iv_rank = np.clip(new.max_iv_rank + random.gauss(0, 0.1), new.min_iv_rank + 0.1, 1.0)
+    
+    # Options Features Mutation
+    if random.random() < mutation_rate:
+        new.min_atm_cost = np.clip(new.min_atm_cost + random.gauss(0, 0.005), 0.0, 0.1)
+    if random.random() < mutation_rate:
+        new.max_atm_cost = np.clip(new.max_atm_cost + random.gauss(0, 0.005), new.min_atm_cost, 1.0)
+    
+    if random.random() < mutation_rate:
+        new.min_skew = np.clip(new.min_skew + random.gauss(0, 0.01), -0.5, 0.5)
+    if random.random() < mutation_rate:
+        new.max_skew = np.clip(new.max_skew + random.gauss(0, 0.01), new.min_skew, 0.5)
+
+    if random.random() < mutation_rate:
+        new.min_term_struct = np.clip(new.min_term_struct + random.gauss(0, 0.01), -0.2, 0.2)
+    if random.random() < mutation_rate:
+        new.max_term_struct = np.clip(new.max_term_struct + random.gauss(0, 0.01), new.min_term_struct, 0.2)
+
+    # Volume PCR mutation
+    if random.random() < mutation_rate:
+        new.min_vol_pcr = np.clip(new.min_vol_pcr + random.gauss(0, 0.1), 0.0, 5.0)
+    if random.random() < mutation_rate:
+        new.max_vol_pcr = np.clip(new.max_vol_pcr + random.gauss(0, 0.2), new.min_vol_pcr, 10.0)
 
     # Exit parameters
     if random.random() < mutation_rate:
@@ -349,6 +406,18 @@ def crossover_dna(parent1: StructureDNA, parent2: StructureDNA) -> StructureDNA:
         entry_regimes=random.choice([parent1.entry_regimes[:], parent2.entry_regimes[:]]),
         min_iv_rank=random.choice([parent1.min_iv_rank, parent2.min_iv_rank]),
         max_iv_rank=random.choice([parent1.max_iv_rank, parent2.max_iv_rank]),
+        min_vix=random.choice([parent1.min_vix, parent2.min_vix]),
+        max_vix=random.choice([parent1.max_vix, parent2.max_vix]),
+        # New Options Genes
+        min_atm_cost=random.choice([parent1.min_atm_cost, parent2.min_atm_cost]),
+        max_atm_cost=random.choice([parent1.max_atm_cost, parent2.max_atm_cost]),
+        min_skew=random.choice([parent1.min_skew, parent2.min_skew]),
+        max_skew=random.choice([parent1.max_skew, parent2.max_skew]),
+        min_term_struct=random.choice([parent1.min_term_struct, parent2.min_term_struct]),
+        max_term_struct=random.choice([parent1.max_term_struct, parent2.max_term_struct]),
+        min_vol_pcr=random.choice([parent1.min_vol_pcr, parent2.min_vol_pcr]),
+        max_vol_pcr=random.choice([parent1.max_vol_pcr, parent2.max_vol_pcr]),
+        # Exits
         profit_target_pct=random.choice([parent1.profit_target_pct, parent2.profit_target_pct]),
         stop_loss_pct=random.choice([parent1.stop_loss_pct, parent2.stop_loss_pct]),
         dte_exit_threshold=random.choice([parent1.dte_exit_threshold, parent2.dte_exit_threshold]),

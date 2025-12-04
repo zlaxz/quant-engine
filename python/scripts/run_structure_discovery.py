@@ -64,6 +64,7 @@ DEFAULT_PATHS = {
     'options_dir': Path('/Volumes/VelocityData/velocity_om/massive/options'),
     'stock_data': Path('/Volumes/VelocityData/velocity_om/features/SPY_master_features.parquet'),
     'regimes': Path('/Volumes/VelocityData/velocity_om/features/SPY/regime_assignments.parquet'),
+    'options_features': Path('/Volumes/VelocityData/velocity_om/features/SPY_options_features.parquet'),
     'surface_dir': Path('/Volumes/VelocityData/velocity_om/payoff_surfaces'),
     'output_dir': Path('/Volumes/VelocityData/velocity_om/discovered_structures'),
 }
@@ -128,6 +129,7 @@ def run_discovery(
     surface_path: Path,
     regime_path: Path,
     output_dir: Path,
+    options_features_path: Path = None,
     population_size: int = 100,
     n_generations: int = 50,
     walk_forward: bool = False,
@@ -144,9 +146,15 @@ def run_discovery(
 
     # Initialize backtester
     logger.info("Loading payoff surface...")
+    if options_features_path and options_features_path.exists():
+        logger.info(f"Using Hybrid Model with options features: {options_features_path}")
+    else:
+        logger.warning("Running in Stock-Regime ONLY mode (no options features)")
+
     backtester = FastBacktester(
         surface_path=surface_path,
-        regime_path=regime_path
+        regime_path=regime_path,
+        options_features_path=options_features_path
     )
 
     # Configure evolution
@@ -210,6 +218,8 @@ def save_discovered_structures(
             'dte': dna.dte_bucket.value,
             'delta': dna.delta_bucket.value,
             'entry_regimes': str(dna.entry_regimes),
+            'min_atm_cost': dna.min_atm_cost,
+            'min_skew': dna.min_skew,
             'profit_target': dna.profit_target_pct,
             'stop_loss': dna.stop_loss_pct,
             'fitness': dna.fitness_score,
@@ -235,7 +245,8 @@ def save_discovered_structures(
 
 def run_baseline_check(
     surface_path: Path,
-    regime_path: Path
+    regime_path: Path,
+    options_features_path: Path = None
 ):
     """
     Quick check: how do seed structures perform?
@@ -246,9 +257,13 @@ def run_baseline_check(
     logger.info("BASELINE CHECK: Testing Seed Structures")
     logger.info("=" * 60)
 
+    if options_features_path and options_features_path.exists():
+        logger.info(f"Using Hybrid Model with options features: {options_features_path}")
+    
     backtester = FastBacktester(
         surface_path=surface_path,
-        regime_path=regime_path
+        regime_path=regime_path,
+        options_features_path=options_features_path
     )
 
     seeds = get_seed_structures()
@@ -311,6 +326,9 @@ def main():
     parser.add_argument('--regimes', type=str,
                         default=str(DEFAULT_PATHS['regimes']),
                         help='Path to regime assignments parquet')
+    parser.add_argument('--options-features', type=str,
+                        default=str(DEFAULT_PATHS['options_features']),
+                        help='Path to options features parquet (for hybrid model)')
     parser.add_argument('--surface-dir', type=str,
                         default=str(DEFAULT_PATHS['surface_dir']),
                         help='Directory for payoff surfaces')
@@ -353,6 +371,7 @@ def main():
     options_dir = Path(args.options_dir)
     stock_data = Path(args.stock_data)
     regime_path = Path(args.regimes)
+    options_features_path = Path(args.options_features)
     surface_dir = Path(args.surface_dir)
     output_dir = Path(args.output_dir)
 
@@ -381,7 +400,7 @@ def main():
 
         if args.baseline:
             # Quick baseline check
-            run_baseline_check(surface_path, regime_path)
+            run_baseline_check(surface_path, regime_path, options_features_path)
             return
 
         if args.discover or args.full:
@@ -395,6 +414,7 @@ def main():
                 surface_path=surface_path,
                 regime_path=regime_path,
                 output_dir=output_dir,
+                options_features_path=options_features_path,
                 population_size=args.population,
                 n_generations=args.generations,
                 walk_forward=args.walk_forward,

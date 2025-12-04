@@ -122,6 +122,7 @@ class FastBacktester:
         regime_path: Path,
         vix_path: Optional[Path] = None,
         iv_rank_path: Optional[Path] = None,
+        options_features_path: Optional[Path] = None,
     ):
         """
         Initialize backtester.
@@ -131,6 +132,7 @@ class FastBacktester:
             regime_path: Path to regime assignments parquet
             vix_path: Optional path to VIX data
             iv_rank_path: Optional path to IV rank data
+            options_features_path: Optional path to options features (hybrid model)
         """
         self.surface_path = Path(surface_path)
         self.regime_path = Path(regime_path)
@@ -146,6 +148,7 @@ class FastBacktester:
         # Load optional data
         self.vix = self._load_vix(vix_path) if vix_path else None
         self.iv_rank = self._load_iv_rank(iv_rank_path) if iv_rank_path else None
+        self.options_features = self._load_options_features(options_features_path) if options_features_path else None
 
         # Align dates
         self.trading_dates = self.lookup.wide.index.intersection(self.regimes.index)
@@ -180,6 +183,18 @@ class FastBacktester:
             logger.warning(f"Could not load IV rank: {e}")
             return None
 
+    def _load_options_features(self, path: Path) -> Optional[pd.DataFrame]:
+        """Load options features for hybrid filtering."""
+        try:
+            df = pd.read_parquet(path)
+            df['date'] = pd.to_datetime(df.get('timestamp', df.get('date')))
+            df = df.set_index('date')
+            logger.info(f"Loaded options features: {len(df)} rows")
+            return df
+        except Exception as e:
+            logger.warning(f"Could not load options features: {e}")
+            return None
+
     def _get_entry_mask(self, dna: StructureDNA) -> pd.Series:
         """
         Get boolean mask for valid entry dates.
@@ -188,6 +203,7 @@ class FastBacktester:
         - Regime filter
         - VIX filter (if configured)
         - IV rank filter (if configured)
+        - Options feature filters (if configured)
         """
         # Start with all dates
         mask = pd.Series(True, index=self.trading_dates)
@@ -205,6 +221,30 @@ class FastBacktester:
         if self.iv_rank is not None:
             ivr_vals = self.iv_rank.reindex(self.trading_dates)
             mask &= (ivr_vals >= dna.min_iv_rank) & (ivr_vals <= dna.max_iv_rank)
+
+        # Options Features Filter (Hybrid Model)
+        if self.options_features is not None:
+            feats = self.options_features.reindex(self.trading_dates)
+            
+            # ATM Cost
+            if 'atm_cost_pct' in feats.columns:
+                mask &= (feats['atm_cost_pct'] >= dna.min_atm_cost) & \
+                        (feats['atm_cost_pct'] <= dna.max_atm_cost)
+            
+            # Skew
+            if 'skew_25d' in feats.columns:
+                mask &= (feats['skew_25d'] >= dna.min_skew) & \
+                        (feats['skew_25d'] <= dna.max_skew)
+            
+            # Term Structure
+            if 'term_structure' in feats.columns:
+                mask &= (feats['term_structure'] >= dna.min_term_struct) & \
+                        (feats['term_structure'] <= dna.max_term_struct)
+            
+            # PCR
+            if 'vol_pcr' in feats.columns:
+                mask &= (feats['vol_pcr'] >= dna.min_vol_pcr) & \
+                        (feats['vol_pcr'] <= dna.max_vol_pcr)
 
         return mask.fillna(False)
 
