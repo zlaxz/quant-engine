@@ -35,7 +35,216 @@ import traceback
 import hashlib
 import importlib.util
 import tempfile
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time, timezone
+
+# Timezone-aware "now" for consistent timestamps (avoids DST bugs)
+def utc_now() -> datetime:
+    """Get current time as timezone-aware UTC datetime."""
+    return datetime.now(timezone.utc)
+
+def eastern_now() -> datetime:
+    """Get current time in US/Eastern (market hours timezone)."""
+    try:
+        import pytz
+        eastern = pytz.timezone('America/New_York')
+        return datetime.now(eastern)
+    except ImportError:
+        # Fallback to UTC if pytz not available
+        return utc_now()
+
+
+# ============================================================================
+# MARKET CALENDAR - NYSE holidays, early closes, trading hours
+# ============================================================================
+
+# Global market calendar instance (lazy-loaded)
+_market_calendar = None
+
+def get_market_calendar():
+    """Get NYSE market calendar (lazy-loaded singleton)."""
+    global _market_calendar
+    if _market_calendar is None:
+        try:
+            import pandas_market_calendars as mcal
+            _market_calendar = mcal.get_calendar('NYSE')
+        except ImportError:
+            logger.warning("pandas-market-calendars not installed - market hours checks disabled")
+            return None
+    return _market_calendar
+
+
+def is_market_open(dt: Optional[datetime] = None) -> bool:
+    """
+    Check if the market is currently open.
+
+    Uses NYSE calendar to account for:
+    - Weekends
+    - NYSE holidays (New Year's, MLK Day, Presidents Day, Good Friday,
+      Memorial Day, Juneteenth, July 4th, Labor Day, Thanksgiving, Christmas)
+    - Early closes (day before Thanksgiving, Christmas Eve, etc.)
+
+    Args:
+        dt: Datetime to check (default: now in Eastern time)
+
+    Returns:
+        True if market is open, False otherwise
+    """
+    cal = get_market_calendar()
+    if cal is None:
+        # Fallback to simple weekday check if calendar not available
+        now = dt or eastern_now()
+        if now.weekday() >= 5:  # Weekend
+            return False
+        hour = now.hour
+        minute = now.minute
+        time_value = hour * 60 + minute
+        return 9 * 60 + 30 <= time_value < 16 * 60  # 9:30 AM - 4:00 PM
+
+    now = dt or eastern_now()
+    date_str = now.strftime('%Y-%m-%d')
+
+    # Check if today is a trading day
+    schedule = cal.schedule(start_date=date_str, end_date=date_str)
+    if schedule.empty:
+        return False  # Holiday or weekend
+
+    # Check if we're within trading hours
+    market_open = schedule['market_open'].iloc[0]
+    market_close = schedule['market_close'].iloc[0]
+
+    # Convert to timezone-aware for comparison
+    now_utc = now.astimezone(timezone.utc) if now.tzinfo else now.replace(tzinfo=timezone.utc)
+    return market_open <= now_utc <= market_close
+
+
+def get_market_close_time(dt: Optional[datetime] = None) -> Optional[datetime]:
+    """
+    Get market close time for a given day.
+
+    Useful for detecting early close days (1:00 PM close instead of 4:00 PM).
+
+    Args:
+        dt: Date to check (default: today)
+
+    Returns:
+        Market close datetime, or None if not a trading day
+    """
+    cal = get_market_calendar()
+    if cal is None:
+        return None
+
+    now = dt or eastern_now()
+    date_str = now.strftime('%Y-%m-%d')
+
+    schedule = cal.schedule(start_date=date_str, end_date=date_str)
+    if schedule.empty:
+        return None
+
+    return schedule['market_close'].iloc[0].to_pydatetime()
+
+
+def is_trading_day(dt: Optional[datetime] = None) -> bool:
+    """
+    Check if a given date is a trading day (market is open at some point).
+
+    Args:
+        dt: Date to check (default: today)
+
+    Returns:
+        True if market is open at any point that day, False otherwise
+    """
+    cal = get_market_calendar()
+    if cal is None:
+        # Fallback to weekday check
+        now = dt or eastern_now()
+        return now.weekday() < 5
+
+    now = dt or eastern_now()
+    date_str = now.strftime('%Y-%m-%d')
+
+    schedule = cal.schedule(start_date=date_str, end_date=date_str)
+    return not schedule.empty
+
+
+# ============================================================================
+# SUPABASE HELPERS - Timeouts, retries, and error handling
+# ============================================================================
+
+DB_TIMEOUT_SECONDS = 10.0  # Default timeout for database operations
+DB_MAX_RETRIES = 3  # Number of retry attempts for transient failures
+
+
+async def db_execute_with_timeout(operation, timeout: float = DB_TIMEOUT_SECONDS, description: str = "DB operation"):
+    """
+    Execute a Supabase operation with timeout protection.
+
+    Wraps synchronous Supabase client calls in asyncio.to_thread with timeout.
+    Prevents database hangs from freezing the event loop.
+
+    Args:
+        operation: Callable that returns a Supabase response (e.g., lambda: client.table(...).execute())
+        timeout: Maximum time to wait in seconds
+        description: Human-readable description for error messages
+
+    Returns:
+        The result of operation(), or raises TimeoutError/Exception
+
+    Example:
+        result = await db_execute_with_timeout(
+            lambda: supabase.table('positions').select('*').execute(),
+            description="fetch positions"
+        )
+    """
+    try:
+        result = await asyncio.wait_for(
+            asyncio.get_event_loop().run_in_executor(None, operation),
+            timeout=timeout
+        )
+        return result
+    except asyncio.TimeoutError:
+        logger.error(f"⏱️ Database timeout ({timeout}s) for: {description}")
+        raise
+    except Exception as e:
+        logger.error(f"❌ Database error for {description}: {e}")
+        raise
+
+
+async def db_execute_with_retry(
+    operation,
+    timeout: float = DB_TIMEOUT_SECONDS,
+    max_retries: int = DB_MAX_RETRIES,
+    description: str = "DB operation"
+):
+    """
+    Execute a Supabase operation with timeout and exponential backoff retry.
+
+    Use for critical operations that should survive transient failures.
+
+    Args:
+        operation: Callable that returns a Supabase response
+        timeout: Maximum time per attempt
+        max_retries: Maximum number of attempts
+        description: Human-readable description for error messages
+
+    Returns:
+        The result of operation(), or raises after max_retries failures
+    """
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return await db_execute_with_timeout(operation, timeout, description)
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                wait_time = (2 ** attempt) + random.uniform(0, 1)  # Exponential backoff with jitter
+                logger.warning(f"⚠️ {description} failed (attempt {attempt + 1}/{max_retries}), retrying in {wait_time:.1f}s: {e}")
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error(f"❌ {description} failed after {max_retries} attempts: {e}")
+
+    raise last_error
+
+
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass, field
@@ -45,11 +254,28 @@ import re
 
 import random
 import requests
+import aiohttp  # Non-blocking HTTP for async contexts
 import numpy as np
 import pandas as pd
 import polars as pl
 from supabase import create_client, Client
 from enum import Enum
+
+# Discovery module for autonomous market scanning
+try:
+    from engine.discovery import MorphologyScanner, scan_for_opportunities
+    DISCOVERY_AVAILABLE = True
+except ImportError:
+    DISCOVERY_AVAILABLE = False
+    logger.warning("Discovery module not available - autonomous mission creation disabled")
+
+# ============================================================================
+# REPRODUCIBILITY - Seed all random number generators
+# ============================================================================
+# Use environment variable for seed, with default for reproducible backtests
+RANDOM_SEED = int(os.environ.get('RANDOM_SEED', 42))
+random.seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
 
 
 # ============================================================================
@@ -58,37 +284,38 @@ from enum import Enum
 
 def send_telegram_alert(title: str, message: str, priority: str = 'normal') -> bool:
     """
-    Send push notification to user's phone via Telegram.
-    
+    Send push notification to user's phone via Telegram (BLOCKING VERSION).
+    Use send_telegram_alert_async in async contexts to avoid blocking event loop.
+
     Reads credentials from environment variables:
     - TELEGRAM_BOT_TOKEN: Bot token from @BotFather
     - TELEGRAM_CHAT_ID: User's chat ID from @userinfobot
-    
+
     Args:
         title: Alert title/headline
         message: Alert body text
         priority: 'normal', 'high', or 'critical' (adds emoji prefix)
-    
+
     Returns:
         True if sent successfully, False otherwise
     """
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    
+
     if not bot_token or not chat_id:
         logger.warning("Telegram credentials not set. Skipping alert.")
         return False
-    
+
     # Add priority emoji prefix
     prefix = {
         'critical': '🚨 ',
         'high': '⚠️ ',
         'normal': '📊 '
     }.get(priority, '📊 ')
-    
+
     # Format message
     full_message = f"{prefix}<b>{title}</b>\n\n{message}"
-    
+
     try:
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         response = requests.post(url, json={
@@ -97,14 +324,68 @@ def send_telegram_alert(title: str, message: str, priority: str = 'normal') -> b
             "parse_mode": "HTML",
             "disable_notification": priority == 'normal'
         }, timeout=10)
-        
+
         if response.ok:
             logger.info(f"Telegram alert sent: {title}")
             return True
         else:
             logger.error(f"Telegram API error: {response.text}")
             return False
-            
+
+    except Exception as e:
+        logger.error(f"Failed to send Telegram alert: {e}")
+        return False
+
+
+async def send_telegram_alert_async(title: str, message: str, priority: str = 'normal') -> bool:
+    """
+    Send push notification to user's phone via Telegram (ASYNC VERSION).
+    Use this in async functions to avoid blocking the event loop.
+
+    Args:
+        title: Alert title/headline
+        message: Alert body text
+        priority: 'normal', 'high', or 'critical' (adds emoji prefix)
+
+    Returns:
+        True if sent successfully, False otherwise
+    """
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+    if not bot_token or not chat_id:
+        logger.warning("Telegram credentials not set. Skipping alert.")
+        return False
+
+    # Add priority emoji prefix
+    prefix = {
+        'critical': '🚨 ',
+        'high': '⚠️ ',
+        'normal': '📊 '
+    }.get(priority, '📊 ')
+
+    full_message = f"{prefix}<b>{title}</b>\n\n{message}"
+
+    try:
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url,
+                json={
+                    "chat_id": chat_id,
+                    "text": full_message,
+                    "parse_mode": "HTML",
+                    "disable_notification": priority == 'normal'
+                },
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status == 200:
+                    logger.info(f"Telegram alert sent: {title}")
+                    return True
+                else:
+                    text = await response.text()
+                    logger.error(f"Telegram API error: {text}")
+                    return False
     except Exception as e:
         logger.error(f"Failed to send Telegram alert: {e}")
         return False
@@ -177,6 +458,7 @@ class DaemonConfig:
     harvest_interval: int = 300   # 5 minutes
     execute_interval: int = 600   # 10 minutes
     publish_interval: int = 86400 # 24 hours (daily)
+    discovery_interval: int = 1800  # 30 minutes - autonomous market scanning
 
     # Briefing settings
     publish_hour: int = 6  # 6 AM local time
@@ -687,7 +969,7 @@ class ShadowTrader:
         self._running = False
         self._positions: Dict[str, ShadowPosition] = {}  # position_id -> position
         self._strategy_positions: Dict[str, List[str]] = {}  # strategy_id -> [position_ids]
-        self._pending_signals: asyncio.Queue = asyncio.Queue()
+        self._pending_signals: asyncio.Queue = asyncio.Queue(maxsize=1000)  # Bounded to prevent memory exhaustion
         self._last_quotes: Dict[str, 'QuoteTick'] = {}
         self._current_regime: str = RegimeType.LOW_VOL_GRIND
 
@@ -696,6 +978,14 @@ class ShadowTrader:
         self._loaded_strategies: Dict[str, Any] = {}  # strategy_id -> loaded instance
         self._last_signals: Dict[str, int] = {}  # strategy_id -> last signal (0, 1, -1)
         self._strategy_symbols: Dict[str, str] = {}  # strategy_id -> symbol
+        self._signal_cooldowns: Dict[str, datetime] = {}  # strategy_id -> last signal time (debouncing)
+        self._strategy_last_used: Dict[str, datetime] = {}  # strategy_id -> last execution time (for cleanup)
+
+        # Locks for thread-safe access to shared state (prevents race conditions)
+        self._positions_lock = asyncio.Lock()
+        self._quotes_lock = asyncio.Lock()
+        self._strategies_lock = asyncio.Lock()
+        self._signals_lock = asyncio.Lock()  # For atomic signal read-compare-update
 
         # Initialize stream buffers if available
         if STREAM_BUFFER_AVAILABLE:
@@ -749,12 +1039,23 @@ class ShadowTrader:
             await self._client.subscribe_stock_trades(self.symbols)
             await self._client.subscribe_stock_quotes(self.symbols)
 
+            # CRITICAL: Restore open positions from database on restart
+            # This prevents "orphan positions" that would never be closed after daemon restart
+            await self._restore_open_positions()
+
             self._running = True
 
-            # Start background tasks
-            asyncio.create_task(self._tick_consumer())
-            asyncio.create_task(self._signal_processor())
-            asyncio.create_task(self._position_updater())
+            # Start background tasks (store references for proper cleanup)
+            self._tick_task = asyncio.create_task(self._tick_consumer())
+            self._signal_task = asyncio.create_task(self._signal_processor())
+            self._position_task = asyncio.create_task(self._position_updater())
+
+            # Start strategy cache cleanup task (prevents memory leak from unused strategies)
+            self._cleanup_task = asyncio.create_task(self._strategy_cache_cleanup())
+
+            # Add exception handlers to detect silent task failures
+            for task in [self._tick_task, self._signal_task, self._position_task, self._cleanup_task]:
+                task.add_done_callback(self._task_exception_handler)
 
             logger.info("🔮 [ShadowTrader] ThetaData feed connected")
             logger.info(f"   Streaming: {', '.join(self.symbols)}")
@@ -764,11 +1065,190 @@ class ShadowTrader:
             self._running = False
 
     async def stop(self) -> None:
-        """Stop shadow trading."""
+        """Stop shadow trading with proper task cleanup."""
         self._running = False
+
+        # Cancel background tasks gracefully
+        tasks_to_cancel = []
+        for task_attr in ['_tick_task', '_signal_task', '_position_task', '_cleanup_task']:
+            task = getattr(self, task_attr, None)
+            if task and not task.done():
+                task.cancel()
+                tasks_to_cancel.append(task)
+
+        # Wait for tasks to finish cancellation
+        if tasks_to_cancel:
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+
         if self._client:
             await self._client.disconnect()
         logger.info("🔮 [ShadowTrader] Stopped")
+
+    async def emergency_close_all(self, reason: str = "emergency_kill_switch") -> Dict[str, Any]:
+        """
+        KILL SWITCH: Emergency close all open positions immediately.
+
+        This is the nuclear option - closes ALL shadow positions at market prices
+        without waiting for strategy signals. Use when:
+        - Manual intervention required
+        - System instability detected
+        - Market conditions deteriorate rapidly
+
+        Returns:
+            Dict with positions closed, errors encountered, and final status
+        """
+        logger.warning(f"🚨 [KILL SWITCH] Emergency close initiated: {reason}")
+
+        results = {
+            'positions_closed': 0,
+            'positions_failed': 0,
+            'errors': [],
+            'reason': reason,
+            'timestamp': utc_now().isoformat()
+        }
+
+        # Stop accepting new signals immediately
+        self._running = False
+
+        async with self._positions_lock:
+            positions_to_close = list(self._positions.values())
+
+        for position in positions_to_close:
+            try:
+                # Get current quote for exit (under lock to prevent race)
+                async with self._quotes_lock:
+                    quote = self._last_quotes.get(position.symbol)
+
+                if quote:
+                    # Create close signal
+                    signal = ShadowSignal(
+                        strategy_id=position.strategy_id,
+                        symbol=position.symbol,
+                        action='close',
+                        quantity=position.quantity,
+                        signal_time=utc_now()
+                    )
+
+                    # Execute close immediately (bypass queue)
+                    await self._close_position(signal, quote, latency_ms=0)
+                    results['positions_closed'] += 1
+
+                    exit_price = quote.bid_price if position.side == 'long' else quote.ask_price
+                    logger.info(f"🔴 [KILL] Closed {position.symbol} @ ${exit_price:.2f}")
+                else:
+                    # No quote available - mark as failed
+                    results['positions_failed'] += 1
+                    results['errors'].append(f"No quote for {position.symbol}")
+                    logger.error(f"❌ [KILL] No quote for {position.symbol} - position orphaned")
+
+            except Exception as e:
+                results['positions_failed'] += 1
+                results['errors'].append(f"{position.symbol}: {str(e)}")
+                logger.error(f"❌ [KILL] Failed to close {position.symbol}: {e}")
+
+        # Send critical alert
+        send_telegram_alert(
+            "KILL SWITCH ACTIVATED",
+            f"Reason: {reason}\nClosed: {results['positions_closed']}\nFailed: {results['positions_failed']}",
+            priority='critical'
+        )
+
+        logger.warning(
+            f"🚨 [KILL SWITCH] Complete: {results['positions_closed']} closed, {results['positions_failed']} failed"
+        )
+
+        return results
+
+    def _task_exception_handler(self, task: asyncio.Task) -> None:
+        """Handle exceptions from background tasks to prevent silent failures."""
+        if task.cancelled():
+            return  # Normal cancellation, not an error
+
+        exc = task.exception()
+        if exc:
+            task_name = task.get_name() if hasattr(task, 'get_name') else str(task)
+            logger.error(f"🔥 Background task {task_name} crashed: {exc}")
+            traceback.print_exception(type(exc), exc, exc.__traceback__)
+
+            # Try to send alert (non-blocking)
+            try:
+                asyncio.create_task(send_telegram_alert_async(
+                    "ShadowTrader Task Crashed",
+                    f"Task: {task_name}\nError: {exc}",
+                    priority='critical'
+                ))
+            except Exception:
+                pass  # Don't crash the handler
+
+    async def _restore_open_positions(self) -> None:
+        """
+        Restore open positions from database on daemon restart.
+
+        CRITICAL: Without this, daemon restart orphans all open positions.
+        They would remain in DB with is_open=True but never receive price updates
+        or be closeable.
+        """
+        try:
+            result = self.supabase.table('shadow_positions').select(
+                'id', 'strategy_id', 'symbol', 'side', 'quantity', 'entry_price',
+                'entry_bid', 'entry_ask', 'regime_at_entry', 'entry_time'
+            ).eq('is_open', True).execute()
+
+            if not result.data:
+                logger.info("🔮 [ShadowTrader] No open positions to restore")
+                return
+
+            restored = 0
+            async with self._positions_lock:
+                for pos_data in result.data:
+                    position_id = pos_data['id']
+
+                    # Parse entry_time from ISO string to datetime
+                    entry_time_raw = pos_data.get('entry_time')
+                    if isinstance(entry_time_raw, str):
+                        try:
+                            entry_time = datetime.fromisoformat(entry_time_raw.replace('Z', '+00:00'))
+                        except ValueError:
+                            entry_time = utc_now()
+                    elif isinstance(entry_time_raw, datetime):
+                        entry_time = entry_time_raw
+                    else:
+                        entry_time = utc_now()
+
+                    # Reconstruct ShadowPosition
+                    position = ShadowPosition(
+                        position_id=position_id,
+                        strategy_id=pos_data['strategy_id'],
+                        symbol=pos_data['symbol'],
+                        side=pos_data['side'],
+                        quantity=pos_data['quantity'],
+                        entry_price=pos_data['entry_price'],
+                        entry_bid=pos_data.get('entry_bid', pos_data['entry_price']),
+                        entry_ask=pos_data.get('entry_ask', pos_data['entry_price']),
+                        regime_at_entry=pos_data.get('regime_at_entry', 'unknown'),
+                        entry_time=entry_time,
+                        current_price=pos_data['entry_price'],  # Will be updated by tick consumer
+                        current_bid=pos_data.get('entry_bid', pos_data['entry_price']),
+                        current_ask=pos_data.get('entry_ask', pos_data['entry_price']),
+                        max_favorable=0.0,
+                        max_adverse=0.0,
+                    )
+
+                    # Add to tracking dicts
+                    self._positions[position_id] = position
+
+                    strategy_id = pos_data['strategy_id']
+                    if strategy_id not in self._strategy_positions:
+                        self._strategy_positions[strategy_id] = []
+                    self._strategy_positions[strategy_id].append(position_id)
+
+                    restored += 1
+
+            logger.info(f"🔮 [ShadowTrader] Restored {restored} open positions from database")
+
+        except Exception as e:
+            logger.error(f"❌ [ShadowTrader] Failed to restore positions: {e}")
+            traceback.print_exc()
 
     async def _tick_consumer(self) -> None:
         """
@@ -788,9 +1268,10 @@ class ShadowTrader:
                 break
 
             try:
-                # Update last quote cache
+                # Update last quote cache (with lock to prevent race conditions)
                 if isinstance(tick, QuoteTick):
-                    self._last_quotes[tick.symbol] = tick
+                    async with self._quotes_lock:
+                        self._last_quotes[tick.symbol] = tick
 
                     # Update open positions with current prices
                     await self._update_position_prices(tick)
@@ -815,23 +1296,26 @@ class ShadowTrader:
 
     async def _update_position_prices(self, quote: 'QuoteTick') -> None:
         """Update open positions with current market prices."""
-        for pos_id, position in self._positions.items():
-            if position.symbol == quote.symbol:
-                position.current_price = quote.mid_price
-                position.current_bid = quote.bid_price
-                position.current_ask = quote.ask_price
+        async with self._positions_lock:
+            for pos_id, position in list(self._positions.items()):  # list() to avoid mutation during iteration
+                if position.symbol == quote.symbol:
+                    position.current_price = quote.mid_price
+                    position.current_bid = quote.bid_price
+                    position.current_ask = quote.ask_price
 
-                # Calculate current P&L
-                if position.side == 'long':
-                    pnl_pct = (quote.bid_price - position.entry_price) / position.entry_price
-                else:
-                    pnl_pct = (position.entry_price - quote.ask_price) / position.entry_price
+                    # Calculate current P&L (with division by zero protection)
+                    if abs(position.entry_price) < 1e-9:
+                        pnl_pct = 0.0  # Avoid division by zero
+                    elif position.side == 'long':
+                        pnl_pct = (quote.bid_price - position.entry_price) / position.entry_price
+                    else:
+                        pnl_pct = (position.entry_price - quote.ask_price) / position.entry_price
 
-                # Track excursions
-                if pnl_pct > position.max_favorable:
-                    position.max_favorable = pnl_pct
-                if pnl_pct < position.max_adverse:
-                    position.max_adverse = pnl_pct
+                    # Track excursions
+                    if pnl_pct > position.max_favorable:
+                        position.max_favorable = pnl_pct
+                    if pnl_pct < position.max_adverse:
+                        position.max_adverse = pnl_pct
 
     async def _on_new_bar(self, event: 'NewBarEvent') -> None:
         """
@@ -866,23 +1350,35 @@ class ShadowTrader:
             strategy_name = strategy_info['name']
 
             try:
-                # Load strategy if not cached
-                if strategy_id not in self._loaded_strategies:
-                    instance = await self._load_strategy_instance(strategy_info)
-                    if instance:
-                        self._loaded_strategies[strategy_id] = instance
-                        self._last_signals[strategy_id] = 0  # Start flat
-                        self._strategy_symbols[strategy_id] = symbol
-                    else:
-                        continue
+                # Load strategy if not cached (protected by lock to prevent race conditions)
+                async with self._strategies_lock:
+                    if strategy_id not in self._loaded_strategies:
+                        instance = await self._load_strategy_instance(strategy_info)
+                        if instance:
+                            self._loaded_strategies[strategy_id] = instance
+                            self._last_signals[strategy_id] = 0  # Start flat
+                            self._strategy_symbols[strategy_id] = symbol
+                        else:
+                            continue
 
-                strategy_instance = self._loaded_strategies[strategy_id]
+                    strategy_instance = self._loaded_strategies[strategy_id]
+
                 self.stats['strategy_runs'] += 1
 
-                # Run strategy on rolling DataFrame
+                # Run strategy on rolling DataFrame with timeout protection
                 # The strategy returns a Series/array of positions (like in backtest)
                 # We only care about the LAST value (current signal)
-                result = strategy_instance.run(df, initial_capital=100000)
+                try:
+                    result = await asyncio.wait_for(
+                        asyncio.get_event_loop().run_in_executor(
+                            None, lambda: strategy_instance.run(df, initial_capital=100000)
+                        ),
+                        timeout=5.0  # 5 second timeout to prevent hung strategies
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"⏱️ Strategy {strategy_name} timed out (>5s), skipping")
+                    self.stats['strategy_timeouts'] = self.stats.get('strategy_timeouts', 0) + 1
+                    continue
 
                 # Extract the last signal
                 # Handle different return formats from strategies
@@ -903,38 +1399,55 @@ class ShadowTrader:
                 # Normalize to -1, 0, 1
                 current_signal = max(-1, min(1, current_signal))
 
-                # Check if signal changed
-                last_signal = self._last_signals.get(strategy_id, 0)
-                if current_signal != last_signal:
-                    self.stats['signal_changes'] += 1
+                # Track strategy usage time for cleanup
+                self._strategy_last_used[strategy_id] = datetime.utcnow()
 
-                    # Determine action
-                    if current_signal > 0 and last_signal <= 0:
-                        action = 'buy'
-                    elif current_signal < 0 and last_signal >= 0:
-                        action = 'sell'
-                    elif current_signal == 0 and last_signal != 0:
-                        action = 'close'
-                    else:
-                        action = None
+                # Atomic signal read-compare-update with lock (prevents race condition)
+                async with self._signals_lock:
+                    last_signal = self._last_signals.get(strategy_id, 0)
+                    if current_signal != last_signal:
+                        self.stats['signal_changes'] += 1
 
-                    if action:
-                        # Submit signal to ShadowTrader
-                        signal = ShadowSignal(
-                            strategy_id=strategy_id,
-                            symbol=symbol,
-                            action=action,
-                            quantity=self._calculate_position_size(strategy_info),
-                            signal_time=datetime.utcnow()
-                        )
-                        await self.submit_signal(signal)
+                        # Signal debouncing: 60-second cooldown between signals for same strategy
+                        last_signal_time = self._signal_cooldowns.get(strategy_id)
+                        if last_signal_time:
+                            elapsed = (datetime.utcnow() - last_signal_time).total_seconds()
+                            if elapsed < 60.0:
+                                logger.debug(
+                                    f"🕐 Signal debounced for {strategy_name} ({elapsed:.1f}s < 60s cooldown)"
+                                )
+                                continue  # Skip this signal, try again next bar
 
-                        logger.info(
-                            f"🎯 [Live] {strategy_name} signal: {last_signal} → {current_signal} ({action.upper()})"
-                        )
+                        # Determine action
+                        if current_signal > 0 and last_signal <= 0:
+                            action = 'buy'
+                        elif current_signal < 0 and last_signal >= 0:
+                            action = 'sell'
+                        elif current_signal == 0 and last_signal != 0:
+                            action = 'close'
+                        else:
+                            action = None
 
-                    # Update last signal
-                    self._last_signals[strategy_id] = current_signal
+                        if action:
+                            # Submit signal to ShadowTrader
+                            signal = ShadowSignal(
+                                strategy_id=strategy_id,
+                                symbol=symbol,
+                                action=action,
+                                quantity=self._calculate_position_size(strategy_info),
+                                signal_time=datetime.utcnow()
+                            )
+                            await self.submit_signal(signal)
+
+                            # Update cooldown timestamp
+                            self._signal_cooldowns[strategy_id] = datetime.utcnow()
+
+                            logger.info(
+                                f"🎯 [Live] {strategy_name} signal: {last_signal} → {current_signal} ({action.upper()})"
+                            )
+
+                        # Update last signal
+                        self._last_signals[strategy_id] = current_signal
 
             except Exception as e:
                 logger.error(f"Strategy {strategy_name} execution error: {e}")
@@ -1043,11 +1556,63 @@ class ShadowTrader:
 
         - Spread: Buy at ask, sell at bid
         - Liquidity: Reject if order > quote size
+        - Staleness: Reject if quote > 1 second old
         """
-        quote = self._last_quotes.get(signal.symbol)
+        # Get quote with lock protection
+        async with self._quotes_lock:
+            quote = self._last_quotes.get(signal.symbol)
+
         if not quote:
             logger.warning(f"No quote for {signal.symbol}, rejecting signal")
             self.stats['trades_rejected'] += 1
+            return
+
+        # CRITICAL: Quote staleness check - reject quotes > 1 second old
+        # This prevents executing at stale prices which causes P&L bleed in live trading
+        quote_age_seconds = (utc_now() - quote.timestamp).total_seconds() if quote.timestamp else float('inf')
+        if quote_age_seconds > 1.0:
+            logger.warning(
+                f"🕐 Stale quote for {signal.symbol} ({quote_age_seconds:.1f}s old), rejecting signal"
+            )
+            self.stats['stale_quote_rejects'] = self.stats.get('stale_quote_rejects', 0) + 1
+            await self._record_rejection(signal, quote, 'stale_quote')
+            return
+
+        # CRITICAL: Market hours check - reject trades outside RTH
+        # Prevents executing during pre-market (wide spreads) or on holidays
+        if not is_market_open():
+            logger.warning(
+                f"🚫 Market closed, rejecting {signal.action} for {signal.symbol}"
+            )
+            self.stats['outside_rth_rejects'] = self.stats.get('outside_rth_rejects', 0) + 1
+            await self._record_rejection(signal, quote, 'market_closed')
+            return
+
+        # CRITICAL: Crossed market check - reject if bid > ask (data error or unusual condition)
+        if quote.bid_price > quote.ask_price:
+            logger.warning(
+                f"❌ Crossed market for {signal.symbol}: bid=${quote.bid_price:.2f} > ask=${quote.ask_price:.2f}"
+            )
+            self.stats['crossed_market_rejects'] = self.stats.get('crossed_market_rejects', 0) + 1
+            await self._record_rejection(signal, quote, 'crossed_market')
+            return
+
+        # CRITICAL: Wide spread filter - reject if spread > 5% of mid price
+        # Protects against bad fills in illiquid conditions or data issues
+        if quote.ask_price > 0 and quote.bid_price > 0:
+            mid_price = (quote.bid_price + quote.ask_price) / 2
+            spread_pct = (quote.ask_price - quote.bid_price) / mid_price if mid_price > 0 else 1.0
+            if spread_pct > 0.05:  # 5% max spread
+                logger.warning(
+                    f"📏 Wide spread for {signal.symbol}: {spread_pct*100:.1f}% > 5% max"
+                )
+                self.stats['wide_spread_rejects'] = self.stats.get('wide_spread_rejects', 0) + 1
+                await self._record_rejection(signal, quote, 'wide_spread')
+                return
+
+        # Handle close action separately (has its own locking)
+        if signal.action == 'close':
+            await self._close_position(signal, quote, latency_ms)
             return
 
         # Determine fill price based on side
@@ -1057,10 +1622,6 @@ class ShadowTrader:
         elif signal.action == 'sell':
             fill_price = quote.bid_price  # Hit the bid
             available_size = quote.bid_size
-        elif signal.action == 'close':
-            # Close existing position
-            await self._close_position(signal, quote, latency_ms)
-            return
         else:
             logger.warning(f"Unknown action: {signal.action}")
             return
@@ -1076,17 +1637,37 @@ class ShadowTrader:
             await self._record_rejection(signal, quote, 'insufficient_liquidity')
             return
 
-        # Open new position
-        await self._open_position(signal, quote, fill_price, latency_ms)
+        # CRITICAL: TOCTOU FIX - Hold lock from duplicate check through position open
+        # Without this, another coroutine could pass duplicate check + open position
+        # between our check and our open, resulting in duplicate positions.
+        async with self._positions_lock:
+            # Duplicate check under lock
+            for position in self._positions.values():
+                if position.strategy_id == signal.strategy_id and position.symbol == signal.symbol:
+                    logger.warning(
+                        f"[DUPE] Rejected: {signal.symbol} position already exists for strategy {signal.strategy_id}"
+                    )
+                    self.stats['trades_rejected'] += 1
+                    return
+
+            # Open position while still holding lock (pass _lock_held=True to avoid deadlock)
+            await self._open_position(signal, quote, fill_price, latency_ms, _lock_held=True)
 
     async def _open_position(
         self,
         signal: ShadowSignal,
         quote: 'QuoteTick',
         fill_price: float,
-        latency_ms: int
+        latency_ms: int,
+        _lock_held: bool = False
     ) -> None:
-        """Open a new shadow position."""
+        """
+        Open a new shadow position.
+
+        Args:
+            _lock_held: If True, caller already holds _positions_lock (avoids deadlock).
+                       Internal parameter - callers should generally not set this.
+        """
         try:
             # Determine current regime
             regime = self._current_regime
@@ -1123,11 +1704,19 @@ class ShadowTrader:
                 current_ask=quote.ask_price,
             )
 
-            self._positions[position_id] = position
-
-            if signal.strategy_id not in self._strategy_positions:
-                self._strategy_positions[signal.strategy_id] = []
-            self._strategy_positions[signal.strategy_id].append(position_id)
+            # CRITICAL: Modify position dicts under lock
+            # If caller already holds lock, skip acquiring (prevents deadlock)
+            if _lock_held:
+                self._positions[position_id] = position
+                if signal.strategy_id not in self._strategy_positions:
+                    self._strategy_positions[signal.strategy_id] = []
+                self._strategy_positions[signal.strategy_id].append(position_id)
+            else:
+                async with self._positions_lock:
+                    self._positions[position_id] = position
+                    if signal.strategy_id not in self._strategy_positions:
+                        self._strategy_positions[signal.strategy_id] = []
+                    self._strategy_positions[signal.strategy_id].append(position_id)
 
             self.stats['positions_opened'] += 1
             self.stats['trades_executed'] += 1
@@ -1147,55 +1736,58 @@ class ShadowTrader:
         latency_ms: int
     ) -> None:
         """Close an existing shadow position."""
-        # Find open positions for this strategy and symbol
-        strategy_positions = self._strategy_positions.get(signal.strategy_id, [])
+        # CRITICAL: Hold lock for entire close operation to prevent race conditions.
+        # Without this, another coroutine could modify positions mid-close, orphaning positions.
+        async with self._positions_lock:
+            # Find open positions for this strategy and symbol
+            strategy_positions = self._strategy_positions.get(signal.strategy_id, [])
 
-        for pos_id in strategy_positions[:]:  # Copy list to allow modification
-            position = self._positions.get(pos_id)
-            if not position or position.symbol != signal.symbol:
-                continue
+            for pos_id in strategy_positions[:]:  # Copy list to allow modification
+                position = self._positions.get(pos_id)
+                if not position or position.symbol != signal.symbol:
+                    continue
 
-            # Determine exit price based on position side
-            if position.side == 'long':
-                exit_price = quote.bid_price  # Sell at bid
-            else:
-                exit_price = quote.ask_price  # Cover at ask
-
-            try:
-                # Call Supabase RPC to close position
-                result = self.supabase.rpc('close_shadow_position', {
-                    'p_position_id': pos_id,
-                    'p_exit_price': exit_price,
-                    'p_exit_bid': quote.bid_price,
-                    'p_exit_ask': quote.ask_price,
-                    'p_regime': self._current_regime,
-                }).execute()
-
-                trade_id = result.data
-
-                # Clean up local tracking
-                del self._positions[pos_id]
-                self._strategy_positions[signal.strategy_id].remove(pos_id)
-
-                # Calculate P&L for logging
+                # Determine exit price based on position side
                 if position.side == 'long':
-                    pnl = (exit_price - position.entry_price) * position.quantity
+                    exit_price = quote.bid_price  # Sell at bid
                 else:
-                    pnl = (position.entry_price - exit_price) * position.quantity
+                    exit_price = quote.ask_price  # Cover at ask
 
-                self.stats['positions_closed'] += 1
-                self.stats['trades_executed'] += 1
+                try:
+                    # Call Supabase RPC to close position
+                    result = self.supabase.rpc('close_shadow_position', {
+                        'p_position_id': pos_id,
+                        'p_exit_price': exit_price,
+                        'p_exit_bid': quote.bid_price,
+                        'p_exit_ask': quote.ask_price,
+                        'p_regime': self._current_regime,
+                    }).execute()
 
-                logger.info(
-                    f"📉 Closed: {signal.symbol} {position.side} "
-                    f"@ ${exit_price:.2f} P&L: ${pnl:.2f}"
-                )
+                    trade_id = result.data
 
-                # Check for graduation
-                await self._check_graduation(signal.strategy_id)
+                    # Clean up local tracking (already under lock)
+                    del self._positions[pos_id]
+                    self._strategy_positions[signal.strategy_id].remove(pos_id)
 
-            except Exception as e:
-                logger.error(f"Failed to close position: {e}")
+                    # Calculate P&L for logging
+                    if position.side == 'long':
+                        pnl = (exit_price - position.entry_price) * position.quantity
+                    else:
+                        pnl = (position.entry_price - exit_price) * position.quantity
+
+                    self.stats['positions_closed'] += 1
+                    self.stats['trades_executed'] += 1
+
+                    logger.info(
+                        f"📉 Closed: {signal.symbol} {position.side} "
+                        f"@ ${exit_price:.2f} P&L: ${pnl:.2f}"
+                    )
+
+                    # Check for graduation (outside lock would deadlock if it accesses positions)
+                    await self._check_graduation(signal.strategy_id)
+
+                except Exception as e:
+                    logger.error(f"Failed to close position: {e}")
 
     async def _record_rejection(
         self,
@@ -1312,9 +1904,17 @@ This strategy has demonstrated consistent performance over {metrics.get('trade_c
             try:
                 await asyncio.sleep(5)  # Update every 5 seconds
 
-                for pos_id, position in self._positions.items():
-                    # Calculate current P&L
-                    if position.side == 'long':
+                # CRITICAL: Take snapshot under lock to prevent race with open/close
+                # The list() call itself is not atomic - dict could change during iteration
+                async with self._positions_lock:
+                    positions_snapshot = list(self._positions.items())
+
+                for pos_id, position in positions_snapshot:
+                    # Calculate current P&L (with division by zero protection)
+                    if abs(position.entry_price) < 1e-9:
+                        current_pnl = 0.0
+                        current_pnl_pct = 0.0
+                    elif position.side == 'long':
                         current_pnl = (position.current_bid - position.entry_price) * position.quantity
                         current_pnl_pct = (position.current_bid - position.entry_price) / position.entry_price
                     else:
@@ -1338,6 +1938,55 @@ This strategy has demonstrated consistent performance over {metrics.get('trade_c
 
             except Exception as e:
                 logger.error(f"Position update error: {e}")
+
+    async def _strategy_cache_cleanup(self) -> None:
+        """
+        Periodically clean up strategy cache to prevent memory leaks.
+
+        Strategies that haven't been used in >1 hour are evicted from the cache.
+        They will be reloaded on next use. This prevents unbounded memory growth
+        when strategies are rotated/deprecated but remain in cache.
+        """
+        CLEANUP_INTERVAL = 300  # Check every 5 minutes
+        MAX_IDLE_SECONDS = 3600  # Evict after 1 hour of no use
+
+        while self._running:
+            try:
+                await asyncio.sleep(CLEANUP_INTERVAL)
+
+                now = datetime.utcnow()
+                strategies_to_evict = []
+
+                # Find strategies that haven't been used recently
+                async with self._strategies_lock:
+                    for strategy_id in list(self._loaded_strategies.keys()):
+                        last_used = self._strategy_last_used.get(strategy_id)
+                        if last_used:
+                            idle_seconds = (now - last_used).total_seconds()
+                            if idle_seconds > MAX_IDLE_SECONDS:
+                                strategies_to_evict.append(strategy_id)
+                        else:
+                            # Never used (shouldn't happen, but clean up anyway)
+                            strategies_to_evict.append(strategy_id)
+
+                    # Evict from all tracking dicts
+                    for strategy_id in strategies_to_evict:
+                        self._loaded_strategies.pop(strategy_id, None)
+                        self._last_signals.pop(strategy_id, None)
+                        self._strategy_symbols.pop(strategy_id, None)
+                        self._strategy_last_used.pop(strategy_id, None)
+                        self._signal_cooldowns.pop(strategy_id, None)
+
+                if strategies_to_evict:
+                    logger.info(
+                        f"🧹 [ShadowTrader] Evicted {len(strategies_to_evict)} idle strategies from cache"
+                    )
+                    self.stats['strategies_evicted'] = self.stats.get('strategies_evicted', 0) + len(strategies_to_evict)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Strategy cleanup error: {e}")
 
     def update_regime(self, regime: str) -> None:
         """Update current market regime."""
@@ -1747,6 +2396,7 @@ class ResearchDirector:
         self.last_harvest_time = datetime.min
         self.last_execute_time = datetime.min
         self.last_publish_time = datetime.min
+        self.last_discovery_time = datetime.min  # Autonomous market scanning
         self.daily_briefings_published = 0
         self.stats = {
             'mutations_harvested': 0,
@@ -1755,6 +2405,8 @@ class ResearchDirector:
             'strategies_failed': 0,
             'briefings_published': 0,
             'graduations': 0,
+            'discoveries': 0,  # Opportunities found by morphology scanner
+            'missions_auto_created': 0,  # Missions created autonomously
             'errors': 0
         }
 
@@ -1776,6 +2428,7 @@ class ResearchDirector:
         logger.info(f"   Fitness threshold: {config.fitness_threshold}")
         logger.info(f"   Shadow Trading: {'ENABLED' if self.shadow_trader else 'DISABLED'}")
         logger.info(f"   Red Team Audits: {'ENABLED' if RED_TEAM_AVAILABLE else 'DISABLED'}")
+        logger.info(f"   Discovery Scanner: {'ENABLED' if DISCOVERY_AVAILABLE else 'DISABLED'}")
         logger.info("=" * 60)
 
         # Mission tracking
@@ -2592,6 +3245,124 @@ Return ONLY the JSON object, no other text."""
         }
 
     # ========================================================================
+    # 0.5 DISCOVERY PHASE - Autonomous Mission Creation
+    # ========================================================================
+
+    async def run_discovery_phase(self) -> Dict[str, Any]:
+        """
+        Autonomous market scanning and mission creation.
+
+        This is what makes the daemon TRULY autonomous - instead of just
+        reacting to manually created missions, it scans the market and
+        creates missions based on observed opportunities.
+
+        Flow:
+        1. Check if any missions exist
+        2. If no missions: scan market for opportunities
+        3. Auto-create missions from top opportunities
+        4. Return summary of discoveries
+
+        Returns:
+            Dict with discoveries made and missions created
+        """
+        if not DISCOVERY_AVAILABLE:
+            logger.debug("Discovery module not available - skipping discovery phase")
+            return {'action': 'skip', 'reason': 'discovery_not_available'}
+
+        logger.info("🔭 [Discovery] Running autonomous market scan...")
+
+        try:
+            # Step 1: Check if we already have active missions
+            mission = await self.get_active_mission()
+            if mission:
+                logger.info(f"   Active mission exists: {mission.name} - skipping discovery")
+                return {
+                    'action': 'skip',
+                    'reason': 'active_mission_exists',
+                    'mission': mission.name
+                }
+
+            # Step 2: Scan market for opportunities
+            scanner = MorphologyScanner(
+                data_dir=self.config.data_dir,
+                min_confidence=0.6
+            )
+            opportunities = scanner.scan()
+
+            if not opportunities:
+                logger.info("   No opportunities found above confidence threshold")
+                return {
+                    'action': 'none',
+                    'reason': 'no_opportunities_found'
+                }
+
+            # Step 3: Create missions from top opportunities (limit to top 3)
+            missions_created = []
+            for opp in opportunities[:3]:
+                try:
+                    mission_params = opp.to_mission_params()
+
+                    # Insert mission into Supabase
+                    result = self.supabase.table('missions').insert({
+                        'name': mission_params['name'],
+                        'objective': mission_params['objective'],
+                        'target_metric': mission_params['target_metric'],
+                        'target_value': mission_params['target_value'],
+                        'target_operator': mission_params['target_operator'],
+                        'max_drawdown': mission_params['max_drawdown'],
+                        'priority': mission_params['priority'],
+                        'status': 'active',
+                        'created_at': datetime.now().isoformat(),
+                        'metadata': {
+                            'source': 'morphology_scanner',
+                            'opportunity_type': opp.opportunity_type.value,
+                            'symbol': opp.symbol,
+                            'confidence': opp.confidence,
+                            'context': opp.context
+                        }
+                    }).execute()
+
+                    if result.data:
+                        mission_id = result.data[0].get('id')
+                        missions_created.append({
+                            'id': mission_id,
+                            'name': mission_params['name'],
+                            'symbol': opp.symbol,
+                            'confidence': opp.confidence
+                        })
+                        logger.info(f"   ✅ Created mission: {mission_params['name']}")
+
+                        # Only create one mission at a time to avoid overwhelming
+                        break
+
+                except Exception as e:
+                    logger.error(f"   Failed to create mission from opportunity: {e}")
+                    continue
+
+            # Step 4: Update stats
+            self.stats['discoveries'] += len(opportunities)
+            self.stats['missions_auto_created'] += len(missions_created)
+
+            # Step 5: Send notification if mission created
+            if missions_created:
+                await send_telegram_alert_async(
+                    title="🔭 Discovery: New Mission Created",
+                    message=f"Auto-created mission from market scan:\n{missions_created[0]['name']}\nSymbol: {missions_created[0]['symbol']}\nConfidence: {missions_created[0]['confidence']:.0%}",
+                    priority='normal'
+                )
+
+            return {
+                'action': 'discovery_complete',
+                'opportunities_found': len(opportunities),
+                'missions_created': missions_created
+            }
+
+        except Exception as e:
+            logger.error(f"Discovery phase error: {e}")
+            traceback.print_exc()
+            return {'action': 'error', 'error': str(e)}
+
+    # ========================================================================
     # 1. THE RECRUITER - Replenish Strategy Pool (Legacy - now uses missions)
     # ========================================================================
 
@@ -3237,6 +4008,13 @@ Convexity Score: {metadata.get('convexity_score', 'N/A')}
             try:
                 now = datetime.now()
 
+                # 0. DISCOVERY PHASE - Autonomous market scanning (runs first!)
+                # This is what makes the daemon TRULY autonomous - it creates missions
+                # from market observations instead of just reacting to manual missions
+                if DISCOVERY_AVAILABLE and (now - self.last_discovery_time).total_seconds() >= self.config.discovery_interval:
+                    await self.run_discovery_phase()
+                    self.last_discovery_time = now
+
                 # 1. Mission Control - check every recruit_interval (goal-seeking loop)
                 if (now - self.last_recruit_time).total_seconds() >= self.config.recruit_interval:
                     await self.run_mission_loop()
@@ -3292,6 +4070,8 @@ Convexity Score: {metadata.get('convexity_score', 'N/A')}
         """Log current statistics."""
         logger.info("=" * 40)
         logger.info("📊 Research Director Stats:")
+        logger.info(f"   🔭 Discoveries: {self.stats['discoveries']}")
+        logger.info(f"   🎯 Missions auto-created: {self.stats['missions_auto_created']}")
         logger.info(f"   Mutations harvested: {self.stats['mutations_harvested']}")
         logger.info(f"   Backtests run: {self.stats['backtests_run']}")
         logger.info(f"   Strategies promoted: {self.stats['strategies_promoted']}")

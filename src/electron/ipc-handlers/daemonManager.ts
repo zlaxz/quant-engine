@@ -26,12 +26,18 @@ const RESTART_DELAY_MS = 5000;
 const logBuffer: string[] = [];
 const MAX_LOG_LINES = 500;
 
-function getRotationEngineRoot(): string {
-  const root = process.env.ROTATION_ENGINE_ROOT;
-  if (!root) {
-    throw new Error('No project directory configured. Go to Settings to set one.');
+function getProjectPythonRoot(): string {
+  // Use cwd/python - the quant-engine python directory
+  const pythonRoot = path.join(process.cwd(), 'python');
+  if (fs.existsSync(pythonRoot)) {
+    return pythonRoot;
   }
-  return root;
+  // Fallback to __dirname relative path (for packaged app)
+  const appPath = path.join(__dirname, '..', '..', 'python');
+  if (fs.existsSync(appPath)) {
+    return appPath;
+  }
+  throw new Error('Python directory not found');
 }
 
 function addLog(line: string) {
@@ -42,32 +48,37 @@ function addLog(line: string) {
     logBuffer.shift();
   }
 
-  // Stream to renderer
+  // Stream to renderer (with destroyed check)
   const windows = BrowserWindow.getAllWindows();
   windows.forEach((win) => {
-    win.webContents.send('daemon-log', logLine);
+    if (!win.isDestroyed()) {
+      win.webContents.send('daemon-log', logLine);
+    }
   });
 }
 
 function sendStatusUpdate(status: 'online' | 'offline' | 'starting' | 'crashed') {
   const windows = BrowserWindow.getAllWindows();
   windows.forEach((win) => {
-    win.webContents.send('daemon-status', {
-      status,
-      pid: daemonPid,
-      timestamp: Date.now(),
-    });
+    if (!win.isDestroyed()) {
+      win.webContents.send('daemon-status', {
+        status,
+        pid: daemonPid,
+        timestamp: Date.now(),
+      });
+    }
   });
 }
 
-async function startDaemon(): Promise<{ success: boolean; pid?: number; error?: string }> {
+export async function startDaemon(): Promise<{ success: boolean; pid?: number; error?: string }> {
   if (daemonProcess && !daemonProcess.killed) {
     return { success: false, error: 'Daemon already running' };
   }
 
   try {
-    const engineRoot = getRotationEngineRoot();
-    const daemonPath = path.join(engineRoot, 'daemon.py');  // Python backend daemon
+    // Find daemon.py in the project python directory
+    const engineRoot = getProjectPythonRoot();
+    const daemonPath = path.join(engineRoot, 'daemon.py');
 
     // Verify daemon script exists
     if (!fs.existsSync(daemonPath)) {
@@ -82,6 +93,9 @@ async function startDaemon(): Promise<{ success: boolean; pid?: number; error?: 
       env: {
         ...process.env,
         PYTHONUNBUFFERED: '1', // Real-time output
+        // Map VITE_ prefixed vars to standard names for Python daemon
+        SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
+        SUPABASE_KEY: process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_KEY || '',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
