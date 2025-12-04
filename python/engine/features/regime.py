@@ -15,8 +15,9 @@ The regime at time T should only use data available at T-1.
 """
 
 import logging
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Any
 from enum import IntEnum
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -323,6 +324,626 @@ class RegimeAnalyzer:
         )
 
         return result
+
+
+# ============================================================================
+# HMM REGIME DETECTION
+# ============================================================================
+
+@dataclass
+class HMMRegimeResult:
+    """Results from HMM regime detection."""
+    regime_probabilities: np.ndarray   # T x K smoothed probabilities
+    most_likely_regime: np.ndarray     # T x 1 most likely state
+    transition_matrix: np.ndarray      # K x K transition probabilities
+    regime_means: np.ndarray           # K x 1 regime means
+    regime_stds: np.ndarray            # K x 1 regime standard deviations
+    log_likelihood: float              # Model log-likelihood
+    next_regime_prob: np.ndarray       # K x 1 predicted next regime probs
+
+
+@dataclass
+class HMMConfig:
+    """Configuration for HMM estimation."""
+    n_regimes: int = 2                 # Number of hidden states
+    max_iter: int = 100                # Max EM iterations
+    tol: float = 1e-6                  # Convergence tolerance
+    min_variance: float = 1e-3         # REG2 FIX: Floor for std dev (not variance - naming legacy)
+                                        # 1e-6 caused PDF peaks ~400k, causing numerical issues
+                                        # 1e-3 gives max PDF peak ~400, much safer
+    random_state: Optional[int] = None # For reproducibility
+
+
+class GaussianHMM:
+    """
+    Gaussian Hidden Markov Model for regime detection.
+
+    Implements:
+    - Forward-backward algorithm for regime probabilities
+    - Baum-Welch (EM) for parameter estimation
+    - Transition probability forecasting
+    - Critical slowing down indicators
+
+    γ_t(i) = P(S_t = q_i | O, λ) = α_t(i)β_t(i) / Σ_j α_t(j)β_t(j)
+    """
+
+    def __init__(self, config: HMMConfig = None):
+        """
+        Initialize Gaussian HMM.
+
+        Args:
+            config: HMM configuration parameters
+        """
+        self.config = config or HMMConfig()
+        self.n_regimes = self.config.n_regimes
+
+        # Model parameters (initialized in fit)
+        self.transition_matrix = None  # A[i,j] = P(S_{t+1}=j | S_t=i)
+        self.means = None              # μ_k for each regime
+        self.stds = None               # σ_k for each regime
+        self.initial_probs = None      # π_k initial state probs
+
+        self._fitted = False
+
+    def _initialize_params(self, data: np.ndarray):
+        """Initialize parameters using k-means-like approach."""
+        n = len(data)
+        k = self.n_regimes
+
+        if self.config.random_state is not None:
+            np.random.seed(self.config.random_state)
+
+        # Initialize means using percentiles
+        percentiles = np.linspace(10, 90, k)
+        self.means = np.percentile(data, percentiles)
+
+        # Initialize stds
+        self.stds = np.full(k, np.std(data) / np.sqrt(k))
+
+        # Initialize transition matrix (sticky regimes)
+        self.transition_matrix = np.full((k, k), 0.05 / (k - 1))
+        np.fill_diagonal(self.transition_matrix, 0.95)
+
+        # Initialize uniform initial probs
+        self.initial_probs = np.full(k, 1.0 / k)
+
+    def _emission_prob(self, x: float, regime: int) -> float:
+        """
+        Calculate emission probability P(x | regime).
+
+        REG2: Use higher floor (1e-3) to prevent numerical explosion.
+        With sigma=1e-6, PDF can exceed 400,000 causing alpha/beta overflow.
+        """
+        mu = self.means[regime]
+        # REG2: Floor at 1e-3 instead of config.min_variance (often 1e-6)
+        sigma = max(self.stds[regime], 1e-3)
+        return np.exp(-0.5 * ((x - mu) / sigma) ** 2) / (sigma * np.sqrt(2 * np.pi))
+
+    def _emission_matrix(self, data: np.ndarray) -> np.ndarray:
+        """Calculate emission matrix B[t, k] = P(O_t | S_t = k)."""
+        T = len(data)
+        K = self.n_regimes
+        B = np.zeros((T, K))
+
+        for t in range(T):
+            for k in range(K):
+                B[t, k] = self._emission_prob(data[t], k)
+
+        # Add floor to prevent numerical issues
+        B = np.maximum(B, 1e-300)
+        return B
+
+    def _forward(self, data: np.ndarray, B: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Forward algorithm.
+
+        α_t(i) = P(O_1, ..., O_t, S_t = i | λ)
+
+        Returns:
+            Tuple of (alpha, scaling_factors)
+        """
+        T = len(data)
+        K = self.n_regimes
+        alpha = np.zeros((T, K))
+        scale = np.zeros(T)
+
+        # Initialization
+        alpha[0] = self.initial_probs * B[0]
+        scale[0] = np.sum(alpha[0])
+        alpha[0] /= scale[0] if scale[0] > 0 else 1
+
+        # Recursion
+        for t in range(1, T):
+            for j in range(K):
+                alpha[t, j] = B[t, j] * np.sum(alpha[t-1] * self.transition_matrix[:, j])
+
+            scale[t] = np.sum(alpha[t])
+            alpha[t] /= scale[t] if scale[t] > 0 else 1
+
+        return alpha, scale
+
+    def _backward(self, data: np.ndarray, B: np.ndarray, scale: np.ndarray) -> np.ndarray:
+        """
+        Backward algorithm.
+
+        β_t(i) = P(O_{t+1}, ..., O_T | S_t = i, λ)
+
+        Returns:
+            beta array
+        """
+        T = len(data)
+        K = self.n_regimes
+        beta = np.zeros((T, K))
+
+        # Initialization
+        beta[T-1] = 1
+
+        # Recursion
+        for t in range(T-2, -1, -1):
+            for i in range(K):
+                beta[t, i] = np.sum(
+                    self.transition_matrix[i, :] * B[t+1] * beta[t+1]
+                )
+            beta[t] /= scale[t] if scale[t] > 0 else 1  # Must use scale[t], not scale[t+1]
+
+        return beta
+
+    def _e_step(self, data: np.ndarray, B: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float]:
+        """
+        E-step: Compute posterior probabilities.
+
+        Returns:
+            Tuple of (gamma, xi, log_likelihood)
+        """
+        T = len(data)
+        K = self.n_regimes
+
+        # Forward-backward
+        alpha, scale = self._forward(data, B)
+        beta = self._backward(data, B, scale)
+
+        # Gamma: P(S_t = k | O)
+        gamma = alpha * beta
+        gamma_sum = np.sum(gamma, axis=1, keepdims=True)
+        gamma = gamma / np.maximum(gamma_sum, 1e-300)
+
+        # Xi: P(S_t = i, S_{t+1} = j | O)
+        xi = np.zeros((T-1, K, K))
+        for t in range(T-1):
+            for i in range(K):
+                for j in range(K):
+                    xi[t, i, j] = (
+                        alpha[t, i] *
+                        self.transition_matrix[i, j] *
+                        B[t+1, j] *
+                        beta[t+1, j]
+                    )
+            xi_sum = np.sum(xi[t])
+            xi[t] /= xi_sum if xi_sum > 0 else 1
+
+        # Log-likelihood
+        log_likelihood = np.sum(np.log(scale + 1e-300))
+
+        return gamma, xi, log_likelihood
+
+    def _m_step(self, data: np.ndarray, gamma: np.ndarray, xi: np.ndarray):
+        """M-step: Re-estimate parameters."""
+        T = len(data)
+        K = self.n_regimes
+
+        # Update initial probs
+        self.initial_probs = gamma[0]
+
+        # Update transition matrix
+        for i in range(K):
+            denom = np.sum(gamma[:-1, i])
+            if denom > 0:
+                self.transition_matrix[i] = np.sum(xi[:, i, :], axis=0) / denom
+
+        # Normalize transition matrix rows
+        row_sums = np.sum(self.transition_matrix, axis=1, keepdims=True)
+        self.transition_matrix /= np.maximum(row_sums, 1e-300)
+
+        # Update means
+        for k in range(K):
+            gamma_sum = np.sum(gamma[:, k])
+            if gamma_sum > 0:
+                self.means[k] = np.sum(gamma[:, k] * data) / gamma_sum
+
+        # Update stds
+        for k in range(K):
+            gamma_sum = np.sum(gamma[:, k])
+            if gamma_sum > 0:
+                variance = np.sum(gamma[:, k] * (data - self.means[k])**2) / gamma_sum
+                self.stds[k] = max(np.sqrt(variance), self.config.min_variance)
+
+    def fit(self, data: np.ndarray) -> 'GaussianHMM':
+        """
+        Fit HMM using Baum-Welch (EM) algorithm.
+
+        Args:
+            data: 1D array of observations (e.g., returns)
+
+        Returns:
+            self
+        """
+        data = np.asarray(data).flatten()
+
+        if len(data) < self.n_regimes * 10:
+            logger.warning(f"Data length {len(data)} may be too short for {self.n_regimes} regimes")
+
+        self._initialize_params(data)
+
+        prev_ll = -np.inf
+
+        for iteration in range(self.config.max_iter):
+            # E-step
+            B = self._emission_matrix(data)
+            gamma, xi, log_likelihood = self._e_step(data, B)
+
+            # Check convergence
+            if abs(log_likelihood - prev_ll) < self.config.tol:
+                logger.info(f"HMM converged at iteration {iteration}")
+                break
+
+            prev_ll = log_likelihood
+
+            # M-step
+            self._m_step(data, gamma, xi)
+
+        # REG1: Removed regime sorting - it broke gamma alignment
+        # The sorting reordered parameters but NOT gamma posteriors,
+        # causing regime labels to be inverted relative to posteriors.
+        # Regimes will be in whatever order EM converged to.
+        # If ordering is needed, do it consistently in decode() instead.
+
+        self._fitted = True
+        return self
+
+    def decode(self, data: np.ndarray) -> HMMRegimeResult:
+        """
+        Compute regime probabilities for observations.
+
+        Args:
+            data: 1D array of observations
+
+        Returns:
+            HMMRegimeResult with all regime information
+        """
+        if not self._fitted:
+            raise ValueError("Model must be fitted first")
+
+        data = np.asarray(data).flatten()
+        B = self._emission_matrix(data)
+        gamma, _, log_likelihood = self._e_step(data, B)
+
+        # Most likely regime
+        most_likely = np.argmax(gamma, axis=1)
+
+        # Predict next regime
+        last_prob = gamma[-1]
+        next_prob = last_prob @ self.transition_matrix
+
+        return HMMRegimeResult(
+            regime_probabilities=gamma,
+            most_likely_regime=most_likely,
+            transition_matrix=self.transition_matrix,
+            regime_means=self.means,
+            regime_stds=self.stds,
+            log_likelihood=log_likelihood,
+            next_regime_prob=next_prob
+        )
+
+    def predict_transition_prob(
+        self,
+        current_regime_prob: np.ndarray,
+        steps: int = 1
+    ) -> np.ndarray:
+        """
+        Predict regime probability at future time step.
+
+        P(S_{T+k} = j | O_{1:T}) = Σ_i P(S_T = i | O) * A^k[i,j]
+
+        Args:
+            current_regime_prob: Current regime probability vector
+            steps: Number of steps ahead to predict
+
+        Returns:
+            Predicted regime probability vector
+        """
+        if not self._fitted:
+            raise ValueError("Model must be fitted first")
+
+        trans_k = np.linalg.matrix_power(self.transition_matrix, steps)
+        return current_regime_prob @ trans_k
+
+
+def fit_hmm_regimes(
+    returns: np.ndarray,
+    n_regimes: int = 2,
+    **kwargs
+) -> HMMRegimeResult:
+    """
+    Convenience function to fit HMM and get regime probabilities.
+
+    Args:
+        returns: Return series
+        n_regimes: Number of regimes (default 2: low vol / high vol)
+        **kwargs: Additional HMMConfig parameters
+
+    Returns:
+        HMMRegimeResult
+    """
+    config = HMMConfig(n_regimes=n_regimes, **kwargs)
+    hmm = GaussianHMM(config)
+    hmm.fit(returns)
+    return hmm.decode(returns)
+
+
+# ============================================================================
+# CRITICAL SLOWING DOWN (Early Warning Signals)
+# ============================================================================
+
+def critical_slowing_down_indicators(
+    data: np.ndarray,
+    window: int = 60
+) -> Dict[str, np.ndarray]:
+    """
+    Calculate Critical Slowing Down indicators for early warning.
+
+    As system approaches tipping point:
+    - Autocorrelation rises toward 1 (slower recovery)
+    - Variance increases (larger fluctuations)
+    - Skewness may shift
+
+    These are LEADING indicators of regime transitions.
+
+    Args:
+        data: Time series (returns or prices)
+        window: Rolling window for calculations
+
+    Returns:
+        Dict with 'autocorr', 'variance', 'skewness' arrays
+    """
+    data = np.asarray(data)
+    n = len(data)
+
+    autocorr = np.full(n, np.nan)
+    variance = np.full(n, np.nan)
+    skewness = np.full(n, np.nan)
+
+    for t in range(window, n):
+        window_data = data[t-window:t]
+
+        # Autocorrelation (lag-1)
+        if np.std(window_data) > 1e-10:
+            autocorr[t] = np.corrcoef(window_data[:-1], window_data[1:])[0, 1]
+
+        # Variance
+        variance[t] = np.var(window_data)
+
+        # Skewness
+        std = np.std(window_data)
+        if std > 1e-10:
+            skewness[t] = np.mean(((window_data - np.mean(window_data)) / std) ** 3)
+
+    return {
+        'autocorr': autocorr,
+        'variance': variance,
+        'skewness': skewness
+    }
+
+
+def detect_slowing_down(
+    csd_indicators: Dict[str, np.ndarray],
+    lookback: int = 252,
+    threshold_std: float = 2.0
+) -> Dict:
+    """
+    Detect critical slowing down from indicators.
+
+    Rising autocorrelation + rising variance = transition warning
+
+    Args:
+        csd_indicators: Output from critical_slowing_down_indicators
+        lookback: Period for z-score calculation
+        threshold_std: Z-score threshold for warning
+
+    Returns:
+        Dict with warning level and z-scores
+    """
+    autocorr = csd_indicators['autocorr']
+    variance = csd_indicators['variance']
+
+    # Get valid values
+    ac_valid = autocorr[~np.isnan(autocorr)]
+    var_valid = variance[~np.isnan(variance)]
+
+    if len(ac_valid) < lookback or len(var_valid) < lookback:
+        return {
+            'warning_level': 'INSUFFICIENT_DATA',
+            'autocorr_zscore': np.nan,
+            'variance_zscore': np.nan
+        }
+
+    # Z-scores of recent values
+    ac_recent = ac_valid[-lookback:]
+    var_recent = var_valid[-lookback:]
+
+    ac_zscore = (ac_valid[-1] - np.mean(ac_recent)) / np.std(ac_recent)
+    var_zscore = (var_valid[-1] - np.mean(var_recent)) / np.std(var_recent)
+
+    # Warning level
+    if ac_zscore > threshold_std and var_zscore > threshold_std:
+        warning = 'HIGH'
+        message = 'Critical slowing down detected - regime transition likely'
+    elif ac_zscore > threshold_std or var_zscore > threshold_std:
+        warning = 'ELEVATED'
+        message = 'Partial slowing down signals'
+    else:
+        warning = 'NORMAL'
+        message = 'No transition warning'
+
+    return {
+        'warning_level': warning,
+        'autocorr_zscore': ac_zscore,
+        'variance_zscore': var_zscore,
+        'message': message
+    }
+
+
+# ============================================================================
+# MARKOV SWITCHING (statsmodels integration)
+# ============================================================================
+
+def fit_markov_switching(
+    data: np.ndarray,
+    k_regimes: int = 2,
+    trend: str = 'c',
+    switching_variance: bool = True
+) -> Optional[Any]:
+    """
+    Fit Markov Switching model using statsmodels.
+
+    This is Hamilton's (1989) regime-switching model where
+    both mean and variance can switch between regimes.
+
+    Args:
+        data: Time series data
+        k_regimes: Number of regimes
+        trend: 'c' for constant, 'n' for none
+        switching_variance: Whether variance switches with regime
+
+    Returns:
+        Fitted model result, or None if statsmodels unavailable
+    """
+    try:
+        import statsmodels.api as sm
+
+        model = sm.tsa.MarkovRegression(
+            data,
+            k_regimes=k_regimes,
+            trend=trend,
+            switching_variance=switching_variance
+        )
+        result = model.fit(disp=False)
+        return result
+
+    except ImportError:
+        logger.warning("statsmodels not available for Markov Switching")
+        return None
+    except Exception as e:
+        logger.warning(f"Markov Switching fit failed: {e}")
+        return None
+
+
+# ============================================================================
+# FEATURE INTEGRATION
+# ============================================================================
+
+def add_hmm_features(
+    df: pd.DataFrame,
+    returns_col: str = 'returns',
+    n_regimes: int = 2,
+    window: int = 252,
+    lag: int = 1
+) -> pd.DataFrame:
+    """
+    Add HMM regime features to DataFrame.
+
+    Features added:
+    - hmm_regime: Most likely regime (0 = low vol, 1 = high vol, etc.)
+    - hmm_prob_0, hmm_prob_1, ...: Regime probabilities
+    - hmm_transition_prob: Probability of regime change
+    - csd_autocorr: Critical slowing down autocorrelation
+    - csd_variance: Critical slowing down variance
+    - csd_warning: Early warning signal
+
+    Args:
+        df: DataFrame with return data
+        returns_col: Column name for returns
+        n_regimes: Number of hidden regimes
+        window: Window for CSD indicators
+        lag: Lag to avoid lookahead bias
+
+    Returns:
+        DataFrame with HMM features
+    """
+    result = df.copy()
+
+    if returns_col not in result.columns:
+        logger.warning(f"Returns column '{returns_col}' not found")
+        return result
+
+    returns = result[returns_col].values
+
+    # Fit HMM (expanding window approach for robustness)
+    min_fit_length = max(n_regimes * 50, 100)
+
+    if len(returns) < min_fit_length:
+        logger.warning(f"Insufficient data for HMM: {len(returns)} < {min_fit_length}")
+        return result
+
+    # Fit on full data (for regime interpretation)
+    hmm_result = fit_hmm_regimes(returns, n_regimes=n_regimes)
+
+    # Add regime probabilities (lagged)
+    regime_probs = pd.DataFrame(
+        hmm_result.regime_probabilities,
+        index=df.index,
+        columns=[f'hmm_prob_{i}' for i in range(n_regimes)]
+    )
+    for col in regime_probs.columns:
+        result[col] = regime_probs[col].shift(lag)
+
+    # Most likely regime
+    result['hmm_regime'] = pd.Series(
+        hmm_result.most_likely_regime,
+        index=df.index
+    ).shift(lag)
+
+    # Transition probability (probability of being in different regime next period)
+    trans_probs = []
+    for t in range(len(returns)):
+        if t < lag:
+            trans_probs.append(np.nan)
+        else:
+            current_prob = hmm_result.regime_probabilities[t-lag]
+            # Probability of staying in same regime:
+            # P(S_{t+1} = S_t) = Σ_i P(S_t = i) * P(S_{t+1} = i | S_t = i)
+            #                 = Σ_i P(S_t = i) * A[i,i]
+            same_regime = np.sum(current_prob * np.diag(hmm_result.transition_matrix))
+            trans_probs.append(1 - same_regime)
+
+    result['hmm_transition_prob'] = trans_probs
+
+    # Critical slowing down indicators
+    csd = critical_slowing_down_indicators(returns, window=window)
+    result['csd_autocorr'] = pd.Series(csd['autocorr'], index=df.index).shift(lag)
+    result['csd_variance'] = pd.Series(csd['variance'], index=df.index).shift(lag)
+
+    # CSD z-scores for warning
+    result['csd_autocorr_zscore'] = (
+        (result['csd_autocorr'] - result['csd_autocorr'].rolling(252).mean()) /
+        result['csd_autocorr'].rolling(252).std()
+    )
+    result['csd_variance_zscore'] = (
+        (result['csd_variance'] - result['csd_variance'].rolling(252).mean()) /
+        result['csd_variance'].rolling(252).std()
+    )
+
+    # Warning flag
+    result['csd_warning'] = (
+        (result['csd_autocorr_zscore'] > 2.0) &
+        (result['csd_variance_zscore'] > 2.0)
+    ).astype(int)
+
+    return result
+
+
+# Need dataclass import for HMMRegimeResult
+from dataclasses import dataclass
+from typing import Any
 
 
 # ============================================================================

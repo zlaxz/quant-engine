@@ -85,7 +85,9 @@ def ho_stoll_reservation_price(
     """
     Calculate Ho-Stoll reservation price.
 
-    r(S, Q) = S - Q × ρ × σ² × (T - t)
+    r(S, Q) = S - Q × γ × σ² × (T - t)
+
+    MM4: Standard notation uses γ (gamma) for risk aversion, not ρ (rho)
 
     The reservation price is where the dealer is indifferent to trading.
     - Long inventory (Q > 0): r < S → Quotes shift DOWN to attract buyers
@@ -94,7 +96,7 @@ def ho_stoll_reservation_price(
     Args:
         mid_price: Current market mid-price (S)
         inventory: Current inventory position (Q, + = long, - = short)
-        risk_aversion: Dealer risk aversion parameter (ρ), typically 0.0001 to 0.01
+        risk_aversion: Dealer risk aversion parameter (γ), typically 0.0001 to 0.01
         volatility: Asset volatility per period (σ)
         time_to_close: Time remaining until inventory close (T-t), in same units as volatility
 
@@ -162,6 +164,10 @@ def spread_decomposition(
     Returns:
         Dict with spread components
     """
+    # MM5: Validate inventory_variance before sqrt
+    if inventory_variance < 0:
+        raise ValueError(f"inventory_variance must be >= 0, got {inventory_variance}")
+
     # Inventory risk component scales with volatility and inventory variance
     inventory_component = 2 * volatility * np.sqrt(inventory_variance)
 
