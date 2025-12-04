@@ -298,7 +298,9 @@ class ForceAggregator:
         if len(valid_history) <= 1:
             return 50.0
 
-        return float(np.sum(np.array(valid_history) <= value) / len(valid_history) * 100)
+        percentile = float(np.sum(np.array(valid_history) <= value) / len(valid_history) * 100)
+        # FA21: Ensure percentile is in valid range [0, 100]
+        return float(np.clip(percentile, 0.0, 100.0))
 
     def _value_to_strength(self, value: float, thresholds: Tuple[float, ...]) -> ForceStrength:
         """Convert value to qualitative strength."""
@@ -686,10 +688,13 @@ class ForceAggregator:
         bullish_force_score = np.clip(bullish_force_score, -1, 1)
         bullish_force_score = np.clip(bullish_force_score * 2, -1, 1)
 
+        # FA22: Clip hazard_rate to valid probability range
+        safe_hazard = float(np.clip(regime_state.hazard_rate, 0.0, 1.0)) if regime_state else 0.01
+
         risk_components = [
             raw_metrics.get('vpin', 0.4),
             raw_metrics.get('absorption_ratio', 0.7),
-            regime_state.hazard_rate,
+            safe_hazard,
         ]
         valid_risk = [v for v in risk_components if v is not None and not np.isnan(v) and not np.isinf(v)]
         risk_score = float(np.mean(valid_risk)) if valid_risk else 0.5
@@ -697,7 +702,7 @@ class ForceAggregator:
         risk_score = float(np.clip(risk_score, 0.0, 1.0))
 
         transition_components = [
-            regime_state.hazard_rate,
+            safe_hazard,  # FA22: Use clipped hazard_rate
             1.0 if regime_state.critical_slowing_down else 0.0,
             1.0 if regime_state.minsky_signal else 0.0,
         ]

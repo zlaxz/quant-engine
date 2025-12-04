@@ -14,10 +14,9 @@ Layer: 6 (Regime Transition Prediction)
 
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Dict, Any, Union
 from scipy import stats
-from scipy.special import gammaln
 import warnings
 
 
@@ -332,6 +331,17 @@ def pelt_detect(
     """
     n = len(data)
 
+    # CP_R5_8: Validate parameters to prevent silent failures
+    if min_segment < 1:
+        raise ValueError(f"min_segment must be >= 1, got {min_segment}")
+    if n < 2 * min_segment:
+        raise ValueError(
+            f"Data length ({n}) must be >= 2 * min_segment ({2 * min_segment}) "
+            "to detect at least one change point"
+        )
+    if isinstance(penalty, (int, float)) and penalty < 0:
+        raise ValueError(f"penalty must be non-negative, got {penalty}")
+
     # Compute penalty
     if penalty == 'bic':
         beta = 2 * np.log(n)
@@ -619,10 +629,13 @@ class BOCPD:
         new_sum_x2[1:] = self.sum_x2 + x**2
         new_n[1:] = self.n + 1
 
-        # CP9 FIX: Truncate if exceeding max_run_length
+        # CP9 + CP_R5_6: Truncate if exceeding max_run_length
         if len(new_probs) > self.max_run_length:
-            # Truncate and renormalize
+            # Merge truncated probability mass into last position (don't discard)
+            tail_mass = np.sum(new_probs[self.max_run_length:])
             new_probs = new_probs[:self.max_run_length]
+            new_probs[-1] += tail_mass  # Preserve total probability
+            # Now renormalize (should be ~1.0 already, but numerical safety)
             new_probs = new_probs / (np.sum(new_probs) + 1e-300)
             new_sum_x = new_sum_x[:self.max_run_length]
             new_sum_x2 = new_sum_x2[:self.max_run_length]
