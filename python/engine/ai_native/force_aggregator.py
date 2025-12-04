@@ -88,12 +88,25 @@ logger = logging.getLogger("AINative.ForceAggregator")
 
 def _sanitize_value(v: Any, default: float = 0.0) -> Any:
     """Sanitize a single value - replace NaN/Inf with default."""
+    # FA_R8_1: Validate that default itself is finite, otherwise use 0.0
+    if not np.isfinite(default):
+        default = 0.0
+
     if isinstance(v, (float, np.floating)):
         if np.isnan(v) or np.isinf(v):
             return default
         return float(v)
     elif isinstance(v, (int, np.integer)):
         return int(v)
+    elif isinstance(v, np.ndarray):
+        # Handle numpy arrays
+        if v.size == 0:
+            return default
+        if np.any(np.isnan(v)) or np.any(np.isinf(v)):
+            return default
+        return v
+    elif v is None:
+        return default
     return v
 
 

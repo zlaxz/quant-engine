@@ -210,7 +210,7 @@ class StructureMiner:
             include_slippage=True
         )
 
-        # Compute fitness
+        # Compute fitness with safe handling
         fitness = compute_fitness(
             result,
             sharpe_weight=self.config.sharpe_weight,
@@ -219,6 +219,10 @@ class StructureMiner:
             win_rate_weight=self.config.win_rate_weight,
             complexity_penalty=self.config.complexity_penalty
         )
+        
+        # Ensure fitness is a valid number
+        if not np.isfinite(fitness):
+            fitness = -np.inf
 
         # Cache
         if use_cache:
@@ -227,13 +231,64 @@ class StructureMiner:
         dna.fitness_score = fitness
         return fitness
 
-    def _evaluate_population(self) -> List[float]:
-        """Evaluate fitness for entire population."""
-        fitnesses = []
-        for dna in self.population:
-            fitness = self._evaluate_fitness(dna)
-            fitnesses.append(fitness)
-        return fitnesses
+    def _evaluate_population(self, n_workers: int = None) -> List[float]:
+        """
+        Evaluate fitness for entire population using parallel workers.
+
+        Args:
+            n_workers: Number of parallel workers (default: CPU count)
+        """
+        n_workers = n_workers or mp.cpu_count()
+
+        # Check cache first, separate cached vs uncached
+        cached_results = {}
+        uncached_indices = []
+        uncached_dnas = []
+
+        for i, dna in enumerate(self.population):
+            key = self._get_dna_hash(dna)
+            if key in self.fitness_cache:
+                cached_results[i] = self.fitness_cache[key]
+                dna.fitness_score = self.fitness_cache[key]
+            else:
+                uncached_indices.append(i)
+                uncached_dnas.append(dna)
+
+        # Parallel evaluation of uncached structures
+        if uncached_dnas:
+            # Use parallel evaluation
+            from concurrent.futures import ThreadPoolExecutor
+
+            def eval_single(dna):
+                result = self.backtester.backtest(
+                    dna,
+                    start_date=self.train_dates[0],
+                    end_date=self.train_dates[1],
+                    include_slippage=True
+                )
+                fitness = compute_fitness(
+                    result,
+                    sharpe_weight=self.config.sharpe_weight,
+                    sortino_weight=self.config.sortino_weight,
+                    calmar_weight=self.config.calmar_weight,
+                    win_rate_weight=self.config.win_rate_weight,
+                    complexity_penalty=self.config.complexity_penalty
+                )
+                return fitness
+
+            # ThreadPoolExecutor for I/O bound pandas operations
+            with ThreadPoolExecutor(max_workers=n_workers) as executor:
+                new_fitnesses = list(executor.map(eval_single, uncached_dnas))
+
+            # Cache results and update DNA fitness scores
+            for idx, dna, fitness in zip(uncached_indices, uncached_dnas, new_fitnesses):
+                key = self._get_dna_hash(dna)
+                self.fitness_cache[key] = fitness
+                dna.fitness_score = fitness
+                cached_results[idx] = fitness
+
+        # Build final results list in order
+        return [cached_results[i] for i in range(len(self.population))]
 
     def _select_parents(self, fitnesses: List[float]) -> List[StructureDNA]:
         """
@@ -544,10 +599,16 @@ def run_walk_forward(
         logger.info(f"{'=' * 60}")
 
         # Define train/val for this fold
-        train_start = fold * fold_size
-        train_end = (fold + 1) * fold_size
+        # Each fold trains on expanding window, validates on next period
+        train_start = 0  # Always start from beginning (expanding window)
+        train_end = min((fold + 1) * fold_size, n_dates - fold_size // 2)  # Leave room for validation
         val_start = train_end
-        val_end = min(val_start + fold_size // 2, n_dates)
+        val_end = min(val_start + fold_size // 2, n_dates - 1)  # Clamp to valid index
+
+        # Safety check - skip fold if not enough data
+        if train_end >= n_dates - 1 or val_end <= val_start:
+            logger.warning(f"Skipping fold {fold + 1} - not enough data for validation")
+            continue
 
         miner.train_dates = (all_dates[train_start], all_dates[train_end])
         miner.val_dates = (all_dates[val_start], all_dates[val_end])

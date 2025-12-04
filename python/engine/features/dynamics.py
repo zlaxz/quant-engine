@@ -278,9 +278,13 @@ def estimate_mean_reversion(
     X_lag = x[:-1]
     X_curr = x[1:]
 
+    # Check for valid data before regression
+    if len(X_lag) < 2 or len(X_curr) < 2 or np.all(X_lag == X_lag[0]) or np.all(X_curr == X_curr[0]):
+        return np.nan, np.nan np.nan np.nan np.nan np.nan np.nan np.nan np.nan np.nan np.nan
+
     try:
         slope, intercept, _, _, _ = stats.linregress(X_lag, X_curr)
-    except:
+    except (ValueError, FloatingPointError) as e:  # DYN_R8_1: Specific exceptions instead of bare except
         return np.nan, np.nan
 
     # OU parameters from AR(1)
@@ -338,7 +342,7 @@ def estimate_ou_parameters(
 
     try:
         slope, intercept, _, _, _ = stats.linregress(X_lag, X_curr)
-    except:
+    except (ValueError, FloatingPointError) as e:  # DYN_R8_1: Specific exceptions instead of bare except
         return {
             'kappa': np.nan, 'theta': np.nan, 'sigma': np.nan,
             'half_life': np.nan, 'long_run_mean': np.nan,

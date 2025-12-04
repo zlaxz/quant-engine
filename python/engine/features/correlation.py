@@ -188,6 +188,16 @@ def dcc_garch_filter(
     Returns:
         Tuple of (covariance_matrices, correlation_matrices, standardized_residuals)
     """
+    # COR_R8_1: Validate DCC stationarity constraint (a + b < 1)
+    # Violation causes explosive correlations that diverge to infinity
+    if a + b >= 1:
+        raise ValueError(
+            f"DCC stationarity violated: a + b = {a + b} >= 1. "
+            f"DCC requires a + b < 1 for stable correlations. Got a={a}, b={b}."
+        )
+    if a < 0 or b < 0:
+        raise ValueError(f"DCC parameters must be non-negative. Got a={a}, b={b}.")
+
     returns = np.asarray(returns)
     T, N = returns.shape
 
@@ -214,7 +224,13 @@ def dcc_garch_filter(
     # Standardized residuals
     # Add small epsilon to prevent div/0
     h_safe = np.maximum(h, 1e-10)
-    eta = returns / np.sqrt(h_safe)
+    sqrt_h_safe = np.sqrt(h_safe)
+    # Ensure no division by zero (should be prevented by max above)
+    sqrt_h_safe = np.maximum(sqrt_h_safe, 1e-10)
+    # Safe division with explicit check
+    with np.errstate(divide='ignore', invalid='ignore'):
+        eta = returns / sqrt_h_safe
+        eta = np.where(np.isfinite(eta), eta, 0.0)
 
     # Unconditional correlation of standardized residuals
     Q_bar = np.corrcoef(eta.T)
@@ -226,7 +242,7 @@ def dcc_garch_filter(
 
     # Stage 2: DCC dynamics
     Q_list = [Q_bar.copy()]
-    R_list = [Q_bar.copy()]
+    R_list = [Q_bar.copy()]]]]]]]]
     H_list = []
 
     # Initial covariance

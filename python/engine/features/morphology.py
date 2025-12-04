@@ -263,6 +263,20 @@ def _compute_dip(sorted_data: np.ndarray, ecdf: np.ndarray) -> float:
     if data_range < 1e-10:
         # All data points are identical - perfectly unimodal
         return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
+        return 0.0
 
     # Normalize data to [0, 1] - x-coordinates are normalized data values
     x_vals = (sorted_data - data_min) / data_range

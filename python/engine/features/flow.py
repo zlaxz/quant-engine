@@ -195,17 +195,20 @@ def bulk_volume_classification(
 
     # FL11: Estimate sigma with adaptive epsilon based on data scale
     if sigma is None:
-        sigma = np.std(returns)
-        # Adaptive epsilon: use mean absolute return as scale reference
-        data_scale = np.mean(np.abs(returns)) if len(returns) > 0 else 0.0
-        adaptive_eps = max(data_scale * 0.01, 1e-6)  # 1% of typical move, floor at 1e-6
+        if len(returns) > 0:
+            sigma = np.std(returns)
+            # Adaptive epsilon: use mean absolute return as scale reference
+            data_scale = np.mean(np.abs(returns)) if len(returns) > 0 else 0.0
+            adaptive_eps = max(data_scale * 0.01, 1e-6)  # 1% of typical move, floor at 1e-6
 
-        if sigma < adaptive_eps:
-            # Use robust fallback: 25th percentile of non-zero absolute returns
-            nonzero_returns = np.abs(returns[returns != 0])
-            sigma = np.percentile(nonzero_returns, 25) if len(nonzero_returns) > 0 else adaptive_eps
             if sigma < adaptive_eps:
-                sigma = adaptive_eps  # Data-adaptive fallback
+                # Use robust fallback: 25th percentile of non-zero absolute returns
+                nonzero_returns = np.abs(returns[returns != 0])
+                sigma = np.percentile(nonzero_returns, 25) if len(nonzero_returns) > 0 else adaptive_eps
+                if sigma < adaptive_eps:
+                    sigma = adaptive_eps  # Data-adaptive fallback
+        else:
+            sigma = 1e-6  # Safe default for empty returns
 
     # Standardized returns
     z_scores = returns / sigma
@@ -256,7 +259,7 @@ def create_volume_buckets(
     cumvol = np.cumsum(volumes)
     total_vol = cumvol[-1]
 
-    if total_vol < bucket_size:
+    if total_vol < bucket_size or bucket_size <= 0:
         # Not enough volume for even one bucket
         return np.array([total_vol]), [(0, len(volumes))]
 

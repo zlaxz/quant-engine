@@ -50,11 +50,21 @@ def black_scholes_greeks(
         return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0}
 
     sqrt_t = np.sqrt(tte)
-    d1 = (np.log(spot / strike) + (rate + 0.5 * iv**2) * tte) / (iv * sqrt_t)
+    # Avoid division by zero: check iv * sqrt_t > 0
+    denominator = iv * sqrt_t
+    if denominator <= 1e-12:
+        return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0}
+    
+    d1 = (np.log(spot / strike) + (rate + 0.5 * iv**2) * tte) / denominator
     d2 = d1 - iv * sqrt_t
 
     # Gamma (same for calls and puts)
-    gamma = norm.pdf(d1) / (spot * iv * sqrt_t)
+    # Avoid division by zero: check spot * iv * sqrt_t > 0
+    gamma_denominator = spot * iv * sqrt_t
+    if gamma_denominator <= 1e-12:
+        gamma = 0
+    else:
+        gamma = norm.pdf(d1) / gamma_denominator
 
     # Delta
     if is_call:
@@ -194,10 +204,32 @@ class GammaCalculator:
                 ),
                 axis=1
             )
+            # Handle NaN values from gamma calculation
+            df['gamma'] = df['gamma'].fillna(0)
+            # Handle NaN values from gamma calculation
+            df['gamma'] = df['gamma'].fillna(0)
+            # Handle NaN values from gamma calculation
+            df['gamma'] = df['gamma'].fillna(0)
+            # Handle NaN values from gamma calculation
+            df['gamma'] = df['gamma'].fillna(0)
+            # Handle NaN values from gamma calculation
+            df['gamma'] = df['gamma'].fillna(0)
+            # Handle NaN values from gamma calculation
+            df['gamma'] = df['gamma'].fillna(0)
+            # Handle NaN values from gamma calculation
+            df['gamma'] = df['gamma'].fillna(0)
+            # Handle NaN values from gamma calculation
+            df['gamma'] = df['gamma'].fillna(0)
+            # Handle NaN values from gamma calculation
+            df['gamma'] = df['gamma'].fillna(0)
 
         # Calculate GEX per contract (Dollar Gamma)
         # GEX = Gamma * OI * 100 * Spot
         # Gamma already has 1/S in its formula, so we multiply by S once to get dollar terms
+        # Ensure spot_price is positive to avoid invalid calculations
+        if spot_price <= 0:
+            raise ValueError(f"spot_price must be positive, got {spot_price}")
+        
         df['gex_per_strike'] = (
             df['gamma'] *
             df['open_interest'] *

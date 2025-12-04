@@ -125,10 +125,16 @@ def cusum_mean_shift(
     # Estimate reference parameters if not provided
     reference_window = max(20, n // 5)
     if reference_mean is None:
-        reference_mean = np.mean(data[:reference_window])
+        if reference_window > 0 and len(data[:reference_window]) > 0:
+            reference_mean = np.mean(data[:reference_window])
+        else:
+            reference_mean = 0.0
     if reference_std is None:
-        reference_std = np.std(data[:reference_window], ddof=1)
-        reference_std = max(reference_std, 1e-10)  # Prevent division by zero
+        if reference_window > 0 and len(data[:reference_window]) > 0:
+            reference_std = np.std(data[:reference_window], ddof=1)
+            reference_std = max(reference_std, 1e-10)  # Prevent division by zero
+        else:
+            reference_std = 1.0
 
     # Standardize
     z = (data - reference_mean) / reference_std
@@ -201,8 +207,11 @@ def cusum_variance_shift(
     # Estimate reference variance
     reference_window = max(20, n // 5)
     if reference_var is None:
-        reference_var = np.var(data[:reference_window], ddof=1)
-        reference_var = max(reference_var, 1e-10)
+        if reference_window > 0 and len(data[:reference_window]) > 0:
+            reference_var = np.var(data[:reference_window], ddof=1)
+            reference_var = max(reference_var, 1e-10)
+        else:
+            reference_var = 1.0
 
     if target_var is None:
         target_var = 2.0 * reference_var  # Detect doubling of variance
@@ -216,7 +225,17 @@ def cusum_variance_shift(
     safe_ref_var = max(reference_var, min_var)
     safe_target_var = max(target_var, min_var)
 
-    log_ratio = np.log(sigma_0 / sigma_1)
+    # Prevent division by zero in log ratio
+    if sigma_1 <= 0 or sigma_0 <= 0:
+        log_ratio = 0.0
+    else:
+        # Prevent log(0) or log(negative)
+        ratio = sigma_0 / sigma_1
+        if ratio <= 0:
+            log_ratio = 0.0
+        else:
+            log_ratio = np.log(ratio)
+    
     var_diff = 1/safe_ref_var - 1/safe_target_var
 
     s = log_ratio + 0.5 * data**2 * var_diff

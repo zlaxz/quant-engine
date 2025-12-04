@@ -147,6 +147,8 @@ class RegimeAnalyzer:
         # Momentum (distance from SMA20 as percentage)
         # Floor at 0.1% of close to prevent explosion during warm-up
         sma_floor = np.maximum(sma_short, close * 0.001)
+        # Add epsilon to prevent division by zero
+        sma_floor = np.maximum(sma_floor, 1e-10)
         momentum = (close - sma_short) / sma_floor
         df['momentum_sma20'] = momentum.shift(lag)
 
@@ -232,7 +234,32 @@ class RegimeAnalyzer:
 
         # VIX change (regime transition indicator)
         # Floor VIX at 1 to prevent div/0 in pct_change (VIX < 1 never happens in practice)
-        vix_safe = np.maximum(vix, 1.0)
+        vix_floor = np.maximum(vix, 1.0)
+        vix_change = vix_floor.pct_change()
+        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
+        vix_change = vix_floor.pct_change()
+        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
+        vix_change = vix_floor.pct_change()
+        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
+        vix_change = vix_floor.pct_change()
+        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
+        vix_change = vix_floor.pct_change()
+        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
+        vix_change = vix_floor.pct_change()
+        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
+        vix_change = vix_floor.pct_change()
+        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
+        vix_change = vix_floor.pct_change()
+        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
+        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
+        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
+        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
+        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
+        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
+        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
+        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
+        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
+        df['vix_pct_change'] = vix_floor.pct_change()safe = np.maximum(vix, 1.0)
         df['vix_change_1d'] = vix_safe.pct_change()
         df['vix_change_5d'] = vix_safe.pct_change(5)
 

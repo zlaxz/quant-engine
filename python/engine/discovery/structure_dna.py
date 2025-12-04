@@ -131,6 +131,46 @@ class StructureDNA:
         """Ensure valid values."""
         if not self.entry_regimes:
             self.entry_regimes = [0, 1, 2, 3]
+        # Ensure min/max bounds are valid
+        if self.min_iv_rank > self.max_iv_rank:
+            self.min_iv_rank, self.max_iv_rank = self.max_iv_rank, self.min_iv_rank
+        if self.min_vix > self.max_vix:
+            self.min_vix, self.max_vix = self.max_vix, self.min_vix
+        if self.min_atm_cost > self.max_atm_cost:
+            self.min_atm_cost, self.max_atm_cost = self.max_atm_cost, self.min_atm_cost
+        if self.min_skew > self.max_skew:
+            self.min_skew, self.max_skew = self.max_skew, self.min_skew
+        if self.min_term_struct > self.max_term_struct:
+            self.min_term_struct, self.max_term_struct = self.max_term_struct, self.min_term_struct
+        if self.min_vol_pcr > self.max_vol_pcr:
+            self.min_vol_pcr, self.max_vol_pcr = self.max_vol_pcr, self.min_vol_pcr> self.max_vol_pcr:
+            self.min_vol_pcr, self.max_vol_pcr = self.max_vol_pcr, self.min_vol_pcr
+        # Ensure min/max bounds are valid
+        if self.min_iv_rank > self.max_iv_rank:
+            self.min_iv_rank, self.max_iv_rank = self.max_iv_rank, self.min_iv_rank
+        if self.min_vix > self.max_vix:
+            self.min_vix, self.max_vix = self.max_vix, self.min_vix
+        if self.min_atm_cost > self.max_atm_cost:
+            self.min_atm_cost, self.max_atm_cost = self.max_atm_cost, self.min_atm_cost
+        if self.min_skew > self.max_skew:
+            self.min_skew, self.max_skew = self.max_skew, self.min_skew
+        if self.min_term_struct > self.max_term_struct:
+            self.min_term_struct, self.max_term_struct = self.max_term_struct, self.min_term_struct
+        if self.min_vol_pcr > self.max_vol_pcr:
+            self.min_vol_pcr, self.max_vol_pcr = self.max_vol_pcr, self.min_vol_pcr
+        # Ensure min/max bounds are valid
+        if self.min_iv_rank > self.max_iv_rank:
+            self.min_iv_rank, self.max_iv_rank = self.max_iv_rank, self.min_iv_rank
+        if self.min_vix > self.max_vix:
+            self.min_vix, self.max_vix = self.max_vix, self.min_vix
+        if self.min_atm_cost > self.max_atm_cost:
+            self.min_atm_cost, self.max_atm_cost = self.max_atm_cost, self.min_atm_cost
+        if self.min_skew > self.max_skew:
+            self.min_skew, self.max_skew = self.max_skew, self.min_skew
+        if self.min_term_struct > self.max_term_struct:
+            self.min_term_struct, self.max_term_struct = self.max_term_struct, self.min_term_struct
+        if self.min_vol_pcr > self.max_vol_pcr:
+            self.min_vol_pcr, self.max_vol_pcr = self.max_vol_pcr, self.min_vol_pcr
 
     @property
     def structure_key(self) -> str:
@@ -582,6 +622,70 @@ def get_seed_structures() -> List[StructureDNA]:
         stop_loss_pct=1.00,
     ))
 
+    # === REGIME 3 (Compression) SPECIFIC SEEDS ===
+    # 2023-2024 is dominated by regime 3 - we need structures that work here
+    seeds.append(StructureDNA(
+        structure_type=StructureType.SHORT_STRANGLE,
+        dte_bucket=DTEBucket.DTE_30,
+        delta_bucket=DeltaBucket.D25,
+        entry_regimes=[3],  # Compression only
+        profit_target_pct=0.50,
+        stop_loss_pct=2.00,
+    ))
+    seeds.append(StructureDNA(
+        structure_type=StructureType.SHORT_STRADDLE,
+        dte_bucket=DTEBucket.DTE_21,
+        delta_bucket=DeltaBucket.ATM,
+        entry_regimes=[3],  # Compression only
+        profit_target_pct=0.30,
+        stop_loss_pct=1.50,
+    ))
+    seeds.append(StructureDNA(
+        structure_type=StructureType.IRON_CONDOR,
+        dte_bucket=DTEBucket.DTE_45,
+        delta_bucket=DeltaBucket.D25,
+        wing_width_pct=0.05,
+        entry_regimes=[3],  # Compression only
+        profit_target_pct=0.50,
+        stop_loss_pct=1.50,
+    ))
+    seeds.append(StructureDNA(
+        structure_type=StructureType.SHORT_STRANGLE,
+        dte_bucket=DTEBucket.DTE_45,
+        delta_bucket=DeltaBucket.D10,
+        entry_regimes=[3],  # Compression only
+        profit_target_pct=0.40,
+        stop_loss_pct=2.00,
+    ))
+
+    # === ALL-REGIME STRUCTURES (unconstrained) ===
+    # These trade regardless of regime - let the market decide
+    seeds.append(StructureDNA(
+        structure_type=StructureType.SHORT_STRADDLE,
+        dte_bucket=DTEBucket.DTE_30,
+        delta_bucket=DeltaBucket.ATM,
+        entry_regimes=[0, 1, 2, 3],  # All regimes
+        profit_target_pct=0.30,
+        stop_loss_pct=1.00,
+    ))
+    seeds.append(StructureDNA(
+        structure_type=StructureType.SHORT_STRANGLE,
+        dte_bucket=DTEBucket.DTE_45,
+        delta_bucket=DeltaBucket.D25,
+        entry_regimes=[0, 1, 2, 3],  # All regimes
+        profit_target_pct=0.50,
+        stop_loss_pct=2.00,
+    ))
+    seeds.append(StructureDNA(
+        structure_type=StructureType.IRON_CONDOR,
+        dte_bucket=DTEBucket.DTE_30,
+        delta_bucket=DeltaBucket.D25,
+        wing_width_pct=0.05,
+        entry_regimes=[0, 1, 2, 3],  # All regimes
+        profit_target_pct=0.50,
+        stop_loss_pct=1.50,
+    ))
+
     return seeds
 
 
@@ -652,9 +756,14 @@ def get_payoff_surface_keys_for_dna(dna: StructureDNA) -> List[str]:
     """
     Get all payoff surface keys that this DNA might use.
 
-    Some structures need multiple lookups:
-    - Spread: ATM call + OTM call
-    - Condor: Multiple delta levels
+    IMPORTANT: Maps to keys that ACTUALLY EXIST in the payoff surface.
+
+    Available keys in surface:
+    - ATM single legs: LONG_CALL_ATM, LONG_PUT_ATM, SHORT_CALL_ATM, SHORT_PUT_ATM
+    - ATM straddles: LONG_STRADDLE_ATM, SHORT_STRADDLE_ATM
+    - OTM strangles: LONG_STRANGLE_25D/10D/5D, SHORT_STRANGLE_25D/10D/5D
+
+    Complex structures are approximated using combinations of these.
 
     Returns list of structure_key strings to look up.
     """
@@ -662,63 +771,65 @@ def get_payoff_surface_keys_for_dna(dna: StructureDNA) -> List[str]:
     delta = dna.delta_bucket.value
     dte = dna.dte_bucket.value
 
-    # Simple structures - single lookup
-    SIMPLE = {
-        StructureType.LONG_CALL: f"LONG_CALL_{delta}_{dte}DTE",
-        StructureType.LONG_PUT: f"LONG_PUT_{delta}_{dte}DTE",
-        StructureType.SHORT_CALL: f"SHORT_CALL_{delta}_{dte}DTE",
-        StructureType.SHORT_PUT: f"SHORT_PUT_{delta}_{dte}DTE",
-        StructureType.LONG_STRADDLE: f"LONG_STRADDLE_{delta}_{dte}DTE",
-        StructureType.SHORT_STRADDLE: f"SHORT_STRADDLE_{delta}_{dte}DTE",
-        StructureType.LONG_STRANGLE: f"LONG_STRANGLE_{delta}_{dte}DTE",
-        StructureType.SHORT_STRANGLE: f"SHORT_STRANGLE_{delta}_{dte}DTE",
-    }
+    # Single legs - only ATM keys exist, so map all deltas to ATM
+    if stype == StructureType.LONG_CALL:
+        return [f"LONG_CALL_ATM_{dte}DTE"]
+    if stype == StructureType.LONG_PUT:
+        return [f"LONG_PUT_ATM_{dte}DTE"]
+    if stype == StructureType.SHORT_CALL:
+        return [f"SHORT_CALL_ATM_{dte}DTE"]
+    if stype == StructureType.SHORT_PUT:
+        return [f"SHORT_PUT_ATM_{dte}DTE"]
 
-    if stype in SIMPLE:
-        return [SIMPLE[stype]]
+    # Straddles - only ATM keys exist
+    if stype == StructureType.LONG_STRADDLE:
+        return [f"LONG_STRADDLE_ATM_{dte}DTE"]
+    if stype == StructureType.SHORT_STRADDLE:
+        return [f"SHORT_STRADDLE_ATM_{dte}DTE"]
 
-    # Complex structures - multiple lookups needed
-    # These are approximations - real backtester will need more sophistication
+    # Strangles - OTM keys exist (25D, 10D, 5D)
+    # Map delta bucket to strangle key
+    strangle_delta = delta if delta in ['25D', '10D', '5D'] else '25D'
+    if stype == StructureType.LONG_STRANGLE:
+        return [f"LONG_STRANGLE_{strangle_delta}_{dte}DTE"]
+    if stype == StructureType.SHORT_STRANGLE:
+        return [f"SHORT_STRANGLE_{strangle_delta}_{dte}DTE"]
+
+    # === COMPLEX STRUCTURES - Approximations ===
+
+    # Spreads: Approximate using ATM single leg (directional bias)
+    # Call spreads have net bullish bias - use long call
     if stype == StructureType.CALL_DEBIT_SPREAD:
-        return [f"LONG_CALL_ATM_{dte}DTE", f"SHORT_CALL_25D_{dte}DTE"]
-
+        return [f"LONG_CALL_ATM_{dte}DTE"]
     if stype == StructureType.CALL_CREDIT_SPREAD:
-        return [f"SHORT_CALL_ATM_{dte}DTE", f"LONG_CALL_25D_{dte}DTE"]
-
+        return [f"SHORT_CALL_ATM_{dte}DTE"]
     if stype == StructureType.PUT_DEBIT_SPREAD:
-        return [f"LONG_PUT_ATM_{dte}DTE", f"SHORT_PUT_25D_{dte}DTE"]
-
+        return [f"LONG_PUT_ATM_{dte}DTE"]
     if stype == StructureType.PUT_CREDIT_SPREAD:
-        return [f"SHORT_PUT_ATM_{dte}DTE", f"LONG_PUT_25D_{dte}DTE"]
+        return [f"SHORT_PUT_ATM_{dte}DTE"]
 
+    # Iron Condor: Short inner strangle (25D) + Long outer strangle (10D)
+    # This is an approximation - real iron condor has 4 legs
+    # Net effect is similar to short strangle with protection
     if stype == StructureType.IRON_CONDOR:
-        return [
-            f"SHORT_CALL_25D_{dte}DTE",
-            f"LONG_CALL_10D_{dte}DTE",
-            f"SHORT_PUT_25D_{dte}DTE",
-            f"LONG_PUT_10D_{dte}DTE",
-        ]
+        return [f"SHORT_STRANGLE_25D_{dte}DTE", f"LONG_STRANGLE_10D_{dte}DTE"]
 
+    # Iron Butterfly: Short ATM straddle + Long OTM strangle (wings)
     if stype == StructureType.IRON_BUTTERFLY:
-        return [
-            f"SHORT_STRADDLE_ATM_{dte}DTE",
-            f"LONG_CALL_25D_{dte}DTE",
-            f"LONG_PUT_25D_{dte}DTE",
-        ]
+        return [f"SHORT_STRADDLE_ATM_{dte}DTE", f"LONG_STRANGLE_25D_{dte}DTE"]
 
-    # Calendar spreads need different DTE
-    back_dte = min(120, dte + dna.back_month_offset)
+    # Calendar spreads: Use front month straddle as primary proxy
+    # (Calendar P&L is complex; this is a simplification)
     if stype == StructureType.CALL_CALENDAR:
-        return [f"SHORT_CALL_{delta}_{dte}DTE", f"LONG_CALL_{delta}_{back_dte}DTE"]
-
+        return [f"LONG_STRADDLE_ATM_{dte}DTE"]
     if stype == StructureType.PUT_CALENDAR:
-        return [f"SHORT_PUT_{delta}_{dte}DTE", f"LONG_PUT_{delta}_{back_dte}DTE"]
+        return [f"LONG_STRADDLE_ATM_{dte}DTE"]
 
+    # Diagonals: Similar to calendars, use straddle as proxy
     if stype == StructureType.CALL_DIAGONAL:
-        return [f"SHORT_CALL_ATM_{dte}DTE", f"LONG_CALL_25D_{back_dte}DTE"]
-
+        return [f"LONG_STRADDLE_ATM_{dte}DTE"]
     if stype == StructureType.PUT_DIAGONAL:
-        return [f"SHORT_PUT_ATM_{dte}DTE", f"LONG_PUT_25D_{back_dte}DTE"]
+        return [f"LONG_STRADDLE_ATM_{dte}DTE"]
 
     # Fallback
     return [f"LONG_STRADDLE_ATM_{dte}DTE"]

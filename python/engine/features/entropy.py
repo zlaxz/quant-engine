@@ -79,9 +79,16 @@ def shannon_entropy(
 
     # Remove zero counts
     hist = hist[hist > 0]
+    
+    # Guard against empty histogram (all bins zero)
+    if len(hist) == 0:
+        return np.nan
 
     # Normalize to probabilities
-    probs = hist / hist.sum()
+    hist_sum = hist.sum()
+    if hist_sum == 0:
+        return np.nan
+    probs = hist / hist_sum
 
     # Calculate entropy
     return scipy_entropy(probs, base=base)
@@ -101,13 +108,16 @@ def normalized_entropy(
         0 = perfectly predictable (deterministic)
         1 = maximum uncertainty (uniform/random)
     """
+    # ENT_R8_1: Validate bins >= 2 (bins=1 causes log2(1)=0 → division by zero)
+    if bins < 2:
+        logger.warning(f"bins must be >= 2 for normalized entropy, got {bins}")
+        return np.nan
+
     h = shannon_entropy(data, bins=bins, method=method, base=2)
     h_max = np.log2(bins)  # Max entropy for uniform distribution
 
-    if h_max == 0:
-        return np.nan
-
-    return h / h_max
+    # h_max guaranteed > 0 since bins >= 2
+    return h / h_max if not np.isnan(h) and h_max > 0 else np.nan
 
 
 def rolling_entropy(
@@ -198,6 +208,11 @@ def permutation_entropy(
         For order=3, sequence [1.2, 0.5, 0.8] has pattern (1,2,0)
         because 0.5 < 0.8 < 1.2 (indices when sorted)
     """
+    # ENT_R8_3: Validate order >= 2 (order=1 has factorial(1)=1, order=0 has factorial(0)=1, log2(1)=0 → div by zero)
+    if order < 2:
+        logger.warning(f"order must be >= 2 for permutation entropy, got {order}")
+        return np.nan
+
     data = np.asarray(data).flatten()
     data = data[~np.isnan(data)]
 
@@ -214,19 +229,25 @@ def permutation_entropy(
         # Get permutation pattern (rank order)
         pattern = tuple(np.argsort(subsequence))
         permutations.append(pattern)
+    
+    # Check if we have any permutations
+    if len(permutations) == 0:
+        return np.nan
 
     # Count pattern frequencies
     counter = Counter(permutations)
     total = len(permutations)
 
-    # Calculate entropy (guard against log(0))
+    # Calculate entropy (guard against log(0) and empty counter)
+    if total == 0:
+        return np.nan
     probs = np.array(list(counter.values())) / total
     h = -np.sum(np.where(probs > 0, probs * np.log2(probs), 0))
 
     if normalize:
         # Maximum entropy for order! possible patterns
         h_max = np.log2(math.factorial(order))
-        return h / h_max if h_max > 0 else np.nan
+        return h / h_max if h_max > 0 and not np.isnan(h) else np.nan
 
     return h
 
@@ -738,7 +759,8 @@ def add_entropy_features(
     df: pd.DataFrame,
     returns_col: str = 'returns',
     window: int = 50,
-    lag: int = 1
+    lag: int = 1,
+    bins: int = 20
 ) -> pd.DataFrame:
     """
     Add entropy features to DataFrame.

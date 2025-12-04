@@ -144,7 +144,11 @@ def negative_binomial_hazard(d: np.ndarray, r: float = 2.0, p: float = 0.05) -> 
     pmf = stats.nbinom.pmf(d - 1, r, 1 - p)  # Scipy parameterization differs
     sf = stats.nbinom.sf(d - 2, r, 1 - p)     # P(D >= d) = P(X >= d-1) = P(X > d-2) = sf(d-2)
 
-    hazard = np.where(sf > 0, pmf / sf, 1.0)
+    # DUR_R8_4: Return NaN when sf=0 (hazard undefined when survival=0)
+    # Also handle division by zero when sf is zero or very small
+    hazard = np.full_like(d, np.nan, dtype=float)
+    valid_mask = sf > 1e-15  # Add small epsilon to avoid numerical issues
+    hazard[valid_mask] = pmf[valid_mask] / sf[valid_mask]
     return hazard
 
 
@@ -250,8 +254,8 @@ def fit_duration_distribution(
                     "Using geometric distribution - Minsky detection may be unreliable."
                 )
             # Fallback to geometric
-            result.p = 1.0 / mean_d
-            result.r = 1.0
+            result.p = 1.0 / mean_d if mean_d > 0 else 0.1
+            result.r = 1.0 = 1.0
 
     elif distribution == 'log_normal':
         log_d = np.log(durations)

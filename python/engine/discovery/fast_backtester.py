@@ -154,6 +154,20 @@ class FastBacktester:
         self.trading_dates = self.lookup.wide.index.intersection(self.regimes.index)
         logger.info(f"Aligned {len(self.trading_dates)} trading dates")
 
+        # PRE-ALIGN all data to trading_dates (thread-safe, no reindex during backtest)
+        # This is critical for parallel evaluation - avoids "cannot reindex" errors
+        self._aligned_regimes = self.regimes.reindex(self.trading_dates)
+        self._aligned_vix = self.vix.reindex(self.trading_dates) if self.vix is not None else None
+        self._aligned_iv_rank = self.iv_rank.reindex(self.trading_dates) if self.iv_rank is not None else None
+        if self.options_features is not None:
+            # Handle potential duplicate indices by taking last value
+            if self.options_features.index.has_duplicates:
+                logger.warning("Options features has duplicate dates - taking last value per date")
+                self.options_features = self.options_features[~self.options_features.index.duplicated(keep='last')]
+            self._aligned_options_features = self.options_features.reindex(self.trading_dates)
+        else:
+            self._aligned_options_features = None
+
     def _load_regimes(self, path: Path) -> pd.Series:
         """Load regime assignments."""
         df = pd.read_parquet(path)
@@ -204,43 +218,42 @@ class FastBacktester:
         - VIX filter (if configured)
         - IV rank filter (if configured)
         - Options feature filters (if configured)
+
+        Uses pre-aligned data for thread-safety during parallel evaluation.
         """
         # Start with all dates
         mask = pd.Series(True, index=self.trading_dates)
 
-        # Regime filter
-        regime_vals = self.regimes.reindex(self.trading_dates)
-        mask &= regime_vals.isin(dna.entry_regimes)
+        # Regime filter (use pre-aligned data)
+        mask &= self._aligned_regimes.isin(dna.entry_regimes)
 
-        # VIX filter
-        if self.vix is not None:
-            vix_vals = self.vix.reindex(self.trading_dates)
-            mask &= (vix_vals >= dna.min_vix) & (vix_vals <= dna.max_vix)
+        # VIX filter (use pre-aligned data)
+        if self._aligned_vix is not None:
+            mask &= (self._aligned_vix >= dna.min_vix) & (self._aligned_vix <= dna.max_vix)
 
-        # IV rank filter
-        if self.iv_rank is not None:
-            ivr_vals = self.iv_rank.reindex(self.trading_dates)
-            mask &= (ivr_vals >= dna.min_iv_rank) & (ivr_vals <= dna.max_iv_rank)
+        # IV rank filter (use pre-aligned data)
+        if self._aligned_iv_rank is not None:
+            mask &= (self._aligned_iv_rank >= dna.min_iv_rank) & (self._aligned_iv_rank <= dna.max_iv_rank)
 
-        # Options Features Filter (Hybrid Model)
-        if self.options_features is not None:
-            feats = self.options_features.reindex(self.trading_dates)
-            
+        # Options Features Filter (Hybrid Model) - use pre-aligned data
+        if self._aligned_options_features is not None:
+            feats = self._aligned_options_features
+
             # ATM Cost
             if 'atm_cost_pct' in feats.columns:
                 mask &= (feats['atm_cost_pct'] >= dna.min_atm_cost) & \
                         (feats['atm_cost_pct'] <= dna.max_atm_cost)
-            
+
             # Skew
             if 'skew_25d' in feats.columns:
                 mask &= (feats['skew_25d'] >= dna.min_skew) & \
                         (feats['skew_25d'] <= dna.max_skew)
-            
+
             # Term Structure
             if 'term_structure' in feats.columns:
                 mask &= (feats['term_structure'] >= dna.min_term_struct) & \
                         (feats['term_structure'] <= dna.max_term_struct)
-            
+
             # PCR
             if 'vol_pcr' in feats.columns:
                 mask &= (feats['vol_pcr'] >= dna.min_vol_pcr) & \
@@ -351,7 +364,8 @@ class FastBacktester:
         """Count number of distinct trades (entries after flat periods)."""
         # A trade starts when we go from 0 to non-zero return
         non_zero = returns != 0
-        trade_starts = non_zero & (~non_zero.shift(1).fillna(False))
+        shifted = non_zero.shift(1).fillna(False).astype(bool)
+        trade_starts = non_zero & (~shifted)
         return int(trade_starts.sum())
 
     def _compute_metrics(

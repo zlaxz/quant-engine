@@ -167,9 +167,13 @@ def spread_decomposition(
     # MM5: Validate inventory_variance before sqrt
     if inventory_variance < 0:
         raise ValueError(f"inventory_variance must be >= 0, got {inventory_variance}")
-
-    # Inventory risk component scales with volatility and inventory variance
-    inventory_component = 2 * volatility * np.sqrt(inventory_variance)
+    
+    # Handle zero variance case to avoid sqrt(0) issues
+    if inventory_variance == 0:
+        inventory_component = 0
+    else:
+        # Inventory risk component scales with volatility and inventory variance
+        inventory_component = 2 * volatility * np.sqrt(inventory_variance)
 
     # Adverse selection component
     info_component = informed_prob * observed_spread
@@ -187,6 +191,11 @@ def spread_decomposition(
         order_component *= scale
         inventory_component *= scale
         info_component *= scale
+    else:
+        # If total is zero or negative, use equal distribution
+        order_component = observed_spread / 3
+        inventory_component = observed_spread / 3
+        info_component = observed_spread / 3
 
     return {
         'order_processing': order_component,
@@ -224,7 +233,32 @@ def avellaneda_stoikov_quotes(
 
     Returns:
         OptimalQuotes dataclass
+
+    Raises:
+        ValueError: If risk_aversion or market_depth_k are invalid
     """
+    # MM_R8_1: Validate parameters to prevent division by zero
+    if risk_aversion <= 0:
+        raise ValueError(
+            f"risk_aversion must be > 0, got {risk_aversion}. "
+            "A-S model requires positive risk aversion for spread calculation."
+        )
+    if market_depth_k <= 0:
+        raise ValueError(
+            f"market_depth_k must be > 0, got {market_depth_k}. "
+            "Market depth parameter must be positive."
+        )
+    if volatility <= 0:
+        raise ValueError(
+            f"volatility must be > 0, got {volatility}. "
+            "Volatility must be positive for A-S model."
+        )
+    if volatility <= 0:
+        raise ValueError(
+            f"volatility must be > 0, got {volatility}. "
+            "Volatility must be positive for A-S model."
+        )
+
     # Reservation price
     inventory_skew = inventory * risk_aversion * (volatility ** 2) * time_remaining
     reservation = mid_price - inventory_skew
