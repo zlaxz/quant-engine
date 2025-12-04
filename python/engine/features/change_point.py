@@ -115,6 +115,11 @@ def cusum_mean_shift(
     CUSUMResult
         Detection results
     """
+    # CP_R7_2: Validate input data for NaN
+    data = np.asarray(data)
+    if np.any(np.isnan(data)):
+        raise ValueError("Input data contains NaN values - cusum_mean_shift cannot handle NaN")
+
     n = len(data)
 
     # Estimate reference parameters if not provided
@@ -334,6 +339,11 @@ def pelt_detect(
     PELTResult
         Detection results
     """
+    # CP_R7_4: Validate input data for NaN
+    data = np.asarray(data)
+    if np.any(np.isnan(data)):
+        raise ValueError("Input data contains NaN values - pelt_detect cannot handle NaN")
+
     n = len(data)
 
     # CP_R5_8: Validate parameters to prevent silent failures
@@ -652,7 +662,14 @@ class BOCPD:
             # run lengths, corrupting posterior mean/variance calculations.
             # Better to lose tail probability than corrupt statistics.
             new_probs = new_probs[:self.max_run_length]
-            new_probs = new_probs / (np.sum(new_probs) + 1e-300)
+
+            # CP_R7_1: Re-check probability sum after truncation
+            prob_sum = np.sum(new_probs)
+            if prob_sum > 1e-300:
+                new_probs = new_probs / prob_sum
+            else:
+                # Complete probability collapse - reset to fresh start
+                new_probs = np.ones(len(new_probs)) / len(new_probs)
             new_sum_x = new_sum_x[:self.max_run_length]
             new_sum_x2 = new_sum_x2[:self.max_run_length]
             new_n = new_n[:self.max_run_length]
@@ -689,6 +706,11 @@ class BOCPD:
         BOCPDResult
             Full detection results
         """
+        # CP_R7_3: Validate input data for NaN
+        data = np.asarray(data)
+        if np.any(np.isnan(data)):
+            raise ValueError("Input data contains NaN values - BOCPD cannot handle NaN")
+
         self.reset()
         n = len(data)
 
@@ -863,6 +885,11 @@ def add_change_point_features(
 
     df = df.copy()
     data = df[returns_col].dropna().values
+
+    # CP_R7_5: Re-validate after extraction to ensure no NaN slipped through
+    if np.any(np.isnan(data)):
+        warnings.warn("NaN values found after dropna() - filtering again")
+        data = data[~np.isnan(data)]
 
     if len(data) < 50:
         warnings.warn("Insufficient data for change point detection")

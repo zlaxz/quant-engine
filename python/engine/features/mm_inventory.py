@@ -611,7 +611,10 @@ def nope_signal(
         }
 
     percentile = stats.percentileofscore(nope_history, nope_value)
-    zscore = (nope_value - np.mean(nope_history)) / np.std(nope_history)
+
+    # MM_R7_1: Protect against division by zero when std = 0
+    nope_std = np.std(nope_history)
+    zscore = (nope_value - np.mean(nope_history)) / nope_std if nope_std > 0 else 0.0
 
     if percentile > extreme_percentile:
         signal = 'BEARISH'  # Extreme call buying → expect reversal down
@@ -669,7 +672,10 @@ def classify_gamma_regime(
         )
 
     percentiles = np.percentile(gex_history, [low_percentile, high_percentile])
-    zscore = (gex_value - np.mean(gex_history)) / np.std(gex_history)
+
+    # MM_R7_2: Protect against division by zero when std = 0
+    gex_std = np.std(gex_history)
+    zscore = (gex_value - np.mean(gex_history)) / gex_std if gex_std > 0 else 0.0
 
     if gex_value > percentiles[1]:
         return GammaRegime(
@@ -737,9 +743,14 @@ def gamma_flip_level(
     # Find where GEX changes sign
     for i in range(1, len(strikes)):
         if gex_by_strike[i-1] * gex_by_strike[i] < 0:
-            # Linear interpolation to find exact flip level
-            flip = strikes[i-1] - gex_by_strike[i-1] * (strikes[i] - strikes[i-1]) / (gex_by_strike[i] - gex_by_strike[i-1])
-            return float(flip)
+            # MM_R7_3: Linear interpolation to find exact flip level
+            # Protect against division by zero when consecutive GEX values are identical
+            denominator = gex_by_strike[i] - gex_by_strike[i-1]
+            if abs(denominator) > 1e-10:
+                flip = strikes[i-1] - gex_by_strike[i-1] * (strikes[i] - strikes[i-1]) / denominator
+                return float(flip)
+            # If denominator ~0, return midpoint strike
+            return float((strikes[i-1] + strikes[i]) / 2)
 
     return None
 
@@ -773,6 +784,10 @@ def pinning_probability(
     """
     if time_to_expiry <= 0 or total_oi <= 0:
         return 0.0
+
+    # MM_R7_4: Validate positive prices to prevent log domain errors
+    if strike <= 0 or spot_price <= 0:
+        raise ValueError(f"strike ({strike}) and spot_price ({spot_price}) must be positive")
 
     # Moneyness factor (closer to ATM = higher pinning)
     moneyness = abs(np.log(spot_price / strike))
@@ -846,8 +861,12 @@ def calculate_inventory_features(
     else:
         reversion_pred = 'NEUTRAL'
 
-    # Reservation price estimate
-    inventory_proxy = cum_delta[-1] / np.mean(buy_volume + sell_volume) if len(cum_delta) > 0 else 0
+    # MM_R7_5: Reservation price estimate with division-by-zero protection
+    mean_vol = np.mean(buy_volume + sell_volume) if len(buy_volume) > 0 else 0
+    if len(cum_delta) > 0 and mean_vol > 1e-10:
+        inventory_proxy = cum_delta[-1] / mean_vol
+    else:
+        inventory_proxy = 0.0
     current_price = prices[-1]
     vol_estimate = np.std(np.diff(np.log(prices[-window:]))) if len(prices) > window else 0.02
     reservation = ho_stoll_reservation_price(

@@ -191,11 +191,12 @@ def dcc_garch_filter(
     returns = np.asarray(returns)
     T, N = returns.shape
 
+    # COR_R7_1: Don't use unreliable correlation fallback with insufficient data
     if T < N + 10:
-        logger.warning(f"Insufficient data for DCC: T={T}, N={N}")
-        # Return simple rolling correlations
-        corr = np.corrcoef(returns.T)
-        return [np.cov(returns.T)] * T, [corr] * T, returns / np.std(returns, axis=0)
+        raise ValueError(
+            f"Insufficient data for DCC-GARCH: T={T}, N={N}. "
+            f"Need at least T >= N + 10 for reliable estimates."
+        )
 
     # Stage 1: Univariate GARCH for each asset
     h = np.zeros((T, N))
@@ -343,6 +344,15 @@ def absorption_ratio(
         stds = np.where(stds > 0, stds, 1.0)  # Avoid div by zero
         cov_matrix = cov_matrix / np.outer(stds, stds)
 
+    # COR_R7_10: Check condition number before eigenvalue decomposition
+    try:
+        cond_number = np.linalg.cond(cov_matrix)
+        if cond_number > 1e12:  # Extremely ill-conditioned
+            logger.warning(f"Covariance matrix ill-conditioned (cond={cond_number:.2e})")
+            return np.nan
+    except np.linalg.LinAlgError:
+        return np.nan
+
     # Get eigenvalues
     eigenvalues = np.linalg.eigvalsh(cov_matrix)
     eigenvalues = np.sort(eigenvalues)[::-1]  # Descending order
@@ -442,9 +452,15 @@ def eigenvalue_entropy(
     p = eigenvalues / total
 
     # Shannon entropy
-    entropy = -np.sum(p * np.log(p))
+    # COR_R7_9: Use safe log with epsilon to avoid 0*log(0)=nan for tiny probabilities
+    p_safe = np.clip(p, 1e-15, 1.0)  # Ensure p > 0 for log
+    entropy = -np.sum(p * np.log(p_safe))
 
     if normalize:
+        # COR_R7_7: Handle single eigenvalue case where ln(1)=0 would cause div by zero
+        if len(eigenvalues) == 1:
+            # Single eigenvalue = zero entropy (fully concentrated)
+            return 0.0
         max_entropy = np.log(len(eigenvalues))
         if max_entropy > 0:
             entropy = entropy / max_entropy
@@ -508,8 +524,9 @@ def tail_dependence_t_copula(
     Returns:
         Tail dependence coefficient (0 to 1)
     """
-    if nu <= 0:
-        return 0.0
+    # COR_R7_4: t-distribution requires nu >= 2 for valid variance
+    if nu < 2:
+        raise ValueError(f"Degrees of freedom must be >= 2 for t-copula, got {nu}")
 
     # Clip to avoid numerical instability (formula unstable for |rho| > 0.95)
     rho = np.clip(rho, -0.95, 0.95)
@@ -592,6 +609,14 @@ def estimate_t_copula_params(
     """
     x = np.asarray(x)
     y = np.asarray(y)
+
+    # COR_R7_5: Filter NaN values before rankdata/ppf pipeline
+    valid_mask = ~(np.isnan(x) | np.isnan(y))
+    x = x[valid_mask]
+    y = y[valid_mask]
+
+    if len(x) < 10:
+        return (0.0, 4.0)  # Insufficient data, return default
 
     # Convert to uniform
     n = len(x)
@@ -720,10 +745,15 @@ def test_contagion(
     rho_crisis = np.corrcoef(x_crisis, y_crisis)[0, 1]
     rho_normal = np.corrcoef(x_normal, y_normal)[0, 1]
 
-    # Variance ratio
+    # COR_R7_6: Variance ratio with bounds to prevent extreme/inverted conclusions
     var_crisis = np.var(x_crisis)
     var_normal = np.var(x_normal)
-    var_ratio = var_crisis / var_normal if var_normal > 0 else 1.0
+    if var_normal > 1e-10:
+        var_ratio = var_crisis / var_normal
+        # Cap variance ratio to prevent ill-conditioned corrections
+        var_ratio = np.clip(var_ratio, 0.01, 100.0)
+    else:
+        var_ratio = 1.0  # Default to neutral when normal variance ~0
 
     # Adjusted correlation
     rho_adjusted = forbes_rigobon_correction(rho_crisis, var_ratio)
@@ -762,6 +792,17 @@ def correlation_regime_indicators(
     """
     returns = np.asarray(returns)
     T, N = returns.shape
+
+    # COR_R7_8: Validate minimum data length to avoid all-NaN output
+    if T <= window:
+        warnings.warn(f"Insufficient data: T={T} <= window={window}. Need at least window+1 samples.")
+        return {
+            'absorption_ratio': np.full(T, np.nan),
+            'eigenvalue_entropy': np.full(T, np.nan),
+            'avg_correlation': np.full(T, np.nan),
+            'max_correlation': np.full(T, np.nan),
+            'corr_dispersion': np.full(T, np.nan)
+        }
 
     ar = np.full(T, np.nan)
     entropy = np.full(T, np.nan)
@@ -833,8 +874,12 @@ def detect_correlation_regime(
     ar_current = ar_valid[-1]
     entropy_current = entropy_valid[-1]
 
-    ar_zscore = (ar_current - np.mean(ar_recent)) / np.std(ar_recent)
-    entropy_zscore = (entropy_current - np.mean(entropy_recent)) / np.std(entropy_recent)
+    # COR_R7_2: Protect against division by zero when std = 0 (stable markets)
+    ar_std = np.std(ar_recent)
+    entropy_std = np.std(entropy_recent)
+
+    ar_zscore = (ar_current - np.mean(ar_recent)) / ar_std if ar_std > 0 else 0.0
+    entropy_zscore = (entropy_current - np.mean(entropy_recent)) / entropy_std if entropy_std > 0 else 0.0
 
     # Regime classification
     if ar_zscore > threshold_std and entropy_zscore < -threshold_std:
@@ -991,15 +1036,20 @@ def add_correlation_features(
         indicators['correlation_dispersion'], index=df.index
     ).shift(lag)
 
-    # Z-scores (rolling)
+    # COR_R7_3: Z-scores (rolling) with division-by-zero protection
+    ar_rolling_std = result['absorption_ratio'].rolling(252).std()
+    ar_rolling_std_safe = ar_rolling_std.replace(0, np.nan)  # Replace 0 with NaN to avoid div-by-zero
     result['ar_zscore'] = (
         (result['absorption_ratio'] - result['absorption_ratio'].rolling(252).mean()) /
-        result['absorption_ratio'].rolling(252).std()
+        ar_rolling_std_safe
     )
 
+    # COR_R7_3 continued: Same protection for entropy_zscore
+    entropy_rolling_std = result['eigenvalue_entropy'].rolling(252).std()
+    entropy_rolling_std_safe = entropy_rolling_std.replace(0, np.nan)
     result['entropy_zscore'] = (
         (result['eigenvalue_entropy'] - result['eigenvalue_entropy'].rolling(252).mean()) /
-        result['eigenvalue_entropy'].rolling(252).std()
+        entropy_rolling_std_safe
     )
 
     # Regime classification

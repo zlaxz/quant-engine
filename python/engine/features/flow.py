@@ -402,6 +402,11 @@ def vpin_cdf(
     Returns:
         CDF value (0-1), >0.90 indicates toxicity alert
     """
+    # FL_R7_1: Check for NaN current_vpin - NaN should return NaN, not 0.0
+    # NaN VPIN means unknown toxicity, not "definitely NOT toxic"
+    if np.isnan(current_vpin):
+        return np.nan
+
     historical_vpin = np.asarray(historical_vpin)
     historical_vpin = historical_vpin[~np.isnan(historical_vpin)]
 
@@ -999,9 +1004,14 @@ def calculate_flow_features(
         kyle_lam = np.nan
 
     if len(lambda_history) > 5 and np.isfinite(kyle_lam):
-        kyle_zscore = (kyle_lam - np.mean(lambda_history)) / np.std(lambda_history)
+        std_lambda = np.std(lambda_history)
+        if std_lambda > 0:
+            kyle_zscore = (kyle_lam - np.mean(lambda_history)) / std_lambda
+        else:
+            kyle_zscore = 0.0  # Perfectly stable lambda
     else:
-        kyle_zscore = 0.0
+        # FL_R7_2: Return NaN instead of 0.0 - uncertainty should not be masked as neutral
+        kyle_zscore = np.nan
 
     # OFI (if LOB data available)
     if all(x is not None for x in [bid_prices, ask_prices, bid_sizes, ask_sizes]):

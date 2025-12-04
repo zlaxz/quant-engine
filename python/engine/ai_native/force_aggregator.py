@@ -405,8 +405,8 @@ class ForceAggregator:
             # FA_R6_3: Validate value is finite before creating ForceVector
             if not np.isfinite(entropy_val):
                 entropy_val = 2.5  # Default to mid-range entropy
-            # FA7: Wrap in float() for type consistency
-            entropy_vel = float(entropy_result.entropy_velocity) if not np.isnan(entropy_result.entropy_velocity) else 0.0
+            # FA7 + FA_R7_6: Use np.isfinite() to catch both NaN and Inf
+            entropy_vel = float(entropy_result.entropy_velocity) if np.isfinite(entropy_result.entropy_velocity) else 0.0
 
             forces.append(ForceVector(
                 name="shannon_entropy",
@@ -433,39 +433,47 @@ class ForceAggregator:
         # =====================================================================
         try:
             if 'volume' in df.columns and 'close' in df.columns:
-                # VPIN - calculate_vpin expects (prices, volumes, bucket_size, n_buckets)
-                prices = df['close'].values
-                volumes = df['volume'].values
-                # Bucket size = average volume per bucket (use median daily volume)
-                bucket_size = np.median(volumes[volumes > 0]) if np.any(volumes > 0) else 1e6
+                # FA_R7_3: Validate volume and price data before VPIN calculation
+                prices = df['close'].dropna().values
+                volumes = df['volume'].dropna().values
+                # Ensure same length after independent dropna
+                min_len = min(len(prices), len(volumes))
+                prices = prices[:min_len]
+                volumes = volumes[:min_len]
 
-                vpin_values, _ = calculate_vpin(prices, volumes, bucket_size, n_buckets=50)
-                if len(vpin_values) > 0:
-                    vpin_val = float(vpin_values[-1])
+                if len(prices) < 50:
+                    logger.warning("Insufficient clean price/volume data for VPIN")
+                else:
+                    # Bucket size = average volume per bucket (use median daily volume)
+                    bucket_size = np.median(volumes[volumes > 0]) if np.any(volumes > 0) else 1e6
 
-                    # FA_R6_3: Validate value is finite before creating ForceVector
-                    if not np.isfinite(vpin_val):
-                        logger.warning(f"VPIN value is not finite: {vpin_val}, skipping")
-                        vpin_val = None
+                    vpin_values, _ = calculate_vpin(prices, volumes, bucket_size, n_buckets=50)
+                    if len(vpin_values) > 0:
+                        vpin_val = float(vpin_values[-1])
 
-                    if vpin_val is not None:
-                        forces.append(ForceVector(
-                            name="vpin",
-                            category=ForceCategory.FLOW,
-                            value=vpin_val,
-                            percentile=self._compute_percentile("vpin", vpin_val),
-                            strength=self._value_to_strength(
-                                vpin_val, (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
-                            ),
-                            # FA8 + FA17: Check finiteness of both input AND output
-                            velocity=self._safe_velocity(vpin_values),
-                            interpretation=f"Order flow toxicity {'elevated' if vpin_val > 0.5 else 'normal'}"
-                        ))
+                        # FA_R6_3: Validate value is finite before creating ForceVector
+                        if not np.isfinite(vpin_val):
+                            logger.warning(f"VPIN value is not finite: {vpin_val}, skipping")
+                            vpin_val = None
 
-                        raw_metrics['vpin'] = vpin_val
+                        if vpin_val is not None:
+                            forces.append(ForceVector(
+                                name="vpin",
+                                category=ForceCategory.FLOW,
+                                value=vpin_val,
+                                percentile=self._compute_percentile("vpin", vpin_val),
+                                strength=self._value_to_strength(
+                                    vpin_val, (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
+                                ),
+                                # FA8 + FA17: Check finiteness of both input AND output
+                                velocity=self._safe_velocity(vpin_values),
+                                interpretation=f"Order flow toxicity {'elevated' if vpin_val > 0.5 else 'normal'}"
+                            ))
 
-                        if vpin_val > 0.7:
-                            warnings.append("VPIN elevated - toxic flow detected")
+                            raw_metrics['vpin'] = vpin_val
+
+                            if vpin_val > 0.7:
+                                warnings.append("VPIN elevated - toxic flow detected")
         except Exception as e:
             logger.warning(f"VPIN calculation failed: {e}")
 
@@ -477,7 +485,10 @@ class ForceAggregator:
                 # Try absorption ratio
                 numeric_cols = df.select_dtypes(include=[np.number]).columns[:10]
                 if len(numeric_cols) >= 3:
-                    returns_matrix = df[numeric_cols].pct_change().dropna()
+                    # FA_R7_4: Validate returns_matrix has no NaN/Inf
+                    returns_matrix = df[numeric_cols].pct_change().dropna(how='any')
+                    # Double-check for any remaining NaN/Inf
+                    returns_matrix = returns_matrix.replace([np.inf, -np.inf], np.nan).dropna()
                     if len(returns_matrix) > self.correlation_window:
                         ar = rolling_absorption_ratio(
                             returns_matrix.values,
@@ -639,7 +650,8 @@ class ForceAggregator:
                 ))
 
                 raw_metrics['skewness'] = skewness
-            raw_metrics['kurtosis'] = shape.kurtosis
+            # FA_R7_1: Validate kurtosis is finite before storing
+            raw_metrics['kurtosis'] = shape.kurtosis if np.isfinite(shape.kurtosis) else 0.0
             raw_metrics['shape_class'] = shape.shape_class
 
             if not shape.is_unimodal:
@@ -727,8 +739,8 @@ class ForceAggregator:
         ]
         valid_bullish = [f for f in bullish_forces if not np.isnan(f) and not np.isinf(f)]
         bullish_force_score = float(np.mean(valid_bullish)) if valid_bullish else 0.0
-        # FA_R6_5: Scale then clip (removed ineffective first clip)
-        bullish_force_score = np.clip(bullish_force_score * 2, -1, 1)
+        # FA_R6_5 + FA_R7_2: Scale then clip, wrap in float() for type consistency
+        bullish_force_score = float(np.clip(bullish_force_score * 2, -1, 1))
 
         # FA22 + FA_R6_2: Clip hazard_rate and handle NaN (np.clip doesn't fix NaN!)
         if regime_state:
@@ -740,8 +752,9 @@ class ForceAggregator:
         else:
             safe_hazard = 0.01
 
+        # FA_R7_5: Use consistent neutral defaults (0.5) to avoid asymmetric risk bias
         risk_components = [
-            raw_metrics.get('vpin', 0.4),
+            raw_metrics.get('vpin', 0.5),  # Was 0.4, now neutral 0.5
             raw_metrics.get('absorption_ratio', 0.7),
             safe_hazard,
         ]

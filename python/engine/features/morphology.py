@@ -135,6 +135,16 @@ def compute_shape_metrics(
     # Basic moments
     mean = np.mean(data)
     std = np.std(data, ddof=1)
+
+    # MOR_R7_3: Handle constant data (std=0) - return early with known shape
+    if std < 1e-10:
+        return ShapeMetrics(
+            mean=mean, std=0.0, skewness=0.0, kurtosis=0.0,
+            is_normal=True, is_unimodal=True, n_modes=1,
+            mode_locations=np.array([mean]), dip_statistic=0.0,
+            dip_pvalue=1.0, shape_class='normal'  # Constant data is trivially unimodal
+        )
+
     skewness = stats.skew(data)
     kurtosis = stats.kurtosis(data)  # Excess kurtosis
 
@@ -199,8 +209,14 @@ def hartigans_dip_test(
     p_value : float
         P-value from bootstrap
     """
+    # MOR_R7_4: Filter NaN values before processing
+    data = np.asarray(data)
+    data = data[~np.isnan(data)]
     data = np.sort(data)
     n = len(data)
+
+    if n < 2:
+        return 0.0, 1.0  # Insufficient data - assume unimodal
 
     # MOR1: Compute empirical CDF (left-continuous per Hartigan & Hartigan 1985)
     ecdf = np.arange(0, n) / n
@@ -230,37 +246,56 @@ def _compute_dip(sorted_data: np.ndarray, ecdf: np.ndarray) -> float:
     LCM (Least Concave Majorant): The least concave function >= ECDF
 
     The dip statistic is half the maximum distance between GCM and LCM.
+
+    MOR_R7_1/MOR_R7_2 FIX: The x-coordinates must be the NORMALIZED DATA VALUES,
+    not the indices. The ECDF maps data values to cumulative probabilities.
     """
     n = len(sorted_data)
     if n < 2:
         return 0.0
 
-    # MOR2: With left-continuous ECDF, points are (i/n, ecdf[i]) for i=0..n-1
-    # We add (0, 0) at start and (1, 1) at end conceptually
+    # MOR_R7_1: Normalize data to [0, 1] for proper dip calculation
+    # The dip test operates on the uniform [0,1] domain
+    data_min = sorted_data[0]
+    data_max = sorted_data[-1]
+    data_range = data_max - data_min
+
+    if data_range < 1e-10:
+        # All data points are identical - perfectly unimodal
+        return 0.0
+
+    # Normalize data to [0, 1] - x-coordinates are normalized data values
+    x_vals = (sorted_data - data_min) / data_range
+
+    # ECDF values - right-continuous: F(x_i) = (i+1)/n
+    # This is the standard definition where F(x) = P(X <= x)
+    y_vals = (np.arange(n) + 1) / n
 
     # GCM: Greatest Convex Minorant (lower envelope)
     # Build lower convex hull with non-decreasing slopes
     gcm = np.zeros(n)
 
-    # Lower convex hull: slopes must be non-decreasing
-    # Start from (0, 0)
+    # Start from (0, 0) - the ECDF starts at 0 before the first observation
     hull_x = [0.0]
     hull_y = [0.0]
 
     for i in range(n):
-        x_new = i / n  # Left-continuous: x-coordinate matches ecdf index
-        y_new = ecdf[i]
+        x_new = x_vals[i]
+        y_new = y_vals[i]
 
         # For lower hull (GCM), we need non-decreasing slopes
-        # Remove last point if adding new point would create a right turn (decreasing slope)
         while len(hull_x) >= 2:
-            # Slope from second-to-last to last
-            slope_prev = (hull_y[-1] - hull_y[-2]) / (hull_x[-1] - hull_x[-2]) if hull_x[-1] != hull_x[-2] else float('inf')
-            # Slope from last to new
-            slope_new = (y_new - hull_y[-1]) / (x_new - hull_x[-1]) if x_new != hull_x[-1] else float('inf')
+            dx_prev = hull_x[-1] - hull_x[-2]
+            dx_new = x_new - hull_x[-1]
+
+            if dx_prev < 1e-12 or dx_new < 1e-12:
+                break
+
+            slope_prev = (hull_y[-1] - hull_y[-2]) / dx_prev
+            slope_new = (y_new - hull_y[-1]) / dx_new
 
             # For LOWER hull (GCM), keep if slope_new >= slope_prev
-            if slope_new >= slope_prev - 1e-12:  # Allow small tolerance
+            if slope_new >= slope_prev - 1e-12:
                 break
             hull_x.pop()
             hull_y.pop()
@@ -268,53 +303,54 @@ def _compute_dip(sorted_data: np.ndarray, ecdf: np.ndarray) -> float:
         hull_x.append(x_new)
         hull_y.append(y_new)
 
-    # Add endpoint (1, 1) to complete the hull
-    hull_x.append(1.0)
-    hull_y.append(1.0)
+    # MOR_R7_1: Endpoint is (1.0, 1.0) - ECDF reaches 1 at max data value
+    # Only add if not already there
+    if hull_x[-1] < 1.0 - 1e-12:
+        hull_x.append(1.0)
+        hull_y.append(1.0)
 
-    # Interpolate GCM at all evaluation points
+    # Interpolate GCM at all data points
     hull_idx = 0
     for i in range(n):
-        x = i / n
-        # Find segment containing x
-        while hull_idx < len(hull_x) - 1 and hull_x[hull_idx + 1] <= x:
+        x = x_vals[i]
+        while hull_idx < len(hull_x) - 1 and hull_x[hull_idx + 1] <= x + 1e-12:
             hull_idx += 1
 
         if hull_idx >= len(hull_x) - 1:
             gcm[i] = hull_y[-1]
         else:
-            # Linear interpolation
             x1, y1 = hull_x[hull_idx], hull_y[hull_idx]
             x2, y2 = hull_x[hull_idx + 1], hull_y[hull_idx + 1]
-            if x2 > x1:
+            if x2 > x1 + 1e-12:
                 t = (x - x1) / (x2 - x1)
                 gcm[i] = y1 + t * (y2 - y1)
             else:
                 gcm[i] = y1
 
-    # MOR3: LCM (Least Concave Majorant) - upper envelope
+    # LCM: Least Concave Majorant (upper envelope)
     # Build upper concave hull with non-increasing slopes
-    # Build FORWARD (left to right) for clarity
     lcm = np.zeros(n)
 
-    # Start from (0, 0)
     hull_x = [0.0]
     hull_y = [0.0]
 
     for i in range(n):
-        x_new = i / n  # Left-continuous coordinates
-        y_new = ecdf[i]
+        x_new = x_vals[i]
+        y_new = y_vals[i]
 
         # For UPPER concave hull (LCM), slopes must be NON-INCREASING
-        # Remove points that would create increasing slopes
         while len(hull_x) >= 2:
-            # Slope from second-to-last to last
-            slope_prev = (hull_y[-1] - hull_y[-2]) / (hull_x[-1] - hull_x[-2]) if hull_x[-1] != hull_x[-2] else float('inf')
-            # Slope from last to new
-            slope_new = (y_new - hull_y[-1]) / (x_new - hull_x[-1]) if x_new != hull_x[-1] else float('inf')
+            dx_prev = hull_x[-1] - hull_x[-2]
+            dx_new = x_new - hull_x[-1]
 
-            # For UPPER hull (LCM), keep if slope_new <= slope_prev (non-increasing)
-            if slope_new <= slope_prev + 1e-12:  # Allow small tolerance
+            if dx_prev < 1e-12 or dx_new < 1e-12:
+                break
+
+            slope_prev = (hull_y[-1] - hull_y[-2]) / dx_prev
+            slope_new = (y_new - hull_y[-1]) / dx_new
+
+            # For UPPER hull (LCM), keep if slope_new <= slope_prev
+            if slope_new <= slope_prev + 1e-12:
                 break
             hull_x.pop()
             hull_y.pop()
@@ -322,32 +358,30 @@ def _compute_dip(sorted_data: np.ndarray, ecdf: np.ndarray) -> float:
         hull_x.append(x_new)
         hull_y.append(y_new)
 
-    # Add endpoint (1, 1) to complete the hull
-    hull_x.append(1.0)
-    hull_y.append(1.0)
+    # Endpoint (1.0, 1.0)
+    if hull_x[-1] < 1.0 - 1e-12:
+        hull_x.append(1.0)
+        hull_y.append(1.0)
 
-    # Interpolate LCM at all evaluation points
+    # Interpolate LCM at all data points
     hull_idx = 0
     for i in range(n):
-        x = i / n
-        # Find segment containing x
-        while hull_idx < len(hull_x) - 1 and hull_x[hull_idx + 1] <= x:
+        x = x_vals[i]
+        while hull_idx < len(hull_x) - 1 and hull_x[hull_idx + 1] <= x + 1e-12:
             hull_idx += 1
 
         if hull_idx >= len(hull_x) - 1:
             lcm[i] = hull_y[-1]
         else:
-            # Linear interpolation
             x1, y1 = hull_x[hull_idx], hull_y[hull_idx]
             x2, y2 = hull_x[hull_idx + 1], hull_y[hull_idx + 1]
-            if x2 > x1:
+            if x2 > x1 + 1e-12:
                 t = (x - x1) / (x2 - x1)
                 lcm[i] = y1 + t * (y2 - y1)
             else:
                 lcm[i] = y1
 
     # Dip is half of the maximum vertical distance between LCM and GCM
-    # (which equals max distance from ECDF to the modal interval)
     dip = 0.5 * np.max(lcm - gcm)
 
     return max(dip, 0.0)
@@ -442,6 +476,10 @@ def classify_distribution_shape(
     str
         Shape classification
     """
+    # MOR_R7_6: Handle NaN inputs explicitly
+    if np.isnan(skewness) or np.isnan(kurtosis):
+        return 'unknown'
+
     # Check bimodality first
     if not is_unimodal or n_modes >= 2:
         return 'bimodal'
@@ -790,6 +828,10 @@ def jensen_shannon_divergence(
     float
         JS divergence (in [0, 1])
     """
+    # MOR_R7_5: Handle empty input arrays
+    if len(data1) == 0 or len(data2) == 0:
+        return np.nan
+
     # Common bin edges
     all_data = np.concatenate([data1, data2])
     bins = np.linspace(np.min(all_data), np.max(all_data), n_bins + 1)
@@ -837,6 +879,11 @@ def shape_similarity_score(
     float
         Similarity score
     """
+    # MOR_R7_7: Validate inputs for NaN before computing
+    if (np.isnan(metrics1.skewness) or np.isnan(metrics1.kurtosis) or
+        np.isnan(metrics2.skewness) or np.isnan(metrics2.kurtosis)):
+        return np.nan
+
     # Compare moments
     skew_diff = abs(metrics1.skewness - metrics2.skewness)
     kurt_diff = abs(metrics1.kurtosis - metrics2.kurtosis)

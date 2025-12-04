@@ -294,7 +294,14 @@ def estimate_mean_reversion(
     # DYN1: AR(1) regression on consecutive points gives β = exp(-κ)
     # Don't divide by dt here - it's already implicit in the data spacing
     kappa = -np.log(slope)
-    theta = intercept / (1 - slope)
+
+    # DYN_R7_3: Validate theta doesn't explode when slope very close to 1
+    denominator = 1 - slope
+    if abs(denominator) < 1e-6:
+        return np.nan, np.nan  # Slope too close to 1, theta would explode
+    theta = intercept / denominator
+    if abs(theta) > 1e6:
+        return np.nan, np.nan  # Theta explosion - reject unrealistic parameters
 
     # Half-life (in same units as data spacing)
     half_life = np.log(2) / kappa
@@ -356,7 +363,13 @@ def estimate_ou_parameters(
     # DYN2: OU volatility from discrete-time residuals
     # Correct formula: σ_ε = σ * sqrt(1 - exp(-2κΔt))
     # So: σ = σ_ε / sqrt(1 - exp(-2κΔt))
-    sigma = sigma_residual / np.sqrt(1 - np.exp(-2 * kappa * dt))
+    # DYN_R7_1: Protect against division by zero when κ→0
+    denominator_sq = 1 - np.exp(-2 * kappa * dt)
+    if denominator_sq > 1e-10:
+        sigma = sigma_residual / np.sqrt(denominator_sq)
+    else:
+        # κ too small - process is nearly random walk, OU sigma undefined
+        sigma = np.nan
 
     # Derived quantities
     half_life = np.log(2) / kappa
@@ -417,6 +430,7 @@ def compute_entropy_dynamics(
 
     # Compute rolling entropy
     entropies = []
+    zero_entropy_count = 0  # DYN_R7_9: Track degenerate entropy periods
     for i in range(lookback, n + 1):
         window_data = series[i - lookback:i]
 
@@ -429,7 +443,12 @@ def compute_entropy_dynamics(
             entropy = -np.sum(hist * np.log(hist))
         else:
             entropy = 0
+            zero_entropy_count += 1  # DYN_R7_9: Count degenerate periods
         entropies.append(entropy)
+
+    # DYN_R7_9: Warn if significant portion of periods have zero entropy
+    if zero_entropy_count > len(entropies) * 0.5:
+        logger.warning(f"Degenerate entropy: {zero_entropy_count}/{len(entropies)} periods have zero entropy (constant values)")
 
     entropies = np.array(entropies)
 
@@ -547,9 +566,14 @@ def compute_shape_velocity(
         kurtosis_velocity = np.diff(kurtosis)[-1] if len(kurtosis) > 1 else 0
 
     # Shape transition probability (based on velocity)
-    # High |velocity| = high probability of crossing threshold
-    shape_change_speed = np.sqrt(skewness_velocity**2 + kurtosis_velocity**2)
-    shape_transition_prob = 1 - np.exp(-shape_change_speed * 5)
+    # DYN_R7_6: Handle NaN velocities explicitly
+    if np.isnan(skewness_velocity) or np.isnan(kurtosis_velocity):
+        shape_change_speed = np.nan
+        shape_transition_prob = np.nan
+    else:
+        # High |velocity| = high probability of crossing threshold
+        shape_change_speed = np.sqrt(skewness_velocity**2 + kurtosis_velocity**2)
+        shape_transition_prob = 1 - np.exp(-shape_change_speed * 5)
 
     # Direction
     if skewness_velocity < -0.1:
@@ -622,7 +646,8 @@ def compute_volatility_dynamics(
     realized_vol = vol_series[-1]
 
     # Vol of vol
-    vol_of_vol = np.std(vol_series) if len(vol_series) > 10 else np.nan
+    # DYN_R7_7: Increase min sample threshold from 10 to 50 for stable estimate
+    vol_of_vol = np.std(vol_series) if len(vol_series) >= 50 else np.nan
 
     # Vol derivatives
     if len(vol_series) >= 5:
@@ -638,8 +663,10 @@ def compute_volatility_dynamics(
     mean_reversion_level = ou_params['theta']
     mean_reversion_speed = ou_params['kappa']
 
-    # Vol regime
-    if vol_velocity > vol_of_vol * 0.1:
+    # DYN_R7_5: Vol regime - explicitly check for NaN before comparison
+    if np.isnan(vol_velocity) or np.isnan(vol_of_vol):
+        vol_regime = 'unknown'
+    elif vol_velocity > vol_of_vol * 0.1:
         vol_regime = 'expanding'
     elif vol_velocity < -vol_of_vol * 0.1:
         vol_regime = 'contracting'
@@ -742,13 +769,19 @@ def compute_gamma_dynamics(
         gamma_changes = np.diff(gamma_series)
 
         if len(spot_changes) > 5:
-            try:
-                slope, _, _, _, _ = stats.linregress(spot_changes, gamma_changes)
-                spot_effect = slope * np.std(spot_changes)
-            except (ValueError, ZeroDivisionError):  # DYN10: Specific exceptions
-                spot_effect = 0
+            # DYN_R7_2: Check for zero variance before linregress (flat market)
+            spot_std = np.std(spot_changes)
+            if spot_std < 1e-10:
+                # Flat market - no spot effect measurable
+                spot_effect = np.nan
+            else:
+                try:
+                    slope, _, _, _, _ = stats.linregress(spot_changes, gamma_changes)
+                    spot_effect = slope * spot_std
+                except (ValueError, ZeroDivisionError):  # DYN10: Specific exceptions
+                    spot_effect = np.nan  # Return NaN to signal uncertainty, not 0.0
         else:
-            spot_effect = 0
+            spot_effect = np.nan
     else:
         time_effect = np.nan
         spot_effect = np.nan
@@ -910,6 +943,8 @@ def add_volatility_dynamics_features(
     n = len(returns)
 
     # Rolling volatility
+    # DYN_R7_8: Standard annualized volatility = std(daily_returns) * sqrt(252)
+    # This is consistent with analyze_volatility_dynamics() at line 641
     vol = df[returns_col].rolling(vol_window).std() * np.sqrt(252)
     df[f'{prefix}realized_vol'] = vol
 

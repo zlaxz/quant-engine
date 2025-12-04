@@ -243,6 +243,12 @@ def fit_duration_distribution(
             result.p = (mean_d - 1) / var_d if var_d > 0 else 0.5
             result.r = (mean_d - 1) * result.p / (1 - result.p) if result.p < 1 else 1.0
         else:
+            # DUR_R7_5: Explicit handling of zero/low variance case
+            if var_d < 1e-10:
+                warnings.warn(
+                    f"Zero variance in duration data (var={var_d:.2e}). "
+                    "Using geometric distribution - Minsky detection may be unreliable."
+                )
             # Fallback to geometric
             result.p = 1.0 / mean_d
             result.r = 1.0
@@ -312,9 +318,16 @@ def analyze_regime_hazard(
     if len(hazard) > 10:
         # Compare early vs late hazard
         mid = len(hazard) // 2
-        early_hazard = np.mean(hazard[:mid][hazard[:mid] > 0])
-        late_hazard = np.mean(hazard[mid:][hazard[mid:] > 0])
-        is_increasing = late_hazard > early_hazard * 1.2  # 20% higher
+        # DUR_R7_1: Handle empty arrays when all hazard values are 0.0
+        early_positive = hazard[:mid][hazard[:mid] > 0]
+        late_positive = hazard[mid:][hazard[mid:] > 0]
+        if len(early_positive) > 0 and len(late_positive) > 0:
+            early_hazard = np.mean(early_positive)
+            late_hazard = np.mean(late_positive)
+            is_increasing = late_hazard > early_hazard * 1.2  # 20% higher
+        else:
+            # Insufficient positive hazard values to compare
+            is_increasing = False
     else:
         is_increasing = False
 
@@ -550,6 +563,18 @@ class HiddenSemiMarkov:
         current_regime = most_likely[0]
         current_duration = 1
 
+        # DUR_R7_3: Initialize hazard for first observation (t=0)
+        k = current_regime
+        params = self.duration_params[k]
+        if params.distribution == 'negative_binomial':
+            hazard_at_current[0] = negative_binomial_hazard(
+                np.array([current_duration]),
+                r=params.r,
+                p=params.p
+            )[0]
+        else:
+            hazard_at_current[0] = 1.0 / expected_duration[k] if expected_duration[k] > 0 else 0.0
+
         for t in range(1, n):
             if most_likely[t] == current_regime:
                 current_duration += 1
@@ -768,12 +793,22 @@ def add_duration_features(
     dur = 1
     duration_in_regime[0] = 1
 
+    # DUR_R7_4: Track whether we're coming out of NaN gap
+    prev_was_nan = False
+
     for t in range(1, n):
         if pd.isna(regime[t]):
             duration_in_regime[t] = np.nan
+            prev_was_nan = True
             continue
 
-        if regime[t] == current:
+        # DUR_R7_4: Reset duration counter when coming out of NaN gap
+        if prev_was_nan:
+            # After NaN gap, reset - we don't know if regime continued or changed
+            current = regime[t]
+            dur = 1
+            prev_was_nan = False
+        elif regime[t] == current:
             dur += 1
         else:
             current = regime[t]
@@ -873,7 +908,12 @@ def tvtp_transition_matrix(
                     # Transition probability scales with hazard
                     tvtp[t, i, j] = h * base_matrix[i, j]
 
-            # Normalize row
-            tvtp[t, i, :] /= tvtp[t, i, :].sum()
+            # DUR_R7_2: Normalize row with zero-sum protection
+            row_sum = tvtp[t, i, :].sum()
+            if row_sum > 1e-10:
+                tvtp[t, i, :] /= row_sum
+            else:
+                # Zero-sum row - use uniform distribution as fallback
+                tvtp[t, i, :] = 1.0 / k
 
     return tvtp

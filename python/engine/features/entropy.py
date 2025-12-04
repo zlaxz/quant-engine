@@ -154,9 +154,18 @@ def entropy_decay_rate(
 
     Returns:
         Series of entropy change rates
+
+    Note:
+        ENT_R7_3: First (window + smooth) values will be NaN due to rolling
+        window requirements. For short series, consider using a smaller window
+        or check len(data) > window + smooth before using this function.
     """
-    ent = rolling_entropy(data, window=window)
-    decay = ent.diff(smooth) / smooth
+    # ENT_R7_3: Use adaptive window for short datasets
+    effective_window = min(window, max(10, len(data) // 3))
+    effective_smooth = min(smooth, max(2, len(data) // 10))
+
+    ent = rolling_entropy(data, window=effective_window)
+    decay = ent.diff(effective_smooth) / effective_smooth
 
     return decay
 
@@ -634,6 +643,10 @@ def fano_predictability_limit(
     if np.isnan(entropy_rate) or entropy_rate < 0:
         return np.nan
 
+    # ENT_R7_2: Validate alphabet_size >= 2 (Fano uses log(alphabet_size - 1))
+    if alphabet_size < 2:
+        raise ValueError(f"alphabet_size must be >= 2 for Fano limit, got {alphabet_size}")
+
     # Fano's inequality: S = H(Π) + (1-Π) * log(M-1)
     # where H(Π) = -Π*log(Π) - (1-Π)*log(1-Π)
 
@@ -734,11 +747,15 @@ def add_entropy_features(
         df: DataFrame with returns column
         returns_col: Name of returns column
         window: Window for entropy calculations
-        lag: Lag for lookahead prevention
+        lag: Lag for lookahead prevention (must be >= 1 to prevent lookahead)
 
     Returns:
         DataFrame with entropy features added
     """
+    # ENT_R7_7: Validate lag to prevent lookahead bias
+    if lag < 1:
+        raise ValueError(f"lag must be >= 1 to prevent lookahead bias, got {lag}")
+
     result = df.copy()
 
     if returns_col not in result.columns:
@@ -762,16 +779,23 @@ def add_entropy_features(
     result['entropy_decay'] = entropy_decay_rate(returns, window=window).shift(lag)
 
     # Normalized entropy
-    result['entropy_normalized'] = result['entropy_shannon'] / np.log2(20)
+    # ENT_R7_5: Use bins parameter for normalization (was hard-coded to 20)
+    result['entropy_normalized'] = result['entropy_shannon'] / np.log2(bins)
 
-    # Entropy z-score (deviation from recent average)
+    # ENT_R7_4: Adaptive rolling window for short datasets
+    zscore_window = min(100, max(10, len(result) // 2))
     result['entropy_zscore'] = (
-        (result['entropy_shannon'] - result['entropy_shannon'].rolling(100).mean()) /
-        result['entropy_shannon'].rolling(100).std()
+        (result['entropy_shannon'] - result['entropy_shannon'].rolling(zscore_window).mean()) /
+        result['entropy_shannon'].rolling(zscore_window).std().replace(0, np.nan)  # Avoid div by zero
     )
 
     # Breakout signal: entropy decay exceeding threshold
-    result['entropy_breakout_signal'] = (result['entropy_decay'] < -0.05).astype(int)
+    # ENT_R7_6: Explicit NaN handling - NaN decay should produce NaN signal, not 0
+    result['entropy_breakout_signal'] = np.where(
+        result['entropy_decay'].isna(),
+        np.nan,
+        (result['entropy_decay'] < -0.05).astype(float)
+    )
 
     return result
 
@@ -788,8 +812,9 @@ def _discretize(data: np.ndarray, bins: int) -> np.ndarray:
     """
     data = np.asarray(data)
 
-    # Handle edge case of constant data
-    if np.std(data) < 1e-10:
+    # ENT_R7_1: Handle edge case of constant data or all-NaN
+    # np.std(all_nan) returns nan, and nan < 1e-10 = False, so check NaN explicitly
+    if np.all(np.isnan(data)) or np.std(data) < 1e-10:
         return np.zeros(len(data), dtype=int)
 
     # Use percentile-based binning

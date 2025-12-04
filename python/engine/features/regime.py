@@ -519,7 +519,12 @@ class GaussianHMM:
                         beta[t+1, j]
                     )
             xi_sum = np.sum(xi[t])
-            xi[t] /= xi_sum if xi_sum > 0 else 1
+            # REG_R7_5: Detect degenerate xi (all zeros) and use uniform distribution
+            if xi_sum > 1e-10:
+                xi[t] /= xi_sum
+            else:
+                # Degenerate xi - use uniform distribution to prevent all-zero rows
+                xi[t] = np.ones((K, K)) / (K * K)
 
         # Log-likelihood
         log_likelihood = np.sum(np.log(scale + 1e-300))
@@ -535,13 +540,25 @@ class GaussianHMM:
         self.initial_probs = gamma[0]
 
         # Update transition matrix
+        # REG_R7_1: Ensure rows don't become all-zero (use uniform fallback)
         for i in range(K):
             denom = np.sum(gamma[:-1, i])
             if denom > 0:
-                self.transition_matrix[i] = np.sum(xi[:, i, :], axis=0) / denom
+                new_row = np.sum(xi[:, i, :], axis=0) / denom
+                # Check if row sums to near-zero (degenerate case)
+                if np.sum(new_row) > 1e-10:
+                    self.transition_matrix[i] = new_row
+                else:
+                    # Degenerate row - use uniform distribution
+                    self.transition_matrix[i] = np.ones(K) / K
 
-        # Normalize transition matrix rows
+        # REG_R7_2: Normalize rows, handling zero-sum rows explicitly
         row_sums = np.sum(self.transition_matrix, axis=1, keepdims=True)
+        zero_rows = row_sums.flatten() < 1e-10
+        if np.any(zero_rows):
+            # Replace zero-sum rows with uniform before normalizing
+            self.transition_matrix[zero_rows] = np.ones(K) / K
+            row_sums = np.sum(self.transition_matrix, axis=1, keepdims=True)
         self.transition_matrix /= np.maximum(row_sums, 1e-300)
 
         # Update means
@@ -621,8 +638,15 @@ class GaussianHMM:
         most_likely = np.argmax(gamma, axis=1)
 
         # Predict next regime
+        # REG_R7_3: Ensure next_regime_prob is valid probability distribution
         last_prob = gamma[-1]
         next_prob = last_prob @ self.transition_matrix
+
+        # Validate and renormalize if needed
+        prob_sum = np.sum(next_prob)
+        if abs(prob_sum - 1.0) > 1e-6:
+            next_prob = np.maximum(next_prob, 0)
+            next_prob /= np.sum(next_prob) if np.sum(next_prob) > 0 else 1.0
 
         return HMMRegimeResult(
             regime_probabilities=gamma,
@@ -653,6 +677,16 @@ class GaussianHMM:
         """
         if not self._fitted:
             raise ValueError("Model must be fitted first")
+
+        # REG_R7_4: Validate transition matrix is stochastic before matrix_power
+        row_sums = np.sum(self.transition_matrix, axis=1)
+        if not np.allclose(row_sums, 1.0, rtol=1e-3):
+            # Try to fix by renormalizing
+            for i in range(len(row_sums)):
+                if row_sums[i] > 1e-10:
+                    self.transition_matrix[i] /= row_sums[i]
+                else:
+                    self.transition_matrix[i] = np.ones(self.n_regimes) / self.n_regimes
 
         trans_k = np.linalg.matrix_power(self.transition_matrix, steps)
         return current_regime_prob @ trans_k
@@ -941,9 +975,8 @@ def add_hmm_features(
     return result
 
 
-# Need dataclass import for HMMRegimeResult
-from dataclasses import dataclass
-from typing import Any
+# REG_R7_6: Removed duplicate imports that were already at top of file
+# (dataclass at line 20, Any at line 18)
 
 
 # ============================================================================
