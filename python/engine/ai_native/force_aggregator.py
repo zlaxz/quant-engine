@@ -443,23 +443,29 @@ class ForceAggregator:
                 if len(vpin_values) > 0:
                     vpin_val = float(vpin_values[-1])
 
-                    forces.append(ForceVector(
-                        name="vpin",
-                        category=ForceCategory.FLOW,
-                        value=vpin_val,
-                        percentile=self._compute_percentile("vpin", vpin_val),
-                        strength=self._value_to_strength(
-                            vpin_val, (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
-                        ),
-                        # FA8 + FA17: Check finiteness of both input AND output
-                        velocity=self._safe_velocity(vpin_values),
-                        interpretation=f"Order flow toxicity {'elevated' if vpin_val > 0.5 else 'normal'}"
-                    ))
+                    # FA_R6_3: Validate value is finite before creating ForceVector
+                    if not np.isfinite(vpin_val):
+                        logger.warning(f"VPIN value is not finite: {vpin_val}, skipping")
+                        vpin_val = None
 
-                    raw_metrics['vpin'] = vpin_val
+                    if vpin_val is not None:
+                        forces.append(ForceVector(
+                            name="vpin",
+                            category=ForceCategory.FLOW,
+                            value=vpin_val,
+                            percentile=self._compute_percentile("vpin", vpin_val),
+                            strength=self._value_to_strength(
+                                vpin_val, (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
+                            ),
+                            # FA8 + FA17: Check finiteness of both input AND output
+                            velocity=self._safe_velocity(vpin_values),
+                            interpretation=f"Order flow toxicity {'elevated' if vpin_val > 0.5 else 'normal'}"
+                        ))
 
-                    if vpin_val > 0.7:
-                        warnings.append("VPIN elevated - toxic flow detected")
+                        raw_metrics['vpin'] = vpin_val
+
+                        if vpin_val > 0.7:
+                            warnings.append("VPIN elevated - toxic flow detected")
         except Exception as e:
             logger.warning(f"VPIN calculation failed: {e}")
 
@@ -482,23 +488,29 @@ class ForceAggregator:
                         if len(ar) > 0:
                             ar_val = ar[-1]
 
-                            forces.append(ForceVector(
-                                name="absorption_ratio",
-                                category=ForceCategory.CORRELATION,
-                                value=ar_val,
-                                percentile=self._compute_percentile("absorption_ratio", ar_val),
-                                strength=self._value_to_strength(
-                                    ar_val, (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9)
-                                ),
-                                # FA18: Use consistent safe_velocity method (not weak ~np.isnan check)
-                                velocity=self._safe_velocity(ar),
-                                interpretation=f"Systemic risk {'elevated' if ar_val > 0.8 else 'normal'}"
-                            ))
+                            # FA_R6_3: Validate value is finite before creating ForceVector
+                            if not np.isfinite(ar_val):
+                                logger.warning(f"Absorption ratio value is not finite: {ar_val}, skipping")
+                                ar_val = None
 
-                            raw_metrics['absorption_ratio'] = ar_val
+                            if ar_val is not None:
+                                forces.append(ForceVector(
+                                    name="absorption_ratio",
+                                    category=ForceCategory.CORRELATION,
+                                    value=ar_val,
+                                    percentile=self._compute_percentile("absorption_ratio", ar_val),
+                                    strength=self._value_to_strength(
+                                        ar_val, (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9)
+                                    ),
+                                    # FA18: Use consistent safe_velocity method (not weak ~np.isnan check)
+                                    velocity=self._safe_velocity(ar),
+                                    interpretation=f"Systemic risk {'elevated' if ar_val > 0.8 else 'normal'}"
+                                ))
 
-                            if ar_val > 0.85:
-                                warnings.append("Absorption ratio high - systemic risk elevated")
+                                raw_metrics['absorption_ratio'] = ar_val
+
+                                if ar_val > 0.85:
+                                    warnings.append("Absorption ratio high - systemic risk elevated")
         except Exception as e:
             logger.warning(f"Correlation calculation failed: {e}")
 
@@ -534,7 +546,7 @@ class ForceAggregator:
 
                 # Duration analysis
                 regime_series = hmm_result.most_likely_regime
-                durations = extract_regime_durations(regime_series)
+                # FA_R6_6: Removed unused durations variable
                 days_in_regime = 1
                 for i in range(len(regime_series) - 1, 0, -1):
                     if regime_series[i] == regime_series[i-1]:
@@ -607,19 +619,26 @@ class ForceAggregator:
         try:
             shape = compute_shape_metrics(returns[-60:])
 
-            forces.append(ForceVector(
-                name="skewness",
-                category=ForceCategory.MORPHOLOGY,
-                value=shape.skewness,
-                percentile=self._compute_percentile("skewness", shape.skewness),
-                strength=self._value_to_strength(
-                    shape.skewness, (-2.0, -1.0, -0.5, -0.2, 0.2, 0.5, 1.0, 2.0)
-                ),
-                velocity=0,  # Could compute rolling
-                interpretation=f"Distribution {shape.shape_class}-shaped"
-            ))
+            # FA_R6_3: Validate value is finite before creating ForceVector
+            skewness = shape.skewness
+            if not np.isfinite(skewness):
+                logger.warning(f"Skewness value is not finite: {skewness}, skipping")
+                skewness = None
 
-            raw_metrics['skewness'] = shape.skewness
+            if skewness is not None:
+                forces.append(ForceVector(
+                    name="skewness",
+                    category=ForceCategory.MORPHOLOGY,
+                    value=skewness,
+                    percentile=self._compute_percentile("skewness", skewness),
+                    strength=self._value_to_strength(
+                        skewness, (-2.0, -1.0, -0.5, -0.2, 0.2, 0.5, 1.0, 2.0)
+                    ),
+                    velocity=0,  # Could compute rolling
+                    interpretation=f"Distribution {shape.shape_class}-shaped"
+                ))
+
+                raw_metrics['skewness'] = skewness
             raw_metrics['kurtosis'] = shape.kurtosis
             raw_metrics['shape_class'] = shape.shape_class
 
@@ -634,26 +653,33 @@ class ForceAggregator:
         try:
             vol_dynamics = compute_volatility_dynamics(returns)
 
-            forces.append(ForceVector(
-                name="realized_vol",
-                category=ForceCategory.DYNAMICS,
-                value=vol_dynamics.realized_vol,
-                percentile=self._compute_percentile("realized_vol", vol_dynamics.realized_vol),
-                strength=self._value_to_strength(
-                    vol_dynamics.realized_vol, (5, 10, 15, 18, 22, 28, 35, 50)
-                ),
-                velocity=vol_dynamics.vol_velocity if not np.isnan(vol_dynamics.vol_velocity) else 0.0,
-                interpretation=f"Volatility {vol_dynamics.vol_regime}"
-            ))
+            # FA_R6_3: Validate value is finite before creating ForceVector
+            realized_vol = vol_dynamics.realized_vol
+            if not np.isfinite(realized_vol):
+                logger.warning(f"Realized vol value is not finite: {realized_vol}, skipping")
+                realized_vol = None
 
-            # FA10: Wrap in float() for type consistency
-            raw_metrics['realized_vol'] = float(vol_dynamics.realized_vol)
-            raw_metrics['vol_velocity'] = float(vol_dynamics.vol_velocity) if not np.isnan(vol_dynamics.vol_velocity) else 0.0
+            if realized_vol is not None:
+                forces.append(ForceVector(
+                    name="realized_vol",
+                    category=ForceCategory.DYNAMICS,
+                    value=realized_vol,
+                    percentile=self._compute_percentile("realized_vol", realized_vol),
+                    strength=self._value_to_strength(
+                        realized_vol, (5, 10, 15, 18, 22, 28, 35, 50)
+                    ),
+                    velocity=vol_dynamics.vol_velocity if not np.isnan(vol_dynamics.vol_velocity) else 0.0,
+                    interpretation=f"Volatility {vol_dynamics.vol_regime}"
+                ))
 
-            if vol_dynamics.vol_regime == 'expanding':
-                observations.append("Volatility expanding")
-            elif vol_dynamics.vol_regime == 'contracting':
-                observations.append("Volatility contracting - potential opportunity")
+                # FA10: Wrap in float() for type consistency
+                raw_metrics['realized_vol'] = float(realized_vol)
+                raw_metrics['vol_velocity'] = float(vol_dynamics.vol_velocity) if not np.isnan(vol_dynamics.vol_velocity) else 0.0
+
+                if vol_dynamics.vol_regime == 'expanding':
+                    observations.append("Volatility expanding")
+                elif vol_dynamics.vol_regime == 'contracting':
+                    observations.append("Volatility contracting - potential opportunity")
         except Exception as e:
             logger.warning(f"Volatility dynamics failed: {e}")
 
@@ -701,8 +727,7 @@ class ForceAggregator:
         ]
         valid_bullish = [f for f in bullish_forces if not np.isnan(f) and not np.isinf(f)]
         bullish_force_score = float(np.mean(valid_bullish)) if valid_bullish else 0.0
-        # FA6: Clip before scaling to prevent overflow, then clip again
-        bullish_force_score = np.clip(bullish_force_score, -1, 1)
+        # FA_R6_5: Scale then clip (removed ineffective first clip)
         bullish_force_score = np.clip(bullish_force_score * 2, -1, 1)
 
         # FA22 + FA_R6_2: Clip hazard_rate and handle NaN (np.clip doesn't fix NaN!)

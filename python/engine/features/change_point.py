@@ -206,8 +206,13 @@ def cusum_variance_shift(
     sigma_1 = np.sqrt(target_var)
 
     # CP4: Compute score for each observation with correct 0.5 multiplier
+    # CP_R6_6: Protect against overflow when variances are extremely small
+    min_var = 1e-8
+    safe_ref_var = max(reference_var, min_var)
+    safe_target_var = max(target_var, min_var)
+
     log_ratio = np.log(sigma_0 / sigma_1)
-    var_diff = 1/reference_var - 1/target_var
+    var_diff = 1/safe_ref_var - 1/safe_target_var
 
     s = log_ratio + 0.5 * data**2 * var_diff
 
@@ -343,6 +348,8 @@ def pelt_detect(
         raise ValueError(f"penalty must be non-negative, got {penalty}")
 
     # Compute penalty
+    # CP_R6_3: BIC penalty may be too small for very short series (n=2 → beta≈1.4)
+    # This can cause over-segmentation. For production, ensure n >= 10 for reliable BIC.
     if penalty == 'bic':
         beta = 2 * np.log(n)
     elif penalty == 'aic':
@@ -483,6 +490,11 @@ class BOCPD:
         # CP9 FIX: Limit run length to prevent O(n²) memory
         if max_run_length is None:
             max_run_length = max(500, int(5 / hazard))  # ~5 expected run lengths
+
+        # CP_R6_1: Validate max_run_length is sensible
+        if max_run_length < 2:
+            raise ValueError(f"max_run_length must be >= 2, got {max_run_length}")
+
         self.max_run_length = max_run_length
 
         # Prior hyperparameters (Normal-Inverse-Gamma)
@@ -540,6 +552,8 @@ class BOCPD:
         alpha_n = self.alpha0 + n / 2
 
         # SSE term
+        # CP_R6_5: Note - for n=1, sse=0 which may underestimate uncertainty.
+        # This is inherent to the model (single point has no variance).
         x_bar = sum_x / n if n > 0 else 0
         sse = sum_x2 - 2 * x_bar * sum_x + n * x_bar**2
 
@@ -624,18 +638,20 @@ class BOCPD:
         new_sum_x2[0] = x**2
         new_n[0] = 1
 
-        # r>0: extend existing
-        new_sum_x[1:] = self.sum_x + x
-        new_sum_x2[1:] = self.sum_x2 + x**2
-        new_n[1:] = self.n + 1
+        # CP_R6_2: r>0: extend existing (only if n_rl > 0 to avoid empty slice)
+        if n_rl > 0:
+            new_sum_x[1:] = self.sum_x + x
+            new_sum_x2[1:] = self.sum_x2 + x**2
+            new_n[1:] = self.n + 1
 
-        # CP9 + CP_R5_6: Truncate if exceeding max_run_length
+        # CP9 + CP_R6_4: Truncate if exceeding max_run_length
         if len(new_probs) > self.max_run_length:
-            # Merge truncated probability mass into last position (don't discard)
-            tail_mass = np.sum(new_probs[self.max_run_length:])
+            # Truncate and renormalize (accept probability loss for very long runs)
+            # Note: Merging tail mass into last position (CP_R5_6) caused issues because
+            # sufficient statistics at position max_run_length-1 would represent MULTIPLE
+            # run lengths, corrupting posterior mean/variance calculations.
+            # Better to lose tail probability than corrupt statistics.
             new_probs = new_probs[:self.max_run_length]
-            new_probs[-1] += tail_mass  # Preserve total probability
-            # Now renormalize (should be ~1.0 already, but numerical safety)
             new_probs = new_probs / (np.sum(new_probs) + 1e-300)
             new_sum_x = new_sum_x[:self.max_run_length]
             new_sum_x2 = new_sum_x2[:self.max_run_length]

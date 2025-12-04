@@ -213,14 +213,24 @@ def bulk_volume_classification(
     # Buy probability from CDF
     buy_probs = norm.cdf(z_scores)
 
-    # Allocate volumes (first observation has no return, assign 50/50)
+    # FL_R6_3: Lag classification by 1 to avoid lookahead
+    # volumes[t] classified using returns[t-2] (price change from t-2 to t-1)
+    # This ensures we only use information available BEFORE time t
     buy_volumes = np.zeros_like(volumes, dtype=float)
     sell_volumes = np.zeros_like(volumes, dtype=float)
 
+    # First two observations: no lagged return available, assign 50/50
     buy_volumes[0] = volumes[0] * 0.5
     sell_volumes[0] = volumes[0] * 0.5
-    buy_volumes[1:] = volumes[1:] * buy_probs
-    sell_volumes[1:] = volumes[1:] * (1 - buy_probs)
+
+    if len(volumes) > 1:
+        buy_volumes[1] = volumes[1] * 0.5
+        sell_volumes[1] = volumes[1] * 0.5
+
+    # From index 2 onward: use lagged classification
+    if len(volumes) > 2:
+        buy_volumes[2:] = volumes[2:] * buy_probs[:-1]
+        sell_volumes[2:] = volumes[2:] * (1 - buy_probs[:-1])
 
     return buy_volumes, sell_volumes
 
@@ -1069,10 +1079,11 @@ def add_flow_features(
     result['sell_volume'] = pd.Series(sell_volumes, index=df.index).shift(lag)
 
     # Order imbalance
+    # FL_R6_5: Don't double-shift - buy_volume/sell_volume already shifted
     total = result['buy_volume'] + result['sell_volume']
     total = total.replace(0, np.nan)
-    result['order_imbalance'] = ((result['buy_volume'] - result['sell_volume']) / total).shift(lag)
-    result['buy_volume_ratio'] = (result['buy_volume'] / total).shift(lag)
+    result['order_imbalance'] = (result['buy_volume'] - result['sell_volume']) / total
+    result['buy_volume_ratio'] = result['buy_volume'] / total
 
     # Rolling VPIN
     if bucket_size is None:
@@ -1083,8 +1094,13 @@ def add_flow_features(
     result['vpin'] = vpin_series.shift(lag)
 
     # VPIN percentile (rolling)
+    # FL_R6_4: Handle all-NaN windows (e.g., data gaps > 252 bars)
+    def safe_percentile(x):
+        ranked = pd.Series(x).rank(pct=True)
+        return ranked.iloc[-1] if len(ranked) > 0 else np.nan
+
     result['vpin_percentile'] = result['vpin'].rolling(252).apply(
-        lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False
+        safe_percentile, raw=False
     )
 
     # VPIN toxicity alert
@@ -1099,10 +1115,12 @@ def add_flow_features(
     result['kyle_lambda_r2'] = kyle_df['kyle_lambda_r2'].shift(lag)
 
     # Kyle's Lambda z-score
-    result['kyle_lambda_zscore'] = (
-        (result['kyle_lambda'] - result['kyle_lambda'].rolling(252).mean()) /
-        result['kyle_lambda'].rolling(252).std()
-    )
+    # FL_R6_6: Protect against division by zero when rolling std = 0
+    kyle_mean = result['kyle_lambda'].rolling(252).mean()
+    kyle_std = result['kyle_lambda'].rolling(252).std()
+    kyle_std = kyle_std.replace(0, np.nan)  # Avoid division by zero → inf
+
+    result['kyle_lambda_zscore'] = (result['kyle_lambda'] - kyle_mean) / kyle_std
 
     # Clean up intermediate columns
     result = result.drop(columns=['buy_volume', 'sell_volume'], errors='ignore')
