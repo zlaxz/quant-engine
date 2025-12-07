@@ -23,6 +23,7 @@ import {
 import { StaticFoundation } from '@/components/observatory/StaticFoundation';
 import { JournalView } from '@/components/observatory/JournalView';
 import { MissionControl } from '@/components/observatory/MissionControl';
+import { DynamicRenderer } from '@/components/visualizations/DynamicRenderer';
 import { useJarvisEvents } from '@/hooks/useJarvisEvents';
 
 // ============================================================================
@@ -255,14 +256,18 @@ export default function Observatory() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Orchestrated View - Dynamic canvas */}
+          {/* Orchestrated View - Dynamic canvas + JARVIS visualizations */}
           <TabsContent value="orchestrated" className="space-y-4">
             <OrchestrationCanvas orchestration={orchestration} />
+            {/* Dynamic charts/tables/metrics from JARVIS events */}
+            <DynamicRenderer />
           </TabsContent>
 
-          {/* Static View - Always-visible panels */}
+          {/* Static View - Always-visible panels + Dynamic visualizations */}
           <TabsContent value="static" className="space-y-4">
             <StaticFoundation jarvisState={jarvis} />
+            {/* Dynamic charts/tables/metrics from JARVIS events */}
+            <DynamicRenderer />
           </TabsContent>
 
           {/* Journal View - Persistent record of activity */}
