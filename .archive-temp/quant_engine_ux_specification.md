@@ -1,1 +1,0 @@
-# Quant Engine UX Design Specification
