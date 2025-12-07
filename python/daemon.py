@@ -2042,14 +2042,20 @@ def calculate_sharpe(returns: pd.Series, risk_free_rate: float = 0.0) -> float:
 
 
 def calculate_sortino(returns: pd.Series, risk_free_rate: float = 0.0) -> float:
-    """Calculate annualized Sortino ratio."""
+    """Calculate annualized Sortino ratio.
+
+    FIX: Sortino uses LPM2 (Lower Partial Moment), not std of negative returns.
+    Per Gemini audit 2025-12-06: std(neg_returns) measures dispersion around mean loss,
+    which is wrong. LPM2 = sqrt(mean(min(r, 0)^2)) measures dispersion around zero.
+    """
     if returns.empty:
         return 0.0
     excess_returns = returns - risk_free_rate / 252
-    downside = returns[returns < 0]
-    if downside.empty or downside.std() == 0:
+    downside_returns = np.minimum(returns, 0)  # Clip positive to 0
+    downside_vol = np.sqrt((downside_returns ** 2).mean()) * np.sqrt(252)
+    if downside_vol == 0:
         return calculate_sharpe(returns, risk_free_rate)  # Fallback to Sharpe
-    return np.sqrt(252) * excess_returns.mean() / downside.std()
+    return excess_returns.mean() * np.sqrt(252) / downside_vol
 
 
 def calculate_max_drawdown(equity_curve: pd.Series) -> float:

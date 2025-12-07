@@ -795,6 +795,269 @@ def ui_multi_gauge(title: str, gauges: List[Dict[str, Any]],
     )
 
 
+# ============================================================================
+# JOURNAL SYSTEM - Persistent record of pipeline activity
+# ============================================================================
+
+# Supabase client for journal persistence
+_supabase_client = None
+
+def _get_supabase():
+    """Get or create Supabase client"""
+    global _supabase_client
+    if _supabase_client is None:
+        try:
+            from supabase import create_client
+            url = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL")
+            key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("VITE_SUPABASE_ANON_KEY")
+            if url and key:
+                _supabase_client = create_client(url, key)
+        except Exception as e:
+            print(f"[Journal] Failed to initialize Supabase: {e}")
+    return _supabase_client
+
+
+def journal_entry(
+    activity_type: str,
+    title: str,
+    description: Optional[str] = None,
+    results: Optional[Dict[str, Any]] = None,
+    parameters: Optional[Dict[str, Any]] = None,
+    status: str = "completed",
+    duration_seconds: Optional[int] = None,
+    strategy_name: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    parent_run_id: Optional[str] = None,
+    sharpe_ratio: Optional[float] = None,
+    total_return_pct: Optional[float] = None,
+    max_drawdown_pct: Optional[float] = None,
+) -> Optional[str]:
+    """
+    Log a pipeline activity to the persistent journal.
+
+    Args:
+        activity_type: Type of activity (backtest, discovery, swarm, feature_harvest, etc.)
+        title: Short title for the entry
+        description: Longer description
+        results: Dict of results (metrics, findings, etc.)
+        parameters: Dict of input parameters used
+        status: completed, running, failed, partial, cancelled
+        duration_seconds: How long it took
+        strategy_name: Associated strategy name
+        tags: List of tags for filtering
+        parent_run_id: UUID of parent run (for linked runs)
+        sharpe_ratio: For quick filtering
+        total_return_pct: For quick filtering
+        max_drawdown_pct: For quick filtering
+
+    Returns:
+        UUID of created entry, or None if failed
+    """
+    supabase = _get_supabase()
+    if not supabase:
+        print("[Journal] Supabase not available - entry not persisted")
+        return None
+
+    entry = {
+        "activity_type": activity_type,
+        "title": title,
+        "description": description,
+        "results": results or {},
+        "parameters": parameters or {},
+        "status": status,
+        "duration_seconds": duration_seconds,
+        "strategy_name": strategy_name,
+        "tags": tags or [],
+        "parent_run_id": parent_run_id,
+        "sharpe_ratio": sharpe_ratio,
+        "total_return_pct": total_return_pct,
+        "max_drawdown_pct": max_drawdown_pct,
+    }
+
+    # Remove None values
+    entry = {k: v for k, v in entry.items() if v is not None}
+
+    try:
+        result = supabase.table("pipeline_journal").insert(entry).execute()
+        if result.data:
+            entry_id = result.data[0].get("id")
+            print(f"[Journal] Logged: {title} ({entry_id})")
+            return entry_id
+    except Exception as e:
+        print(f"[Journal] Failed to log entry: {e}")
+
+    return None
+
+
+def journal_backtest(
+    strategy_name: str,
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    sharpe: float,
+    total_return: float,
+    max_dd: float,
+    trades: int = 0,
+    win_rate: Optional[float] = None,
+    profit_factor: Optional[float] = None,
+    duration_seconds: Optional[int] = None,
+    parameters: Optional[Dict[str, Any]] = None,
+    notes: Optional[str] = None,
+) -> Optional[str]:
+    """Log a backtest run to the journal"""
+    return journal_entry(
+        activity_type="backtest",
+        title=f"{strategy_name} on {symbol}",
+        description=f"Backtest from {start_date} to {end_date}. {trades} trades.",
+        results={
+            "sharpe": sharpe,
+            "total_return_pct": total_return * 100 if abs(total_return) < 10 else total_return,
+            "max_drawdown_pct": max_dd * 100 if abs(max_dd) < 1 else max_dd,
+            "trades": trades,
+            "win_rate": win_rate,
+            "profit_factor": profit_factor,
+        },
+        parameters={
+            "symbol": symbol,
+            "start_date": start_date,
+            "end_date": end_date,
+            **(parameters or {})
+        },
+        strategy_name=strategy_name,
+        duration_seconds=duration_seconds,
+        sharpe_ratio=sharpe,
+        total_return_pct=total_return * 100 if abs(total_return) < 10 else total_return,
+        max_drawdown_pct=max_dd * 100 if abs(max_dd) < 1 else max_dd,
+        tags=["backtest", symbol, strategy_name],
+    )
+
+
+def journal_swarm(
+    objective: str,
+    agents_run: int,
+    success_rate: float,
+    top_findings: List[str],
+    duration_seconds: Optional[int] = None,
+    parameters: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    """Log a swarm run to the journal"""
+    return journal_entry(
+        activity_type="swarm",
+        title=f"Swarm: {objective[:50]}",
+        description=objective,
+        results={
+            "agents_run": agents_run,
+            "success_rate": success_rate,
+            "top_findings": top_findings[:10],  # Limit findings
+        },
+        parameters=parameters,
+        duration_seconds=duration_seconds,
+        tags=["swarm", "ai"],
+    )
+
+
+def journal_discovery(
+    title: str,
+    description: str,
+    findings: List[str],
+    significance: str = "medium",
+    features_selected: Optional[List[str]] = None,
+    patterns_found: Optional[int] = None,
+) -> Optional[str]:
+    """Log a discovery to the journal"""
+    return journal_entry(
+        activity_type="discovery",
+        title=title,
+        description=description,
+        results={
+            "findings": findings,
+            "significance": significance,
+            "features_selected": features_selected,
+            "patterns_found": patterns_found,
+        },
+        tags=["discovery", significance],
+    )
+
+
+def journal_feature_harvest(
+    symbols: List[str],
+    features_generated: int,
+    feature_modules: List[str],
+    duration_seconds: Optional[int] = None,
+    date_range: Optional[str] = None,
+) -> Optional[str]:
+    """Log a feature harvest run to the journal"""
+    return journal_entry(
+        activity_type="feature_harvest",
+        title=f"Feature harvest: {len(symbols)} symbols, {features_generated} features",
+        description=f"Processed {', '.join(symbols[:5])}{'...' if len(symbols) > 5 else ''} using {', '.join(feature_modules)}",
+        results={
+            "symbols": symbols,
+            "features_generated": features_generated,
+            "feature_modules": feature_modules,
+        },
+        parameters={"date_range": date_range},
+        duration_seconds=duration_seconds,
+        tags=["feature_harvest", "data"],
+    )
+
+
+def get_journal_entries(
+    limit: int = 50,
+    activity_type: Optional[str] = None,
+    starred_only: bool = False,
+    strategy_name: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Retrieve journal entries from Supabase"""
+    supabase = _get_supabase()
+    if not supabase:
+        return []
+
+    try:
+        query = supabase.table("pipeline_journal").select("*").order("created_at", desc=True).limit(limit)
+
+        if activity_type:
+            query = query.eq("activity_type", activity_type)
+        if starred_only:
+            query = query.eq("starred", True)
+        if strategy_name:
+            query = query.eq("strategy_name", strategy_name)
+
+        result = query.execute()
+        return result.data or []
+    except Exception as e:
+        print(f"[Journal] Failed to retrieve entries: {e}")
+        return []
+
+
+def star_journal_entry(entry_id: str, starred: bool = True) -> bool:
+    """Star or unstar a journal entry"""
+    supabase = _get_supabase()
+    if not supabase:
+        return False
+
+    try:
+        supabase.table("pipeline_journal").update({"starred": starred}).eq("id", entry_id).execute()
+        return True
+    except Exception as e:
+        print(f"[Journal] Failed to update entry: {e}")
+        return False
+
+
+def add_journal_notes(entry_id: str, notes: str) -> bool:
+    """Add notes to a journal entry"""
+    supabase = _get_supabase()
+    if not supabase:
+        return False
+
+    try:
+        supabase.table("pipeline_journal").update({"notes": notes}).eq("id", entry_id).execute()
+        return True
+    except Exception as e:
+        print(f"[Journal] Failed to update entry: {e}")
+        return False
+
+
 # For testing
 if __name__ == "__main__":
     print("Testing UI Bridge...")

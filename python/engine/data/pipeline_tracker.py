@@ -141,13 +141,12 @@ class PipelineTracker:
             result = self.client.table("pipeline_runs").insert(payload).execute()
             run_id = result.data[0]["id"]
 
-            # Initialize module statuses
-            for module in self.MODULES:
-                self.client.table("pipeline_module_status").insert({
-                    "run_id": run_id,
-                    "module_name": module,
-                    "status": "pending",
-                }).execute()
+            # Initialize module statuses - batch insert for efficiency
+            module_statuses = [
+                {"run_id": run_id, "module_name": module, "status": "pending"}
+                for module in self.MODULES
+            ]
+            self.client.table("pipeline_module_status").insert(module_statuses).execute()
 
             logger.info(f"Started pipeline run {run_id} for {len(symbols)} symbols")
             return run_id

@@ -29,9 +29,10 @@ Usage:
 
 import logging
 import numpy as np
-from typing import Optional, Dict, Any
-from dataclasses import dataclass
+from typing import Optional, Dict, Any, List
+from dataclasses import dataclass, field
 from enum import Enum
+from datetime import datetime, date
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,274 @@ class AssetType(Enum):
     STOCK = 'stock'
     OPTION = 'option'
     FUTURE = 'future'
+
+
+class DrawdownAction(Enum):
+    """Actions to take based on drawdown level."""
+    NORMAL = 'normal'           # Full trading
+    REDUCE_25 = 'reduce_25'     # Reduce position sizes 25%
+    REDUCE_50 = 'reduce_50'     # Reduce position sizes 50%
+    STOP_TODAY = 'stop_today'   # Stop trading for rest of day
+    PAUSE_WEEK = 'pause_week'   # Pause for 1 week
+    SHUTDOWN = 'shutdown'       # Full shutdown - circuit breaker
+
+
+@dataclass
+class DrawdownState:
+    """Current drawdown state and metrics."""
+    peak_equity: float
+    current_equity: float
+    drawdown_pct: float
+    drawdown_dollars: float
+    action: DrawdownAction
+    daily_pnl: float = 0.0
+    weekly_pnl: float = 0.0
+    monthly_pnl: float = 0.0
+    position_multiplier: float = 1.0  # Applied to all position sizes
+    consecutive_losing_days: int = 0
+    last_check: datetime = field(default_factory=datetime.now)
+
+
+class DrawdownController:
+    """
+    Drawdown-based risk controls to prevent account blowup.
+
+    Implements tiered circuit breakers:
+    - Daily limit: 2% (stop for day)
+    - Weekly limit: 5% (reduce sizes 50%)
+    - Monthly limit: 10% (pause 1 week)
+    - Circuit breaker: 15% (full shutdown)
+
+    Also tracks:
+    - Consecutive losing days
+    - VIX-based position scaling
+    - Equity high water mark
+    """
+
+    def __init__(
+        self,
+        initial_equity: float,
+        daily_limit: float = 0.02,      # 2%
+        weekly_limit: float = 0.05,     # 5%
+        monthly_limit: float = 0.10,    # 10%
+        circuit_breaker: float = 0.15,  # 15%
+        max_consecutive_losers: int = 5,
+    ):
+        """
+        Initialize drawdown controller.
+
+        Args:
+            initial_equity: Starting account value
+            daily_limit: Max daily drawdown before stopping (0.02 = 2%)
+            weekly_limit: Max weekly drawdown before reducing size
+            monthly_limit: Max monthly drawdown before pausing
+            circuit_breaker: Max total drawdown before shutdown
+            max_consecutive_losers: Max losing days before pause
+        """
+        self.initial_equity = initial_equity
+        self.peak_equity = initial_equity
+        self.current_equity = initial_equity
+
+        # Limits
+        self.daily_limit = daily_limit
+        self.weekly_limit = weekly_limit
+        self.monthly_limit = monthly_limit
+        self.circuit_breaker = circuit_breaker
+        self.max_consecutive_losers = max_consecutive_losers
+
+        # Tracking
+        self.daily_start_equity = initial_equity
+        self.weekly_start_equity = initial_equity
+        self.monthly_start_equity = initial_equity
+        self.daily_pnl_history: List[float] = []
+        self.consecutive_losing_days = 0
+        self.pause_until: Optional[date] = None
+
+        # Current state
+        self._action = DrawdownAction.NORMAL
+        self._position_multiplier = 1.0
+
+        logger.info(f"DrawdownController initialized:")
+        logger.info(f"  Initial equity: ${initial_equity:,.2f}")
+        logger.info(f"  Daily limit: {daily_limit:.1%}")
+        logger.info(f"  Weekly limit: {weekly_limit:.1%}")
+        logger.info(f"  Monthly limit: {monthly_limit:.1%}")
+        logger.info(f"  Circuit breaker: {circuit_breaker:.1%}")
+
+    def update_equity(self, new_equity: float) -> DrawdownState:
+        """
+        Update current equity and check drawdown limits.
+
+        Call this after each trade or at regular intervals.
+
+        Args:
+            new_equity: Current account equity
+
+        Returns:
+            DrawdownState with current status and recommended action
+        """
+        old_equity = self.current_equity
+        self.current_equity = new_equity
+
+        # Update high water mark
+        if new_equity > self.peak_equity:
+            self.peak_equity = new_equity
+
+        # Calculate drawdowns
+        total_dd = (self.peak_equity - new_equity) / self.peak_equity if self.peak_equity > 0 else 0
+        daily_dd = (self.daily_start_equity - new_equity) / self.daily_start_equity if self.daily_start_equity > 0 else 0
+        weekly_dd = (self.weekly_start_equity - new_equity) / self.weekly_start_equity if self.weekly_start_equity > 0 else 0
+        monthly_dd = (self.monthly_start_equity - new_equity) / self.monthly_start_equity if self.monthly_start_equity > 0 else 0
+
+        # Check if paused
+        if self.pause_until and date.today() < self.pause_until:
+            self._action = DrawdownAction.PAUSE_WEEK
+            self._position_multiplier = 0.0
+            logger.warning(f"Trading paused until {self.pause_until}")
+        # Check circuit breaker (most severe)
+        elif total_dd >= self.circuit_breaker:
+            self._action = DrawdownAction.SHUTDOWN
+            self._position_multiplier = 0.0
+            logger.critical(f"CIRCUIT BREAKER: {total_dd:.1%} drawdown - SHUTDOWN")
+        # Check monthly limit
+        elif monthly_dd >= self.monthly_limit:
+            self._action = DrawdownAction.PAUSE_WEEK
+            self._position_multiplier = 0.0
+            self.pause_until = date.today()  # Will be set properly by end_day
+            logger.error(f"Monthly limit hit: {monthly_dd:.1%} - Pausing 1 week")
+        # Check weekly limit
+        elif weekly_dd >= self.weekly_limit:
+            self._action = DrawdownAction.REDUCE_50
+            self._position_multiplier = 0.5
+            logger.warning(f"Weekly limit hit: {weekly_dd:.1%} - Reducing size 50%")
+        # Check daily limit
+        elif daily_dd >= self.daily_limit:
+            self._action = DrawdownAction.STOP_TODAY
+            self._position_multiplier = 0.0
+            logger.warning(f"Daily limit hit: {daily_dd:.1%} - Stopping today")
+        # Check consecutive losers
+        elif self.consecutive_losing_days >= self.max_consecutive_losers:
+            self._action = DrawdownAction.REDUCE_25
+            self._position_multiplier = 0.75
+            logger.warning(f"{self.consecutive_losing_days} consecutive losing days - Reducing size 25%")
+        else:
+            self._action = DrawdownAction.NORMAL
+            self._position_multiplier = 1.0
+
+        return DrawdownState(
+            peak_equity=self.peak_equity,
+            current_equity=self.current_equity,
+            drawdown_pct=total_dd,
+            drawdown_dollars=self.peak_equity - self.current_equity,
+            action=self._action,
+            daily_pnl=new_equity - self.daily_start_equity,
+            weekly_pnl=new_equity - self.weekly_start_equity,
+            monthly_pnl=new_equity - self.monthly_start_equity,
+            position_multiplier=self._position_multiplier,
+            consecutive_losing_days=self.consecutive_losing_days,
+        )
+
+    def start_new_day(self) -> None:
+        """Call at start of trading day to reset daily tracking."""
+        daily_pnl = self.current_equity - self.daily_start_equity
+        self.daily_pnl_history.append(daily_pnl)
+
+        # Track consecutive losers
+        if daily_pnl < 0:
+            self.consecutive_losing_days += 1
+        else:
+            self.consecutive_losing_days = 0
+
+        # Reset daily start
+        self.daily_start_equity = self.current_equity
+
+        # Reset action if we were stopped for day
+        if self._action == DrawdownAction.STOP_TODAY:
+            self._action = DrawdownAction.NORMAL
+            self._position_multiplier = 1.0
+
+        logger.info(f"New day started. Previous day P&L: ${daily_pnl:,.2f}")
+
+    def start_new_week(self) -> None:
+        """Call at start of trading week to reset weekly tracking."""
+        self.weekly_start_equity = self.current_equity
+
+        # Reset action if we were in weekly reduction
+        if self._action == DrawdownAction.REDUCE_50:
+            self._action = DrawdownAction.NORMAL
+            self._position_multiplier = 1.0
+
+        logger.info(f"New week started. Equity: ${self.current_equity:,.2f}")
+
+    def start_new_month(self) -> None:
+        """Call at start of month to reset monthly tracking."""
+        self.monthly_start_equity = self.current_equity
+
+        # Reset pause if it was monthly-triggered
+        if self._action == DrawdownAction.PAUSE_WEEK:
+            self.pause_until = None
+            self._action = DrawdownAction.NORMAL
+            self._position_multiplier = 1.0
+
+        logger.info(f"New month started. Equity: ${self.current_equity:,.2f}")
+
+    def get_position_multiplier(self) -> float:
+        """Get current position size multiplier based on drawdown state."""
+        return self._position_multiplier
+
+    def can_trade(self) -> bool:
+        """Check if trading is allowed based on current state."""
+        return self._action not in [
+            DrawdownAction.STOP_TODAY,
+            DrawdownAction.PAUSE_WEEK,
+            DrawdownAction.SHUTDOWN
+        ]
+
+    def get_state(self) -> DrawdownState:
+        """Get current drawdown state without updating."""
+        total_dd = (self.peak_equity - self.current_equity) / self.peak_equity if self.peak_equity > 0 else 0
+        return DrawdownState(
+            peak_equity=self.peak_equity,
+            current_equity=self.current_equity,
+            drawdown_pct=total_dd,
+            drawdown_dollars=self.peak_equity - self.current_equity,
+            action=self._action,
+            daily_pnl=self.current_equity - self.daily_start_equity,
+            weekly_pnl=self.current_equity - self.weekly_start_equity,
+            monthly_pnl=self.current_equity - self.monthly_start_equity,
+            position_multiplier=self._position_multiplier,
+            consecutive_losing_days=self.consecutive_losing_days,
+        )
+
+    def apply_vix_scaling(self, vix: float) -> float:
+        """
+        Apply VIX-based position scaling on top of drawdown multiplier.
+
+        High VIX = smaller positions (vol scaling).
+
+        Args:
+            vix: Current VIX level
+
+        Returns:
+            Combined multiplier (drawdown * vix scaling)
+        """
+        # VIX scaling: reduce size as VIX increases
+        if vix <= 15:
+            vix_mult = 1.0      # Normal vol - full size
+        elif vix <= 20:
+            vix_mult = 0.85     # Elevated - slight reduction
+        elif vix <= 25:
+            vix_mult = 0.70     # High - reduce 30%
+        elif vix <= 30:
+            vix_mult = 0.50     # Very high - half size
+        elif vix <= 40:
+            vix_mult = 0.25     # Extreme - quarter size
+        else:
+            vix_mult = 0.10     # Crisis - minimal exposure
+
+        combined = self._position_multiplier * vix_mult
+        logger.debug(f"VIX={vix:.1f}, VIX mult={vix_mult:.2f}, Combined={combined:.2f}")
+        return combined
 
 
 # Contract multipliers by asset type and symbol
@@ -409,3 +678,45 @@ if __name__ == "__main__":
     )
     print(f"Buy {result.quantity} contracts @ $5000")
     print(f"Notional: ${result.notional_value:,.2f}, Risk: ${result.risk_amount:,.2f}")
+
+    # =========================================================================
+    # DRAWDOWN CONTROLLER DEMO
+    # =========================================================================
+    print("\n" + "=" * 60)
+    print("DRAWDOWN CONTROLLER DEMO")
+    print("=" * 60)
+
+    dc = DrawdownController(initial_equity=100000)
+
+    print("\n--- Scenario 1: Normal Trading ---")
+    state = dc.update_equity(101000)  # Up $1k
+    print(f"Equity: ${state.current_equity:,.0f}, DD: {state.drawdown_pct:.2%}")
+    print(f"Action: {state.action.value}, Position Mult: {state.position_multiplier:.0%}")
+    print(f"Can trade: {dc.can_trade()}")
+
+    print("\n--- Scenario 2: Daily Limit Hit (-2%) ---")
+    dc2 = DrawdownController(initial_equity=100000)
+    state = dc2.update_equity(97500)  # Down 2.5%
+    print(f"Equity: ${state.current_equity:,.0f}, DD: {state.drawdown_pct:.2%}")
+    print(f"Action: {state.action.value}, Position Mult: {state.position_multiplier:.0%}")
+    print(f"Can trade: {dc2.can_trade()}")
+
+    print("\n--- Scenario 3: Weekly Limit Hit (-5%) ---")
+    dc3 = DrawdownController(initial_equity=100000)
+    state = dc3.update_equity(94000)  # Down 6%
+    print(f"Equity: ${state.current_equity:,.0f}, DD: {state.drawdown_pct:.2%}")
+    print(f"Action: {state.action.value}, Position Mult: {state.position_multiplier:.0%}")
+    print(f"Can trade: {dc3.can_trade()}")
+
+    print("\n--- Scenario 4: Circuit Breaker (-15%) ---")
+    dc4 = DrawdownController(initial_equity=100000)
+    state = dc4.update_equity(84000)  # Down 16%
+    print(f"Equity: ${state.current_equity:,.0f}, DD: {state.drawdown_pct:.2%}")
+    print(f"Action: {state.action.value}, Position Mult: {state.position_multiplier:.0%}")
+    print(f"Can trade: {dc4.can_trade()}")
+
+    print("\n--- Scenario 5: VIX Scaling ---")
+    dc5 = DrawdownController(initial_equity=100000)
+    for vix in [12, 18, 25, 35, 50]:
+        mult = dc5.apply_vix_scaling(vix)
+        print(f"VIX {vix:2d}: Position multiplier = {mult:.0%}")

@@ -140,9 +140,11 @@ def negative_binomial_hazard(d: np.ndarray, r: float = 2.0, p: float = 0.05) -> 
     d = np.maximum(d, 1)
 
     # PMF: P(D=d) = C(d-1+r-1, d-1) * (1-p)^r * p^(d-1)
-    # Using scipy for numerical stability
-    pmf = stats.nbinom.pmf(d - 1, r, 1 - p)  # Scipy parameterization differs
-    sf = stats.nbinom.sf(d - 2, r, 1 - p)     # P(D >= d) = P(X >= d-1) = P(X > d-2) = sf(d-2)
+    # FIX: Per Gemini audit 2025-12-06 - Pass p directly to scipy.stats.nbinom
+    # Scipy expects p = probability of success per trial
+    # Previous code passed 1-p which inverted the distribution
+    pmf = stats.nbinom.pmf(d - 1, r, p)
+    sf = stats.nbinom.sf(d - 2, r, p)  # P(D >= d) = P(X >= d-1) = P(X > d-2) = sf(d-2)
 
     # DUR_R8_4: Return NaN when sf=0 (hazard undefined when survival=0)
     # Also handle division by zero when sf is zero or very small
@@ -255,7 +257,7 @@ def fit_duration_distribution(
                 )
             # Fallback to geometric
             result.p = 1.0 / mean_d if mean_d > 0 else 0.1
-            result.r = 1.0 = 1.0
+            result.r = 1.0
 
     elif distribution == 'log_normal':
         log_d = np.log(durations)
@@ -416,7 +418,8 @@ class HiddenSemiMarkov:
         elif params.distribution == 'poisson':
             return stats.poisson.pmf(d, params.mu)
         elif params.distribution == 'negative_binomial':
-            return stats.nbinom.pmf(d - 1, params.r, 1 - params.p)
+            # FIX: Per Gemini audit 2025-12-06 - Pass p directly, not 1-p
+            return stats.nbinom.pmf(d - 1, params.r, params.p)
         elif params.distribution == 'log_normal':
             if d <= 0:
                 return 0

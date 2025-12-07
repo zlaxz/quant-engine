@@ -3,7 +3,7 @@
  * Responds to [DISPLAY: VIEW_NAME] directives from chat
  */
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 
 export type VisualizationView = 
   | 'default'
@@ -33,8 +33,14 @@ export function VisualizationProvider({ children }: { children: ReactNode }) {
     setCurrentView('default');
   }, []);
 
+  const contextValue = useMemo(() => ({ 
+    currentView, 
+    setView, 
+    resetToDefault 
+  }), [currentView, setView, resetToDefault]);
+
   return (
-    <VisualizationContext.Provider value={{ currentView, setView, resetToDefault }}>
+    <VisualizationContext.Provider value={contextValue}>
       {children}
     </VisualizationContext.Provider>
   );

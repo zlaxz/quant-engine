@@ -203,6 +203,25 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeAllListeners('daemon-status');
   },
 
+  // JARVIS engine events (UI control from Python engine)
+  // Type definition: src/types/jarvis.ts (JarvisEvent interface)
+  onJarvisEvent: (callback: (event: {
+    sessionId: string;
+    activityType: string;
+    content: string;
+    timestamp: string;
+    displayDirectives: Array<{
+      type: 'view' | 'progress' | 'chart' | 'table' | 'metrics' | 'notification';
+      value: unknown;
+      message?: string;
+    }>;
+    data: Record<string, unknown>;
+  }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('jarvis-event', handler);
+    return () => ipcRenderer.removeListener('jarvis-event', handler);
+  },
+
   // Context Management
   contextGetProtectedCanon: (workspaceId: string) =>
     ipcRenderer.invoke('context-get-protected-canon', workspaceId),
@@ -290,6 +309,115 @@ contextBridge.exposeInMainWorld('electron', {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('popout:closed', handler);
     return () => ipcRenderer.removeListener('popout:closed', handler);
+  },
+
+  // ==========================================================================
+  // Trading Operations (IBKR Integration)
+  // ==========================================================================
+
+  trading: {
+    // ==========================================================================
+    // Account Management (Multi-Account Support)
+    // ==========================================================================
+    accounts: () =>
+      ipcRenderer.invoke('trading:accounts'),
+    addAccount: (config: {
+      name: string;
+      mode: 'paper' | 'live';
+      host?: string;
+      port?: number;
+      clientId?: number;
+      maxPositionPerSymbol?: number;
+      dailyLossLimit?: number;
+    }) => ipcRenderer.invoke('trading:addAccount', config),
+    removeAccount: (name: string) =>
+      ipcRenderer.invoke('trading:removeAccount', name),
+    connectAccount: (name: string) =>
+      ipcRenderer.invoke('trading:connectAccount', name),
+    disconnectAccount: (name: string) =>
+      ipcRenderer.invoke('trading:disconnectAccount', name),
+    setActiveAccount: (name: string) =>
+      ipcRenderer.invoke('trading:setActiveAccount', name),
+    connectAll: () =>
+      ipcRenderer.invoke('trading:connectAll'),
+    disconnectAll: () =>
+      ipcRenderer.invoke('trading:disconnectAll'),
+    setupDual: (config?: {
+      paperClientId?: number;
+      liveClientId?: number;
+      paperLossLimit?: number;
+      liveLossLimit?: number;
+    }) => ipcRenderer.invoke('trading:setupDual', config),
+
+    // ==========================================================================
+    // Legacy Connection (backwards compatible)
+    // ==========================================================================
+    connect: (mode: 'paper' | 'live' = 'paper', account?: string) =>
+      ipcRenderer.invoke('trading:connect', { mode, account }),
+    disconnect: (account?: string) =>
+      ipcRenderer.invoke('trading:disconnect', { account }),
+    status: () =>
+      ipcRenderer.invoke('trading:status'),
+    health: () =>
+      ipcRenderer.invoke('trading:health'),
+
+    // ==========================================================================
+    // Position and Quote Data (with optional account selection)
+    // ==========================================================================
+    positions: (options?: { account?: string; aggregate?: boolean }) =>
+      ipcRenderer.invoke('trading:positions', options),
+    quote: (symbol: string, account?: string) =>
+      ipcRenderer.invoke('trading:quote', { symbol, account }),
+
+    // ==========================================================================
+    // Order Operations (with account selection)
+    // ==========================================================================
+    order: (params: {
+      symbol: string;
+      side: 'BUY' | 'SELL';
+      quantity: number;
+      orderType: 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_LIMIT';
+      limitPrice?: number;
+      stopPrice?: number;
+      timeInForce?: 'GTC' | 'DAY' | 'IOC';
+      strategyName?: string;
+      priority?: 'CRITICAL' | 'HIGH' | 'NORMAL' | 'LOW';
+      dryRun?: boolean;
+      account?: string;  // Target account (uses active if not specified)
+    }) => ipcRenderer.invoke('trading:order', params),
+    cancel: (orderId: string, account?: string) =>
+      ipcRenderer.invoke('trading:cancel', { orderId, account }),
+    cancelAll: (options?: { symbol?: string; account?: string }) =>
+      ipcRenderer.invoke('trading:cancelAll', options),
+
+    // ==========================================================================
+    // Trading Control (with account selection)
+    // ==========================================================================
+    halt: (reason: string, options?: { account?: string; all?: boolean }) =>
+      ipcRenderer.invoke('trading:halt', { reason, ...options }),
+    resume: (options?: { account?: string; all?: boolean }) =>
+      ipcRenderer.invoke('trading:resume', options),
+
+    // ==========================================================================
+    // Statistics (with account selection)
+    // ==========================================================================
+    stats: (account?: string) =>
+      ipcRenderer.invoke('trading:stats', { account }),
+    dailyPnl: (options?: { account?: string; aggregate?: boolean }) =>
+      ipcRenderer.invoke('trading:dailyPnl', options),
+
+    // ==========================================================================
+    // EMERGENCY - Kill Switch (with account selection)
+    // ==========================================================================
+    killSwitch: (reason: string = 'Manual UI trigger', options?: { account?: string; all?: boolean }) =>
+      ipcRenderer.invoke('trading:killSwitch', { reason, ...options }),
+  },
+
+  // Listen for kill switch activation (broadcast to all windows)
+  onKillSwitchActivated: (callback: (data: { reason: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('trading:killSwitchActivated', handler);
+    return () => ipcRenderer.removeListener('trading:killSwitchActivated', handler);
   },
 });
 

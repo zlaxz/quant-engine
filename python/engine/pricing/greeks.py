@@ -373,8 +373,9 @@ def calculate_charm(
     if option_type == 'call':
         return call_charm
     else:
-        # Put charm = call charm + phi(d1) / (sigma * sqrt(T))
-        return call_charm + phi_d1 / (sigma * np.sqrt(T))
+        # FIX: Per Gemini audit 2025-12-06 - Put charm equals Call charm for non-dividend stocks
+        # Reasoning: Put Delta = Call Delta - 1 (constant difference), so dDelta/dT is identical
+        return call_charm
 
 
 def calculate_vanna(S: float, K: float, T: float, r: float, sigma: float) -> float:

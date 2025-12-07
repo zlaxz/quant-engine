@@ -37,7 +37,7 @@ logger = logging.getLogger("MarketPhysics.Features.Entropy")
 def shannon_entropy(
     data: np.ndarray,
     bins: int = 20,
-    method: str = 'quantile',
+    method: str = 'uniform',
     base: int = 2
 ) -> float:
     """
@@ -48,7 +48,9 @@ def shannon_entropy(
     Args:
         data: 1D array of values (e.g., returns)
         bins: Number of bins for discretization
-        method: 'quantile' (equal frequency) or 'uniform' (equal width)
+        method: 'uniform' (equal width) or 'quantile' (equal frequency)
+                NOTE: 'quantile' forces uniform distribution, destroying signal!
+                Default changed to 'uniform' per Gemini audit 2025-12-06.
         base: Logarithm base (2 for bits, e for nats)
 
     Returns:
@@ -97,7 +99,7 @@ def shannon_entropy(
 def normalized_entropy(
     data: np.ndarray,
     bins: int = 20,
-    method: str = 'quantile'
+    method: str = 'uniform'
 ) -> float:
     """
     Calculate normalized entropy in [0, 1].
@@ -124,7 +126,7 @@ def rolling_entropy(
     data: pd.Series,
     window: int = 50,
     bins: int = 20,
-    method: str = 'quantile'
+    method: str = 'uniform'
 ) -> pd.Series:
     """
     Calculate rolling Shannon entropy.
@@ -138,11 +140,23 @@ def rolling_entropy(
     Returns:
         Series of entropy values
     """
-    result = pd.Series(index=data.index, dtype=float)
+    from concurrent.futures import ThreadPoolExecutor
 
-    for i in range(window, len(data) + 1):
-        window_data = data.iloc[i-window:i].values
-        result.iloc[i-1] = shannon_entropy(window_data, bins=bins, method=method)
+    result = pd.Series(index=data.index, dtype=float)
+    data_values = data.values  # Pre-extract for thread-safe access
+
+    def calc_entropy_at(i):
+        window_data = data_values[i-window:i]
+        return i-1, shannon_entropy(window_data, bins=bins, method=method)
+
+    indices = range(window, len(data) + 1)
+
+    # M4 Pro parallel execution
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results = list(executor.map(calc_entropy_at, indices))
+
+    for idx, entropy_val in results:
+        result.iloc[idx] = entropy_val
 
     return result
 
@@ -261,11 +275,23 @@ def rolling_permutation_entropy(
     """
     Calculate rolling permutation entropy.
     """
-    result = pd.Series(index=data.index, dtype=float)
+    from concurrent.futures import ThreadPoolExecutor
 
-    for i in range(window, len(data) + 1):
-        window_data = data.iloc[i-window:i].values
-        result.iloc[i-1] = permutation_entropy(window_data, order=order, delay=delay)
+    result = pd.Series(index=data.index, dtype=float)
+    data_values = data.values  # Pre-extract for thread-safe access
+
+    def calc_perm_entropy_at(i):
+        window_data = data_values[i-window:i]
+        return i-1, permutation_entropy(window_data, order=order, delay=delay)
+
+    indices = range(window, len(data) + 1)
+
+    # M4 Pro parallel execution
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results = list(executor.map(calc_perm_entropy_at, indices))
+
+    for idx, entropy_val in results:
+        result.iloc[idx] = entropy_val
 
     return result
 
@@ -549,12 +575,24 @@ def rolling_kl_divergence(
     Returns:
         Series of KL divergence values
     """
-    result = pd.Series(index=data.index, dtype=float)
+    from concurrent.futures import ThreadPoolExecutor
 
-    for i in range(baseline_window + current_window, len(data) + 1):
-        baseline = data.iloc[i-baseline_window-current_window:i-current_window].values
-        current = data.iloc[i-current_window:i].values
-        result.iloc[i-1] = kl_divergence(current, baseline, bins=bins)
+    result = pd.Series(index=data.index, dtype=float)
+    data_values = data.values  # Pre-extract for thread-safe access
+
+    def calc_kl_at(i):
+        baseline = data_values[i-baseline_window-current_window:i-current_window]
+        current = data_values[i-current_window:i]
+        return i-1, kl_divergence(current, baseline, bins=bins)
+
+    indices = range(baseline_window + current_window, len(data) + 1)
+
+    # M4 Pro parallel execution
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results = list(executor.map(calc_kl_at, indices))
+
+    for idx, kl_val in results:
+        result.iloc[idx] = kl_val
 
     return result
 

@@ -193,24 +193,39 @@ def bulk_volume_classification(
     # Calculate log returns
     returns = np.diff(np.log(prices))
 
-    # FL11: Estimate sigma with adaptive epsilon based on data scale
+    # FL11: Estimate sigma using EXPANDING WINDOW to avoid look-ahead bias
+    # FIX: Per Gemini audit 2025-12-06 - Original used np.std(returns) which sees all future data
+    # Now use expanding window: sigma[t] = std(returns[:t+1]) for each t
+    min_lookback = 20  # Minimum periods for reliable std estimate
+
     if sigma is None:
         if len(returns) > 0:
-            sigma = np.std(returns)
+            # Calculate expanding standard deviation (no look-ahead)
+            expanding_sigma = np.zeros(len(returns))
+            for t in range(len(returns)):
+                if t < min_lookback - 1:
+                    # Not enough data yet - use all available up to t
+                    expanding_sigma[t] = np.std(returns[:t+1]) if t > 0 else np.abs(returns[0])
+                else:
+                    # Use expanding window from start to t
+                    expanding_sigma[t] = np.std(returns[:t+1])
+
             # Adaptive epsilon: use mean absolute return as scale reference
             data_scale = np.mean(np.abs(returns)) if len(returns) > 0 else 0.0
             adaptive_eps = max(data_scale * 0.01, 1e-6)  # 1% of typical move, floor at 1e-6
 
-            if sigma < adaptive_eps:
-                # Use robust fallback: 25th percentile of non-zero absolute returns
-                nonzero_returns = np.abs(returns[returns != 0])
-                sigma = np.percentile(nonzero_returns, 25) if len(nonzero_returns) > 0 else adaptive_eps
-                if sigma < adaptive_eps:
-                    sigma = adaptive_eps  # Data-adaptive fallback
-        else:
-            sigma = 1e-6  # Safe default for empty returns
+            # Floor the expanding sigma at adaptive epsilon
+            expanding_sigma = np.maximum(expanding_sigma, adaptive_eps)
 
-    # Standardized returns
+            # For backward compatibility when sigma is passed as scalar
+            sigma = expanding_sigma
+        else:
+            sigma = np.array([1e-6])  # Safe default for empty returns
+    else:
+        # If sigma provided as scalar, broadcast to array
+        sigma = np.full(len(returns), sigma)
+
+    # Standardized returns (element-wise with expanding sigma)
     z_scores = returns / sigma
 
     # Buy probability from CDF
@@ -345,7 +360,9 @@ def calculate_vpin(
 
             # FL_R6_1: Skip zero-volume buckets (can occur with duplicate searchsorted indices)
             if bucket_vol > 0:
-                imbalances.append(abs(buy_v - sell_v))
+                # FIX: Per Gemini audit 2025-12-06 - Normalize by bucket volume for VPIN in [0,1]
+                # VPIN should be a probability of informed trading, not raw volume
+                imbalances.append(abs(buy_v - sell_v) / bucket_vol)
                 bucket_midpoints.append((start + end) // 2)
                 total_bucketed_volume += bucket_vol
 
@@ -356,10 +373,12 @@ def calculate_vpin(
         # Remaining trades not bucketed - add final partial bucket
         buy_v = np.sum(buy_volumes[start:])
         sell_v = np.sum(sell_volumes[start:])
-        if buy_v + sell_v > 0:
-            imbalances.append(abs(buy_v - sell_v))
+        partial_vol = buy_v + sell_v
+        if partial_vol > 0:
+            # FIX: Normalize partial bucket same as full buckets
+            imbalances.append(abs(buy_v - sell_v) / partial_vol)
             bucket_midpoints.append((start + len(volumes)) // 2)
-            total_bucketed_volume += buy_v + sell_v
+            total_bucketed_volume += partial_vol
 
     imbalances = np.array(imbalances)
     bucket_midpoints = np.array(bucket_midpoints)
@@ -706,10 +725,13 @@ def calculate_ofi(
             e_bid = bid_sizes[t] - bid_sizes[t-1]
 
         # Ask order flow (per Cont-Kukanov-Stoikov model)
+        # FIX: Per Gemini audit 2025-12-06 - Sign was inverted
+        # When ask price UP: market buy lifted the offer → supply absorbed → NEGATIVE flow
+        # When ask price DOWN: new sell limit order at lower price → POSITIVE flow
         if ask_prices[t] > ask_prices[t-1]:
-            e_ask = ask_sizes[t-1]   # Old supply absorbed (price pushed up)
+            e_ask = -ask_sizes[t-1]  # Old supply absorbed by market buy
         elif ask_prices[t] < ask_prices[t-1]:
-            e_ask = -ask_sizes[t]    # New supply appeared (price pushed down)
+            e_ask = ask_sizes[t]     # New sell limit order at lower price
         else:
             e_ask = ask_sizes[t] - ask_sizes[t-1]
 
@@ -932,6 +954,503 @@ def rolling_order_imbalance(
     total = total.replace(0, np.nan)
 
     return (rolling_buy - rolling_sell) / total
+
+
+# =============================================================================
+# INSTITUTIONAL FLOW DETECTION
+# =============================================================================
+
+@dataclass
+class InstitutionalFlowSignal:
+    """Signals indicating institutional/smart money activity."""
+    large_block_detected: bool      # Trade size > 99.5th percentile
+    block_direction: str            # 'buy', 'sell', or 'neutral'
+    block_size_zscore: float        # How extreme the trade size is
+    delta_hedge_score: float        # Correlation between options flow and stock flow
+    spread_trade_score: float       # Likelihood of spread trade activity
+    iceberg_probability: float      # Probability of hidden iceberg order
+    smart_money_index: float        # Composite smart money score (0-1)
+    sweep_detected: bool            # Aggressive multi-exchange sweep
+
+
+class InstitutionalFlowDetector:
+    """
+    Detect institutional/smart money footprints in order flow.
+
+    Key patterns detected:
+    1. Large block trades (>99.5th percentile)
+    2. Delta-hedging correlation (options + stock flow)
+    3. Spread trades (simultaneous opposite positions)
+    4. Iceberg orders (hidden liquidity)
+    5. Aggressive sweeps (multi-exchange taking)
+
+    Usage:
+        detector = InstitutionalFlowDetector()
+        signal = detector.analyze(prices, volumes, trade_sizes)
+    """
+
+    def __init__(
+        self,
+        block_percentile: float = 99.5,
+        hedge_correlation_window: int = 20,
+        sweep_time_window: int = 5,
+    ):
+        """
+        Initialize detector.
+
+        Args:
+            block_percentile: Percentile threshold for large block detection
+            hedge_correlation_window: Window for delta-hedge correlation
+            sweep_time_window: Time window (bars) for sweep detection
+        """
+        self.block_percentile = block_percentile
+        self.hedge_correlation_window = hedge_correlation_window
+        self.sweep_time_window = sweep_time_window
+
+    def detect_large_blocks(
+        self,
+        trade_sizes: np.ndarray,
+        trade_directions: np.ndarray,
+        threshold_percentile: Optional[float] = None
+    ) -> Tuple[bool, str, float]:
+        """
+        Identify trades > threshold percentile (institutional blocks).
+
+        Args:
+            trade_sizes: Array of trade sizes
+            trade_directions: Array of trade directions (+1 buy, -1 sell)
+            threshold_percentile: Override default percentile
+
+        Returns:
+            Tuple of (block_detected, direction, size_zscore)
+        """
+        trade_sizes = np.asarray(trade_sizes)
+        trade_directions = np.asarray(trade_directions)
+
+        if len(trade_sizes) < 100:
+            return False, 'neutral', 0.0
+
+        threshold_pct = threshold_percentile or self.block_percentile
+        threshold = np.percentile(trade_sizes, threshold_pct)
+
+        # Find large blocks
+        is_block = trade_sizes >= threshold
+        if not np.any(is_block):
+            return False, 'neutral', 0.0
+
+        # Most recent block
+        recent_block_idx = np.where(is_block)[0][-1]
+        block_size = trade_sizes[recent_block_idx]
+        block_direction = trade_directions[recent_block_idx]
+
+        # Size z-score
+        mean_size = np.mean(trade_sizes)
+        std_size = np.std(trade_sizes)
+        if std_size > 0:
+            size_zscore = (block_size - mean_size) / std_size
+        else:
+            size_zscore = 0.0
+
+        direction = 'buy' if block_direction > 0 else ('sell' if block_direction < 0 else 'neutral')
+
+        return True, direction, float(size_zscore)
+
+    def delta_hedge_footprint(
+        self,
+        options_flow: np.ndarray,
+        stock_flow: np.ndarray,
+        window: Optional[int] = None
+    ) -> float:
+        """
+        Detect delta-hedging by correlating options and stock flow.
+
+        When institutions buy calls, they often sell stock (or vice versa).
+        This creates a negative correlation between options flow direction
+        and stock flow direction.
+
+        Args:
+            options_flow: Options order flow (signed, e.g., call buys - put buys)
+            stock_flow: Stock order flow (signed)
+            window: Correlation window
+
+        Returns:
+            Delta hedge score (-1 to 1, negative = hedging detected)
+        """
+        options_flow = np.asarray(options_flow)
+        stock_flow = np.asarray(stock_flow)
+
+        window = window or self.hedge_correlation_window
+
+        if len(options_flow) < window or len(stock_flow) < window:
+            return 0.0
+
+        # Align lengths
+        n = min(len(options_flow), len(stock_flow))
+        options_flow = options_flow[-n:]
+        stock_flow = stock_flow[-n:]
+
+        # Rolling correlation
+        if n >= window:
+            recent_opts = options_flow[-window:]
+            recent_stock = stock_flow[-window:]
+
+            # Correlation
+            opts_std = np.std(recent_opts)
+            stock_std = np.std(recent_stock)
+
+            if opts_std > 1e-10 and stock_std > 1e-10:
+                correlation = np.corrcoef(recent_opts, recent_stock)[0, 1]
+                return float(correlation) if np.isfinite(correlation) else 0.0
+
+        return 0.0
+
+    def detect_spread_trades(
+        self,
+        buy_volumes: np.ndarray,
+        sell_volumes: np.ndarray,
+        prices: np.ndarray,
+        time_window: int = 5
+    ) -> float:
+        """
+        Detect spread/arbitrage trade patterns.
+
+        Spreads involve simultaneous buy and sell at different strikes/prices.
+        Pattern: High volume with low net imbalance (buy ≈ sell).
+
+        Args:
+            buy_volumes: Classified buy volumes
+            sell_volumes: Classified sell volumes
+            prices: Trade prices
+            time_window: Window to look for spread patterns
+
+        Returns:
+            Spread probability score (0-1)
+        """
+        buy_volumes = np.asarray(buy_volumes)
+        sell_volumes = np.asarray(sell_volumes)
+
+        if len(buy_volumes) < time_window:
+            return 0.0
+
+        # Recent window
+        recent_buy = buy_volumes[-time_window:]
+        recent_sell = sell_volumes[-time_window:]
+
+        total_buy = np.sum(recent_buy)
+        total_sell = np.sum(recent_sell)
+        total_volume = total_buy + total_sell
+
+        if total_volume < 1:
+            return 0.0
+
+        # Spread indicator: high volume but balanced flow
+        imbalance = abs(total_buy - total_sell) / total_volume
+
+        # Low imbalance + high volume = likely spread
+        volume_zscore = (total_volume - np.mean(buy_volumes + sell_volumes)) / (np.std(buy_volumes + sell_volumes) + 1e-10)
+
+        # Spread score: high volume AND low imbalance
+        if volume_zscore > 1.0 and imbalance < 0.3:
+            spread_score = (1 - imbalance) * min(1.0, volume_zscore / 3)
+        else:
+            spread_score = 0.0
+
+        return float(np.clip(spread_score, 0, 1))
+
+    def detect_iceberg_orders(
+        self,
+        trade_sizes: np.ndarray,
+        trade_prices: np.ndarray,
+        time_window: int = 20
+    ) -> float:
+        """
+        Detect iceberg orders (hidden liquidity).
+
+        Pattern: Many same-size trades at same price level.
+        Institutions often use icebergs to hide large orders.
+
+        Args:
+            trade_sizes: Array of trade sizes
+            trade_prices: Array of trade prices
+            time_window: Window to analyze
+
+        Returns:
+            Iceberg probability (0-1)
+        """
+        trade_sizes = np.asarray(trade_sizes)
+        trade_prices = np.asarray(trade_prices)
+
+        if len(trade_sizes) < time_window:
+            return 0.0
+
+        # Recent trades
+        recent_sizes = trade_sizes[-time_window:]
+        recent_prices = trade_prices[-time_window:]
+
+        # Look for repeated size patterns
+        unique_sizes, size_counts = np.unique(recent_sizes.round(2), return_counts=True)
+
+        # Iceberg indicator: same size appearing frequently
+        max_repeat = np.max(size_counts)
+        repeat_ratio = max_repeat / time_window
+
+        # Also check if prices cluster (hitting same level repeatedly)
+        price_range = np.max(recent_prices) - np.min(recent_prices)
+        avg_price = np.mean(recent_prices)
+        price_cluster = price_range / avg_price if avg_price > 0 else 0
+
+        # Iceberg score: high repeat ratio + tight price cluster
+        if repeat_ratio > 0.3 and price_cluster < 0.001:  # 0.1% price range
+            iceberg_prob = repeat_ratio * (1 - price_cluster * 1000)
+        else:
+            iceberg_prob = 0.0
+
+        return float(np.clip(iceberg_prob, 0, 1))
+
+    def detect_sweeps(
+        self,
+        trade_sizes: np.ndarray,
+        trade_times: np.ndarray,
+        trade_directions: np.ndarray,
+        time_threshold: float = 1.0  # seconds
+    ) -> bool:
+        """
+        Detect aggressive sweep orders.
+
+        Sweeps: Rapid sequence of same-direction trades clearing multiple price levels.
+        Indicates aggressive institutional buying/selling.
+
+        Args:
+            trade_sizes: Array of trade sizes
+            trade_times: Array of trade timestamps (numeric)
+            trade_directions: Array of trade directions
+            time_threshold: Max time between trades for sweep detection
+
+        Returns:
+            True if sweep detected in recent data
+        """
+        if len(trade_sizes) < 5:
+            return False
+
+        trade_sizes = np.asarray(trade_sizes)
+        trade_times = np.asarray(trade_times)
+        trade_directions = np.asarray(trade_directions)
+
+        # Look at recent trades
+        n = min(20, len(trade_sizes))
+        recent_sizes = trade_sizes[-n:]
+        recent_times = trade_times[-n:]
+        recent_dirs = trade_directions[-n:]
+
+        # Check for rapid same-direction sequence
+        time_diffs = np.diff(recent_times)
+        same_direction = recent_dirs[:-1] == recent_dirs[1:]
+        rapid_trades = time_diffs < time_threshold
+
+        # Sweep = 3+ consecutive same-direction rapid trades
+        sweep_mask = same_direction & rapid_trades
+
+        # Count consecutive True values
+        consecutive = 0
+        max_consecutive = 0
+        for val in sweep_mask:
+            if val:
+                consecutive += 1
+                max_consecutive = max(max_consecutive, consecutive)
+            else:
+                consecutive = 0
+
+        return max_consecutive >= 3
+
+    def compute_smart_money_index(
+        self,
+        block_detected: bool,
+        block_zscore: float,
+        delta_hedge_score: float,
+        spread_score: float,
+        iceberg_prob: float,
+        sweep_detected: bool
+    ) -> float:
+        """
+        Compute composite smart money index from individual signals.
+
+        Args:
+            block_detected: Large block trade flag
+            block_zscore: Block size z-score
+            delta_hedge_score: Delta hedge correlation
+            spread_score: Spread trade probability
+            iceberg_prob: Iceberg order probability
+            sweep_detected: Sweep order flag
+
+        Returns:
+            Smart money index (0-1)
+        """
+        scores = []
+
+        # Block contribution (normalized)
+        if block_detected:
+            block_score = min(1.0, abs(block_zscore) / 5)
+            scores.append(block_score * 0.25)
+
+        # Delta hedge contribution (negative correlation = hedging)
+        if delta_hedge_score < -0.3:
+            hedge_score = min(1.0, abs(delta_hedge_score))
+            scores.append(hedge_score * 0.20)
+
+        # Spread contribution
+        if spread_score > 0.3:
+            scores.append(spread_score * 0.15)
+
+        # Iceberg contribution
+        if iceberg_prob > 0.3:
+            scores.append(iceberg_prob * 0.20)
+
+        # Sweep contribution
+        if sweep_detected:
+            scores.append(0.20)
+
+        return float(np.clip(sum(scores), 0, 1))
+
+    def analyze(
+        self,
+        prices: np.ndarray,
+        volumes: np.ndarray,
+        trade_sizes: Optional[np.ndarray] = None,
+        trade_directions: Optional[np.ndarray] = None,
+        options_flow: Optional[np.ndarray] = None,
+        stock_flow: Optional[np.ndarray] = None,
+        trade_times: Optional[np.ndarray] = None
+    ) -> InstitutionalFlowSignal:
+        """
+        Full institutional flow analysis.
+
+        Args:
+            prices: Trade prices
+            volumes: Trade volumes
+            trade_sizes: Individual trade sizes (if available)
+            trade_directions: Trade directions (+1/-1)
+            options_flow: Options order flow (for hedge detection)
+            stock_flow: Stock order flow (for hedge detection)
+            trade_times: Trade timestamps (for sweep detection)
+
+        Returns:
+            InstitutionalFlowSignal with all detected patterns
+        """
+        prices = np.asarray(prices)
+        volumes = np.asarray(volumes)
+
+        # Use volumes as trade sizes if not provided
+        if trade_sizes is None:
+            trade_sizes = volumes
+
+        # Classify trades if directions not provided
+        if trade_directions is None:
+            trade_directions = tick_rule(prices)
+
+        # Large blocks
+        block_detected, block_dir, block_zscore = self.detect_large_blocks(
+            trade_sizes, trade_directions
+        )
+
+        # Delta hedge footprint
+        if options_flow is not None and stock_flow is not None:
+            delta_hedge_score = self.delta_hedge_footprint(options_flow, stock_flow)
+        else:
+            delta_hedge_score = 0.0
+
+        # Spread trades (need BVC classification)
+        buy_vol, sell_vol = bulk_volume_classification(prices, volumes)
+        spread_score = self.detect_spread_trades(buy_vol, sell_vol, prices)
+
+        # Iceberg orders
+        iceberg_prob = self.detect_iceberg_orders(trade_sizes, prices)
+
+        # Sweeps
+        if trade_times is not None:
+            sweep_detected = self.detect_sweeps(trade_sizes, trade_times, trade_directions)
+        else:
+            sweep_detected = False
+
+        # Composite score
+        smart_money_idx = self.compute_smart_money_index(
+            block_detected, block_zscore, delta_hedge_score,
+            spread_score, iceberg_prob, sweep_detected
+        )
+
+        return InstitutionalFlowSignal(
+            large_block_detected=block_detected,
+            block_direction=block_dir,
+            block_size_zscore=block_zscore,
+            delta_hedge_score=delta_hedge_score,
+            spread_trade_score=spread_score,
+            iceberg_probability=iceberg_prob,
+            smart_money_index=smart_money_idx,
+            sweep_detected=sweep_detected
+        )
+
+
+def add_institutional_flow_features(
+    df: pd.DataFrame,
+    price_col: str = 'close',
+    volume_col: str = 'volume',
+    prefix: str = 'inst_',
+    lag: int = 1
+) -> pd.DataFrame:
+    """
+    Add institutional flow features to a DataFrame.
+
+    Args:
+        df: DataFrame with OHLCV data
+        price_col: Column name for prices
+        volume_col: Column name for volumes
+        prefix: Column prefix for features
+        lag: Lag for lookahead prevention
+
+    Returns:
+        DataFrame with institutional flow features
+    """
+    result = df.copy()
+    detector = InstitutionalFlowDetector()
+
+    prices = df[price_col].values
+    volumes = df[volume_col].values
+
+    # Rolling institutional flow analysis - PARALLELIZED for M4 Pro
+    window = 100
+    n = len(df)
+
+    def analyze_window(i):
+        """Analyze a single window - designed for parallel execution."""
+        window_prices = prices[i-window:i]
+        window_volumes = volumes[i-window:i]
+        signal = detector.analyze(window_prices, window_volumes)
+        return (i, signal.smart_money_index, signal.block_size_zscore,
+                signal.spread_trade_score, signal.iceberg_probability)
+
+    # Parallel processing of windows
+    from concurrent.futures import ThreadPoolExecutor
+    indices = range(window, n)
+
+    smart_money_idx = np.full(n, np.nan)
+    block_zscore = np.full(n, np.nan)
+    spread_score = np.full(n, np.nan)
+    iceberg_prob = np.full(n, np.nan)
+
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results = list(executor.map(analyze_window, indices))
+
+    for i, smi, bz, ss, ip in results:
+        smart_money_idx[i] = smi
+        block_zscore[i] = bz
+        spread_score[i] = ss
+        iceberg_prob[i] = ip
+
+    result[f'{prefix}smart_money_index'] = pd.Series(smart_money_idx, index=df.index).shift(lag)
+    result[f'{prefix}block_zscore'] = pd.Series(block_zscore, index=df.index).shift(lag)
+    result[f'{prefix}spread_score'] = pd.Series(spread_score, index=df.index).shift(lag)
+    result[f'{prefix}iceberg_prob'] = pd.Series(iceberg_prob, index=df.index).shift(lag)
+
+    return result
 
 
 # =============================================================================
@@ -1211,5 +1730,16 @@ if __name__ == '__main__':
                  'kyle_lambda_zscore', 'order_imbalance', 'buy_volume_ratio']
     print(f"   Features added: {flow_cols}")
     print(f"   Non-null VPIN values: {df_with_features['vpin'].notna().sum()}")
+
+    # Test Institutional Flow Detection
+    print("\n6. Institutional Flow Detection")
+    detector = InstitutionalFlowDetector()
+    signal = detector.analyze(prices, volumes)
+    print(f"   Large Block Detected: {signal.large_block_detected}")
+    print(f"   Block Direction: {signal.block_direction}")
+    print(f"   Block Size Z-Score: {signal.block_size_zscore:.2f}")
+    print(f"   Spread Trade Score: {signal.spread_trade_score:.2%}")
+    print(f"   Iceberg Probability: {signal.iceberg_probability:.2%}")
+    print(f"   Smart Money Index: {signal.smart_money_index:.2%}")
 
     print("\n=== Flow Module Test Complete ===")

@@ -234,32 +234,8 @@ class RegimeAnalyzer:
 
         # VIX change (regime transition indicator)
         # Floor VIX at 1 to prevent div/0 in pct_change (VIX < 1 never happens in practice)
-        vix_floor = np.maximum(vix, 1.0)
-        vix_change = vix_floor.pct_change()
-        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
-        vix_change = vix_floor.pct_change()
-        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
-        vix_change = vix_floor.pct_change()
-        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
-        vix_change = vix_floor.pct_change()
-        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
-        vix_change = vix_floor.pct_change()
-        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
-        vix_change = vix_floor.pct_change()
-        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
-        vix_change = vix_floor.pct_change()
-        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
-        vix_change = vix_floor.pct_change()
-        df['vix_change'] = vix_changefloor = np.maximum(vix, 1.0)
-        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
-        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
-        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
-        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
-        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
-        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
-        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
-        df['vix_pct_change'] = vix_floor.pct_change()floor = np.maximum(vix, 1.0)
-        df['vix_pct_change'] = vix_floor.pct_change()safe = np.maximum(vix, 1.0)
+        vix_safe = np.maximum(vix, 1.0)
+        df['vix_change'] = vix_safe.pct_change()
         df['vix_change_1d'] = vix_safe.pct_change()
         df['vix_change_5d'] = vix_safe.pct_change(5)
 
@@ -332,17 +308,19 @@ class RegimeAnalyzer:
             logger.warning(f"Window {window} > data length {len(sector_returns)}, returning NaN")
             return pd.Series(np.nan, index=sector_returns.index)
 
-        # Rolling correlation matrix
-        correlations = []
+        # Rolling correlation matrix - PARALLELIZED for M4 Pro
+        from concurrent.futures import ThreadPoolExecutor
 
-        for i in range(len(sector_returns) - window + 1):
+        def calc_window_corr(i):
+            """Calculate correlation for a single window."""
             window_data = sector_returns.iloc[i:i + window]
             corr_matrix = window_data.corr()
-
-            # Average of upper triangle (excluding diagonal)
             mask = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
-            avg_corr = corr_matrix.where(mask).stack().mean()
-            correlations.append(avg_corr)
+            return corr_matrix.where(mask).stack().mean()
+
+        n_windows = len(sector_returns) - window + 1
+        with ThreadPoolExecutor(max_workers=12) as executor:
+            correlations = list(executor.map(calc_window_corr, range(n_windows)))
 
         # Pad beginning with NaN
         result = pd.Series(

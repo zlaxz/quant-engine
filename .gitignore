@@ -39,3 +39,14 @@ SESSION_STATE.md
 # Supabase temp files
 supabase/.temp/
 __pycache__/
+
+# BANNED - These are noise that keeps resurfacing. DO NOT CREATE.
+sigma_agent/
+python/sigma_agent/
+**/sigma_agent/
+*sigma_agent*.py
+mean_reversion.py
+gamma_scalping.py
+gamma_flip.py
+volatility_harvesting.py
+regime_playbook.py

@@ -1,0 +1,138 @@
+{
+  "file": "/Users/zstoc/GitHub/quant-engine/src/pages/TradingTerminal.tsx",
+  "severity": "major",
+  "issues": [
+    {
+      "line": 449,
+      "severity": "error",
+      "issue": "useState initialized with function reference instead of function call. 'generateDemoStats' is passed as reference, not invoked. Results in stats being a function, not TradingStats object.",
+      "fix": "Change line 449 from 'const [stats] = useState(generateDemoStats);' to 'const [stats] = useState(generateDemoStats());'"
+    },
+    {
+      "line": 450,
+      "severity": "error",
+      "issue": "Same issue as line 449: useState initialized with function reference instead of invocation. 'generateForceVectors' is passed as reference, not called.",
+      "fix": "Change line 450 from 'const [forces] = useState(generateForceVectors);' to 'const [forces] = useState(generateForceVectors());'"
+    },
+    {
+      "line": 520,
+      "severity": "error",
+      "issue": "Type mismatch: GamifiedHeader expects 'stats: TradingStats', but 'stats' variable is a function (from line 449), not a TradingStats object. This will cause runtime errors.",
+      "fix": "Fix useState initialization on line 449 to call the function: useState(generateDemoStats())"
+    },
+    {
+      "line": 572,
+      "severity": "error",
+      "issue": "Type mismatch: ForceVectorPanel expects 'forces: ForceVector[]', but 'forces' variable is a function (from line 450), not a ForceVector[] array.",
+      "fix": "Fix useState initialization on line 450 to call the function: useState(generateForceVectors())"
+    },
+    {
+      "line": 491,
+      "severity": "warning",
+      "issue": "Missing dependency in useEffect: 'activeTab' is used in setActiveTab calls inside handleKeyDown, but not in the dependency array. The closure captures the old state value due to missing dependency.",
+      "fix": "Add 'activeTab' to the dependency array: [isFullscreen, activeTab]"
+    },
+    {
+      "line": 462,
+      "severity": "warning",
+      "issue": "useEffect manages keyboard event listener but has incomplete dependency handling. The handleKeyDown function uses setActiveTab and setIsFullscreen, creating potential stale closures if state changes.",
+      "fix": "Add setActiveTab and setIsFullscreen to dependency array if they're not guaranteed stable, or use useCallback to wrap handleKeyDown"
+    },
+    {
+      "line": 368,
+      "severity": "warning",
+      "issue": "Using array index as React key in .map() when event.id exists: 'key={event.id || i}' falls back to index, which is anti-pattern. If events are filtered/reordered, this causes rendering bugs.",
+      "fix": "Ensure event.id is always present and unique. Use 'key={event.id}' only, or generate persistent IDs if missing"
+    },
+    {
+      "line": 381,
+      "severity": "warning",
+      "issue": "Potential null reference: 'event.timestamp || Date.now()' - if timestamp is undefined/null, Date.now() returns milliseconds but Date constructor expects either milliseconds or string. Should be explicit.",
+      "fix": "Use 'new Date(event.timestamp ? event.timestamp : Date.now()).toLocaleTimeString()' for clarity"
+    },
+    {
+      "line": 388,
+      "severity": "warning",
+      "issue": "Direct DOM rendering of user-provided event.message without sanitization. If event.message contains HTML/scripts, could be XSS vulnerability.",
+      "fix": "Verify that event.message is sanitized at source (in useJarvisEvents hook). Consider adding DOMPurify if dynamic HTML is needed."
+    },
+    {
+      "line": 443,
+      "severity": "info",
+      "issue": "generateDemoStats() and generateForceVectors() create new objects on every render if called in useState during rendering (but they're passed as functions currently). Once fixed (line 449/450), consider moving outside component or memoizing.",
+      "fix": "Move generateDemoStats and generateForceVectors outside the component body, or use useMemo for expensive computations"
+    },
+    {
+      "line": 538,
+      "severity": "info",
+      "issue": "Missing error boundary. If any child component throws, entire Trading Terminal crashes silently. No error recovery UI.",
+      "fix": "Wrap main content in React.ErrorBoundary or create custom error boundary component with fallback UI"
+    },
+    {
+      "line": 504,
+      "severity": "info",
+      "issue": "Missing title attribute on back button. Button has 'title' but no aria-label for accessibility.",
+      "fix": "Add 'aria-label=\"Return to main dashboard\"' to the back button"
+    },
+    {
+      "line": 543,
+      "severity": "info",
+      "issue": "TabsTrigger keyboard hints (⌘1, ⌘2, etc) are hidden on small screens but not updated. Tab navigation may not work as expected on mobile.",
+      "fix": "Verify Tabs component has proper keyboard navigation support, or implement custom keyboard handler"
+    },
+    {
+      "line": 359,
+      "severity": "warning",
+      "issue": "ScrollArea has fixed height (h-[300px]) but may not be appropriate for all screen sizes. No responsive design for small screens.",
+      "fix": "Use responsive classes: 'h-[200px] md:h-[300px] lg:h-[400px]' for better mobile UX"
+    },
+    {
+      "line": 691,
+      "severity": "info",
+      "issue": "Footer always displays current time via new Date().toLocaleTimeString() on every render. Not updating in real-time, static until re-render.",
+      "fix": "If real-time clock display is desired, use useEffect with setInterval to update time state. Otherwise, consider removing or caching."
+    },
+    {
+      "line": 453,
+      "severity": "warning",
+      "issue": "useJarvisEvents hook is called unconditionally but may not have proper error handling if Electron IPC fails. No fallback state defined.",
+      "fix": "Add optional chaining and fallback: const { events = [] } = useJarvisEvents() || {}"
+    },
+    {
+      "line": 589,
+      "severity": "warning",
+      "issue": "PipelineVisualization receives 'stages={pipelineStages}' which comes from hook, but component doesn't handle undefined/empty array gracefully based on prop signature.",
+      "fix": "Verify PipelineVisualization component has default stages prop and handles empty array case"
+    },
+    {
+      "line": 642,
+      "severity": "warning",
+      "issue": "PnLHeatmap receives 'data={pnlData}' from hook, but component should handle undefined data. No loading state shown while data loads.",
+      "fix": "Add loading state check before rendering PnLHeatmap, show skeleton or spinner if data undefined"
+    },
+    {
+      "line": 616,
+      "severity": "info",
+      "issue": "Hard-coded agent types array in .map() could be memoized or extracted to prevent recreation on every render.",
+      "fix": "Move agent definitions outside component or wrap in useMemo"
+    },
+    {
+      "line": 656,
+      "severity": "info",
+      "issue": "Hard-coded '+$' currency format in Footer. If stats.monthPnL is negative, shows '+' with negative number. Should check sign.",
+      "fix": "Use: `${stats.monthPnL >= 0 ? '+' : ''}${Math.abs(stats.monthPnL).toLocaleString()}`"
+    }
+  ],
+  "summary": "MAJOR ISSUES FOUND: The component has two critical useState initialization bugs (lines 449-450) that pass function references instead of calling the functions. This causes 'stats' and 'forces' to be functions instead of data objects, breaking type safety and runtime behavior for all dependent components (GamifiedHeader, ForceVectorPanel, AccountStrip). Additionally, there are missing accessibility labels, potential null reference issues, missing error boundaries, and responsive design gaps. The hook dependency arrays have incomplete declarations that could cause stale closures. Once the useState bugs are fixed, add missing accessibility attributes, implement error boundaries, and add responsive design for mobile screens. All HIGH SEVERITY issues must be fixed before deployment.",
+  "recommendations": [
+    "CRITICAL: Fix useState initializations on lines 449-450 - change to invoke functions, not pass references",
+    "Add React.ErrorBoundary wrapper around main content to catch child component errors",
+    "Add aria-label and aria-descriptions to icon buttons for accessibility compliance",
+    "Fix useEffect dependency arrays to include all state/function dependencies",
+    "Implement responsive design for mobile: ScrollArea heights, grid breakpoints",
+    "Add loading states for async data from useJarvisEvents hook",
+    "Verify event.message sanitization to prevent XSS vulnerabilities",
+    "Move hard-coded arrays (agents, demo functions) outside component or memoize them",
+    "Test keyboard navigation (⌘1-4) on different browsers and layouts"
+  ]
+}

@@ -427,6 +427,321 @@ interface ElectronAPI {
   onPopoutData: (callback: (data: { id: string; visualizationType: string; data: unknown; title: string }) => void) => () => void;
   onPopoutDataUpdate: (callback: (data: { id: string; data: unknown }) => void) => () => void;
   onPopoutClosed: (callback: (data: { id: string }) => void) => () => void;
+
+  // JARVIS engine events (Python engine → UI control)
+  // Full type definitions: src/types/jarvis.ts
+  onJarvisEvent: (callback: (event: {
+    sessionId: string;
+    activityType: string;
+    content: string;
+    timestamp: string;
+    displayDirectives: Array<{
+      type: 'view' | 'progress' | 'chart' | 'table' | 'metrics' | 'notification';
+      value: unknown;
+      message?: string;
+    }>;
+    data: Record<string, unknown>;
+  }) => void) => () => void;
+
+  // ==========================================================================
+  // Trading Operations (IBKR Integration) - Multi-Account Support
+  // ==========================================================================
+  trading: {
+    // ========== Account Management ==========
+
+    // List all configured accounts
+    accounts: () => Promise<{
+      success: boolean;
+      accounts?: Array<{
+        name: string;
+        mode: 'paper' | 'live';
+        host: string;
+        port: number;
+        connected: boolean;
+        halted: boolean;
+        ibkrAccountId?: string;
+      }>;
+      activeAccount?: string;
+      error?: string;
+    }>;
+
+    // Add a new account configuration
+    addAccount: (config: {
+      name: string;
+      mode: 'paper' | 'live';
+      host?: string;
+      port?: number;
+      clientId?: number;
+      dailyLossLimit?: number;
+    }) => Promise<{
+      success: boolean;
+      message?: string;
+      error?: string;
+    }>;
+
+    // Remove an account configuration
+    removeAccount: (name: string) => Promise<{
+      success: boolean;
+      message?: string;
+      error?: string;
+    }>;
+
+    // Connect a specific account
+    connectAccount: (name: string) => Promise<{
+      success: boolean;
+      mode?: 'paper' | 'live';
+      ibkrAccountId?: string;
+      message?: string;
+      error?: string;
+    }>;
+
+    // Disconnect a specific account
+    disconnectAccount: (name: string) => Promise<{
+      success: boolean;
+      message?: string;
+      error?: string;
+    }>;
+
+    // Set the active account for UI operations
+    setActiveAccount: (name: string) => Promise<{
+      success: boolean;
+      message?: string;
+      error?: string;
+    }>;
+
+    // Connect all configured accounts
+    connectAll: () => Promise<{
+      success: boolean;
+      results?: Record<string, { connected: boolean; error?: string }>;
+      error?: string;
+    }>;
+
+    // Disconnect all accounts
+    disconnectAll: () => Promise<{
+      success: boolean;
+      message?: string;
+      error?: string;
+    }>;
+
+    // Quick setup for paper + live dual accounts
+    setupDual: (config?: {
+      paperHost?: string;
+      liveHost?: string;
+    }) => Promise<{
+      success: boolean;
+      accounts?: string[];
+      message?: string;
+      error?: string;
+    }>;
+
+    // ========== Legacy Connection (backwards compatible) ==========
+
+    connect: (mode?: 'paper' | 'live', account?: string) => Promise<{
+      success: boolean;
+      mode?: 'paper' | 'live';
+      message?: string;
+      error?: string;
+    }>;
+    disconnect: (account?: string) => Promise<{
+      success: boolean;
+      message?: string;
+      error?: string;
+    }>;
+    status: (account?: string) => Promise<{
+      connected: boolean;
+      mode: 'paper' | 'live' | null;
+      halted: boolean;
+      availableSymbols: string[];
+      accounts?: Array<{
+        name: string;
+        mode: 'paper' | 'live';
+        connected: boolean;
+        halted: boolean;
+      }>;
+    }>;
+    health: () => Promise<{
+      status: 'ok' | 'error';
+      service: string;
+      connected: boolean;
+      mode: 'paper' | 'live' | null;
+      timestamp: string;
+      accounts?: Array<{
+        name: string;
+        connected: boolean;
+        halted: boolean;
+      }>;
+    }>;
+
+    // ========== Position and Quote Data ==========
+
+    positions: (options?: {
+      account?: string;
+      aggregate?: boolean;
+    }) => Promise<{
+      success: boolean;
+      positions?: Record<string, {
+        symbol: string;
+        quantity: number;
+        avg_cost: number;
+        current_price: number;
+        unrealized_pnl: number;
+        realized_pnl_today: number;
+        notional_value: number;
+        is_long: boolean;
+        last_update: string;
+        account?: string;  // Which account holds this position
+      }>;
+      byAccount?: Record<string, Record<string, {
+        symbol: string;
+        quantity: number;
+        avg_cost: number;
+        current_price: number;
+        unrealized_pnl: number;
+        realized_pnl_today: number;
+        notional_value: number;
+        is_long: boolean;
+        last_update: string;
+      }>>;
+      totalExposure?: number;
+      netPosition?: number;
+      error?: string;
+    }>;
+    quote: (symbol: string, account?: string) => Promise<{
+      success: boolean;
+      quote?: {
+        symbol: string;
+        bid: number;
+        ask: number;
+        last: number;
+        mid: number;
+        spread: number;
+        volume: number;
+        timestamp: string;
+      };
+      error?: string;
+    }>;
+
+    // ========== Order Operations ==========
+
+    order: (params: {
+      symbol: string;
+      side: 'BUY' | 'SELL';
+      quantity: number;
+      orderType: 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_LIMIT';
+      limitPrice?: number;
+      stopPrice?: number;
+      timeInForce?: 'GTC' | 'DAY' | 'IOC';
+      strategyName?: string;
+      priority?: 'CRITICAL' | 'HIGH' | 'NORMAL' | 'LOW';
+      dryRun?: boolean;
+      account?: string;  // Target account (defaults to active)
+    }) => Promise<{
+      success: boolean;
+      order?: {
+        orderId: string;
+        symbol: string;
+        side: string;
+        quantity: number;
+        orderType: string;
+        limitPrice?: number;
+        status: string;
+        submittedAt: string;
+        filledQty?: number;
+        avgFillPrice?: number;
+        account?: string;  // Which account executed
+      };
+      error?: string;
+    }>;
+    cancel: (orderId: string, account?: string) => Promise<{
+      success: boolean;
+      message?: string;
+      error?: string;
+    }>;
+    cancelAll: (symbol?: string, account?: string) => Promise<{
+      success: boolean;
+      cancelled?: number;
+      message?: string;
+      error?: string;
+    }>;
+
+    // ========== Trading Control ==========
+
+    halt: (reason: string, account?: string) => Promise<{
+      success: boolean;
+      message?: string;
+      error?: string;
+    }>;
+    resume: (account?: string) => Promise<{
+      success: boolean;
+      message?: string;
+      error?: string;
+    }>;
+
+    // ========== Statistics ==========
+
+    stats: (account?: string) => Promise<{
+      success: boolean;
+      stats?: {
+        ordersToday: number;
+        fillRate: number;
+        avgFillTime: number;
+        cancelRate: number;
+      };
+      error?: string;
+    }>;
+    dailyPnl: (options?: {
+      account?: string;
+      aggregate?: boolean;
+    }) => Promise<{
+      success: boolean;
+      dailyStats?: {
+        date: string;
+        realized_pnl: number;
+        unrealized_pnl: number;
+        total_pnl: number;
+        pnl_percent: number;
+        trades_count: number;
+        win_rate: number;
+        max_drawdown: number;
+        account?: string;
+      };
+      byAccount?: Record<string, {
+        date: string;
+        realized_pnl: number;
+        unrealized_pnl: number;
+        total_pnl: number;
+        pnl_percent: number;
+        trades_count: number;
+        win_rate: number;
+        max_drawdown: number;
+      }>;
+      error?: string;
+    }>;
+
+    // ========== EMERGENCY - Kill Switch ==========
+
+    killSwitch: (reason?: string, options?: {
+      account?: string;  // Target specific account
+      all?: boolean;     // Kill switch ALL accounts
+    }) => Promise<{
+      success: boolean;
+      results?: {
+        cancelledOrders: number;
+        flattenedPositions: string[];
+        halted: boolean;
+        account?: string;
+      };
+      byAccount?: Record<string, {
+        cancelledOrders: number;
+        flattenedPositions: string[];
+        halted: boolean;
+      }>;
+      error?: string;
+    }>;
+  };
+
+  // Listen for kill switch activation (broadcast to all windows)
+  onKillSwitchActivated: (callback: (data: { reason: string }) => void) => () => void;
 }
 
 declare global {

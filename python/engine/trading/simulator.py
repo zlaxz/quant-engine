@@ -341,7 +341,13 @@ class TradeSimulator:
 
     def exit_trade(self, trade: Trade, date: datetime, price: float, reason: str, vix: float = 20.0):
         if trade not in self.active_trades: return
-        
+
+        # Normalize date to MARKET_TZ for consistent datetime comparisons
+        if hasattr(date, 'to_pydatetime'):
+            date = date.to_pydatetime()
+        if hasattr(date, 'tzinfo') and date.tzinfo is None:
+            date = date.replace(tzinfo=MARKET_TZ)
+
         # Handle multi-leg trade exit
         if hasattr(trade, 'legs') and trade.legs:
             # Complex exit logic for multi-leg
@@ -391,6 +397,12 @@ class TradeSimulator:
 
     def _close_expired_trades(self, date: datetime, current_prices: Dict[str, float]):
         """Force-close any options that have expired at intrinsic value."""
+        # Normalize date to MARKET_TZ for consistent datetime comparisons
+        if hasattr(date, 'to_pydatetime'):
+            date = date.to_pydatetime()
+        if hasattr(date, 'tzinfo') and date.tzinfo is None:
+            date = date.replace(tzinfo=MARKET_TZ)
+
         trades_to_close = []
 
         for trade in self.active_trades:
@@ -443,6 +455,12 @@ class TradeSimulator:
             self.trades.append(trade)
 
     def mark_to_market(self, date: datetime, current_prices: Dict[str, float], vix: float = 20.0) -> List[Trade]:
+        # Normalize date to MARKET_TZ for consistent datetime comparisons
+        if hasattr(date, 'to_pydatetime'):
+            date = date.to_pydatetime()
+        if hasattr(date, 'tzinfo') and date.tzinfo is None:
+            date = date.replace(tzinfo=MARKET_TZ)
+
         # Force-close any expired options before MTM
         self._close_expired_trades(date, current_prices)
 

@@ -52,7 +52,12 @@ export type ChartData =
   | PieChartData
   | CandlestickData
   | AreaChartData
-  | ComposedChartData;
+  | ComposedChartData
+  | GaugeData
+  | MultiGaugeData
+  | WaterfallData
+  | TreemapData
+  | PayoffData;
 
 // Line Chart
 export interface LineChartData extends BaseChartData {
@@ -195,6 +200,87 @@ export type ColorScale =
   | 'diverging'
   | 'sequential'
   | 'custom';
+
+// Gauge Chart
+export interface GaugeData extends BaseChartData {
+  type: 'gauge';
+  data: {
+    value: number;
+    min: number;
+    max: number;
+    thresholds?: GaugeThreshold[];
+    unit?: string;
+  };
+}
+
+export interface GaugeThreshold {
+  from: number;
+  to: number;
+  color: string;
+  label?: string;
+}
+
+// Multi-Gauge (Dashboard of gauges)
+export interface MultiGaugeData extends BaseChartData {
+  type: 'multi_gauge';
+  data: {
+    gauges: Array<{
+      title: string;
+      value: number;
+      min: number;
+      max: number;
+      unit?: string;
+      thresholds?: GaugeThreshold[];
+    }>;
+  };
+}
+
+// Waterfall Chart (P&L Attribution)
+export interface WaterfallData extends BaseChartData {
+  type: 'waterfall';
+  data: {
+    items: WaterfallItem[];
+  };
+}
+
+export interface WaterfallItem {
+  label: string;
+  value: number;
+  isTotal?: boolean;
+}
+
+// Treemap (Portfolio Allocation)
+export interface TreemapData extends BaseChartData {
+  type: 'treemap';
+  data: {
+    items: TreemapItem[];
+  };
+}
+
+export interface TreemapItem {
+  name: string;
+  value: number;
+  color?: string;
+  children?: TreemapItem[];
+}
+
+// Options Payoff Diagram
+export interface PayoffData extends BaseChartData {
+  type: 'payoff';
+  data: {
+    strategies: OptionLeg[];
+    underlyingRange: [number, number];
+    currentPrice?: number;
+  };
+}
+
+export interface OptionLeg {
+  type: 'call' | 'put';
+  strike: number;
+  premium: number;
+  quantity: number;
+  position: 'long' | 'short';
+}
 
 // Composed Chart (Multiple chart types combined)
 export interface ComposedChartData extends BaseChartData {

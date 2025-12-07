@@ -1,0 +1,60 @@
+#!/bin/bash
+# emit_ui - Quick UI event emitter for JARVIS mode
+#
+# Usage:
+#   emit_ui swarm "Spawning analysis swarm..."
+#   emit_ui backtest "Running SPY backtest" 45
+#   emit_ui insight "Gamma analysis complete"
+#   emit_ui discovery "Found anomaly at 4500 strike"
+#
+# Views: swarm, mission, backtest, graduation, integrity, insight, default
+
+RESULTS_DIR="/tmp/claude-code-results"
+mkdir -p "$RESULTS_DIR"
+
+VIEW="${1:-default}"
+MESSAGE="${2:-}"
+PROGRESS="${3:-}"
+
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+FILENAME="event_$(date +%s%N | cut -c1-13).json"
+SESSION_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+
+# Map view names to activity types
+case "$VIEW" in
+  swarm) ACTIVITY="swarm_work" ;;
+  backtest) ACTIVITY="backtest" ;;
+  insight|gamma) ACTIVITY="gamma_analysis" ;;
+  discovery|default) ACTIVITY="discovery" ;;
+  *) ACTIVITY="idle" ;;
+esac
+
+# Build JSON
+if [ -n "$PROGRESS" ]; then
+  cat > "$RESULTS_DIR/$FILENAME" << EOF
+{
+  "session_id": "$SESSION_ID",
+  "timestamp": "$TIMESTAMP",
+  "content": "$MESSAGE",
+  "activity_type": "$ACTIVITY",
+  "display_directives": [
+    {"type": "view", "value": "$VIEW"},
+    {"type": "progress", "value": $PROGRESS, "message": "$MESSAGE"}
+  ]
+}
+EOF
+else
+  cat > "$RESULTS_DIR/$FILENAME" << EOF
+{
+  "session_id": "$SESSION_ID",
+  "timestamp": "$TIMESTAMP",
+  "content": "$MESSAGE",
+  "activity_type": "$ACTIVITY",
+  "display_directives": [
+    {"type": "view", "value": "$VIEW"}
+  ]
+}
+EOF
+fi
+
+echo "✓ UI event emitted: $VIEW - $MESSAGE"

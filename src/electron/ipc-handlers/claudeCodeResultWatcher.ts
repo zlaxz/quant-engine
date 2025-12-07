@@ -17,9 +17,24 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { createClient } from '@supabase/supabase-js';
+import { BrowserWindow } from 'electron';
 
 // Result directory that Claude Code writes to
 const RESULTS_DIR = '/tmp/claude-code-results';
+
+// Reference to main window for sending IPC events
+let mainWindowRef: BrowserWindow | null = null;
+
+// Track files being processed to avoid duplicate processing
+const processingFiles = new Set<string>();
+
+/**
+ * Set the main window reference for IPC communication
+ */
+export function setWatcherMainWindow(window: BrowserWindow): void {
+  mainWindowRef = window;
+  console.log('[ClaudeCodeWatcher] Main window reference set');
+}
 
 // Supabase client for inserting messages
 let supabase: ReturnType<typeof createClient> | null = null;
@@ -33,6 +48,18 @@ interface ClaudeCodeResult {
   execution_time_ms?: number;
   exit_code?: number;
   task_summary?: string;
+  // JARVIS engine event fields
+  activity_type?: string;
+  timestamp?: string;
+  data?: Record<string, any>;
+}
+
+/**
+ * Check if this is a JARVIS engine event (vs a chat message)
+ * Engine events have activity_type and are meant to control the UI
+ */
+function isEngineEvent(result: ClaudeCodeResult): boolean {
+  return !!result.activity_type;
 }
 
 /**
@@ -76,11 +103,21 @@ function startWatching(): void {
     if (eventType === 'rename' && filename && filename.endsWith('.json')) {
       const filePath = path.join(RESULTS_DIR, filename);
 
+      // Skip if already being processed (fs.watch fires multiple events)
+      if (processingFiles.has(filePath)) {
+        return;
+      }
+
       // Small delay to ensure file is fully written
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       if (fs.existsSync(filePath)) {
-        await processResultFile(filePath);
+        processingFiles.add(filePath);
+        try {
+          await processResultFile(filePath);
+        } finally {
+          processingFiles.delete(filePath);
+        }
       }
     }
   });
@@ -116,6 +153,30 @@ async function processResultFile(filePath: string): Promise<void> {
     if (!result.session_id) {
       console.error('[ClaudeCodeWatcher] Result missing session_id:', filePath);
       fs.unlinkSync(filePath);
+      return;
+    }
+
+    // JARVIS: Engine events go directly to UI via IPC (no Supabase)
+    if (isEngineEvent(result)) {
+      console.log('[ClaudeCodeWatcher] JARVIS engine event:', result.activity_type);
+
+      if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+        mainWindowRef.webContents.send('jarvis-event', {
+          sessionId: result.session_id,
+          activityType: result.activity_type,
+          content: result.content,
+          timestamp: result.timestamp,
+          displayDirectives: result.display_directives || [],
+          data: result.data || {}
+        });
+        console.log('[ClaudeCodeWatcher] Sent JARVIS event to renderer');
+      } else {
+        console.warn('[ClaudeCodeWatcher] No window reference, cannot send JARVIS event');
+      }
+
+      // Delete processed engine event file
+      fs.unlinkSync(filePath);
+      console.log('[ClaudeCodeWatcher] Deleted processed engine event:', filePath);
       return;
     }
 

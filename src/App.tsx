@@ -4,23 +4,24 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route } from "react-router-dom";
-import { ChatProvider } from "@/contexts/ChatContext";
 import { ResearchDisplayProvider } from "@/contexts/ResearchDisplayContext";
-import { MissionControlProvider } from "@/contexts/MissionControlContext";
 import { VisualizationProvider } from "@/contexts/VisualizationContext";
 import { useEffect, useState, lazy, Suspense } from 'react';
-import Index from "./pages/Index";
+import Launchpad from "./pages/Launchpad";
 import Settings from "./pages/Settings";
 import Dashboard from "./pages/Dashboard";
+import TradingTerminal from "./pages/TradingTerminal";
+import Strategies from "./pages/Strategies";
+import Observatory from "./pages/Observatory";
 import NotFound from "./pages/NotFound";
 import { FirstLaunchModal } from './components/settings/FirstLaunchModal';
 import { isRunningInElectron } from './lib/electronClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CommandPalette } from '@/components/ui/CommandPalette';
+import { JarvisEventHandler } from '@/components/JarvisEventHandler';
 
 // Lazy load popout pages for code splitting
 const PopoutVisualization = lazy(() => import('./pages/PopoutVisualization'));
-const MissionControlPopout = lazy(() => import('./pages/MissionControlPopout'));
 
 const queryClient = new QueryClient();
 
@@ -75,49 +76,41 @@ const App = () => {
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
-            <ChatProvider>
-              <ResearchDisplayProvider>
-                <MissionControlProvider>
-                  <VisualizationProvider>
-                    <Toaster />
-                    <Sonner />
-                    <HashRouter>
-                      <CommandPalette />
-                      <Routes>
-                        <Route path="/" element={<Index />} />
-                        <Route path="/settings" element={<Settings />} />
-                        <Route path="/dashboard" element={<Dashboard />} />
-                        <Route 
-                          path="/popout/:id" 
-                          element={
-                            <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
-                              <PopoutVisualization />
-                            </Suspense>
-                          } 
-                        />
-                        <Route 
-                          path="/mission-control" 
-                          element={
-                            <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
-                              <MissionControlPopout />
-                            </Suspense>
-                          } 
-                        />
-                        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                        <Route path="*" element={<NotFound />} />
-                      </Routes>
-                    </HashRouter>
+            <ResearchDisplayProvider>
+              <VisualizationProvider>
+                <JarvisEventHandler />
+                <Toaster />
+                <Sonner />
+                <HashRouter>
+                  <CommandPalette />
+                  <Routes>
+                    <Route path="/" element={<Launchpad />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/terminal" element={<TradingTerminal />} />
+                    <Route path="/strategies" element={<Strategies />} />
+                    <Route path="/observatory" element={<Observatory />} />
+                    <Route
+                      path="/popout/:id"
+                      element={
+                        <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
+                          <PopoutVisualization />
+                        </Suspense>
+                      }
+                    />
+                    {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </HashRouter>
 
-                    {showFirstLaunch && (
-                      <FirstLaunchModal
-                        open={showFirstLaunch}
-                        onComplete={handleFirstLaunchComplete}
-                      />
-                    )}
-                  </VisualizationProvider>
-                </MissionControlProvider>
-              </ResearchDisplayProvider>
-            </ChatProvider>
+                {showFirstLaunch && (
+                  <FirstLaunchModal
+                    open={showFirstLaunch}
+                    onComplete={handleFirstLaunchComplete}
+                  />
+                )}
+              </VisualizationProvider>
+            </ResearchDisplayProvider>
           </TooltipProvider>
         </QueryClientProvider>
       </ThemeProvider>

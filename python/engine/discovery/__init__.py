@@ -32,10 +32,11 @@ from .payoff_surface_builder import (
     ParsedOption,
 )
 
-from .fast_backtester import (
-    FastBacktester,
+from .precision_backtester import (
+    PrecisionBacktester,
     BacktestResult,
     compute_fitness,
+    DNAToTradeConverter,
 )
 
 from .structure_miner import (
@@ -64,10 +65,11 @@ __all__ = [
     'PayoffSurfaceLookup',
     'parse_occ_ticker',
     'ParsedOption',
-    # Fast backtester
-    'FastBacktester',
+    # Precision backtester
+    'PrecisionBacktester',
     'BacktestResult',
     'compute_fitness',
+    'DNAToTradeConverter',
     # Structure miner
     'StructureMiner',
     'EvolutionConfig',

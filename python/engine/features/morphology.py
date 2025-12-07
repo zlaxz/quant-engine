@@ -263,27 +263,16 @@ def _compute_dip(sorted_data: np.ndarray, ecdf: np.ndarray) -> float:
     if data_range < 1e-10:
         # All data points are identical - perfectly unimodal
         return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
-        return 0.0
 
     # Normalize data to [0, 1] - x-coordinates are normalized data values
     x_vals = (sorted_data - data_min) / data_range
 
-    # ECDF values - right-continuous: F(x_i) = (i+1)/n
-    # This is the standard definition where F(x) = P(X <= x)
-    y_vals = (np.arange(n) + 1) / n
+    # ECDF step values per Hartigan & Hartigan (1985):
+    # GCM (lower envelope) uses LOWER step: F(x_i-) = i/n
+    # LCM (upper envelope) uses UPPER step: F(x_i) = (i+1)/n
+    # FIX: Previously used (i+1)/n for both, which underestimated dip statistic
+    y_vals_gcm = np.arange(n) / n        # Lower step for GCM
+    y_vals_lcm = (np.arange(n) + 1) / n  # Upper step for LCM
 
     # GCM: Greatest Convex Minorant (lower envelope)
     # Build lower convex hull with non-decreasing slopes
@@ -295,7 +284,7 @@ def _compute_dip(sorted_data: np.ndarray, ecdf: np.ndarray) -> float:
 
     for i in range(n):
         x_new = x_vals[i]
-        y_new = y_vals[i]
+        y_new = y_vals_gcm[i]  # Use lower step for GCM
 
         # For lower hull (GCM), we need non-decreasing slopes
         while len(hull_x) >= 2:
@@ -350,7 +339,7 @@ def _compute_dip(sorted_data: np.ndarray, ecdf: np.ndarray) -> float:
 
     for i in range(n):
         x_new = x_vals[i]
-        y_new = y_vals[i]
+        y_new = y_vals_lcm[i]  # Use upper step for LCM
 
         # For UPPER concave hull (LCM), slopes must be NON-INCREASING
         while len(hull_x) >= 2:
@@ -958,37 +947,40 @@ def add_morphology_features(
     # Rolling kurtosis
     df[f'{prefix}kurtosis'] = df[returns_col].rolling(window).kurt()
 
-    # Shape classification (compute periodically for efficiency)
-    shape_classes = []
-    is_bimodal = []
+    # Shape classification - parallelized for M4 Pro
+    from concurrent.futures import ThreadPoolExecutor
 
     config = MorphologyConfig()
+    returns_values = df[returns_col].values  # Pre-extract for thread-safe access
 
-    for i in range(len(df)):
+    def classify_shape_at(i):
         if i < window - 1:
-            shape_classes.append('unknown')
-            is_bimodal.append(False)
-            continue
+            return 'unknown', False
 
-        window_data = df[returns_col].iloc[i - window + 1:i + 1].dropna().values
+        # Extract window data manually (numpy slicing is thread-safe)
+        window_data = returns_values[max(0, i - window + 1):i + 1]
+        window_data = window_data[~np.isnan(window_data)]
 
         if len(window_data) < 20:
-            shape_classes.append('unknown')
-            is_bimodal.append(False)
-            continue
+            return 'unknown', False
 
-        # Quick classification without full dip test
         skew = stats.skew(window_data)
         kurt = stats.kurtosis(window_data)
 
         shape = classify_distribution_shape(
             skew, kurt,
-            is_unimodal=True,  # Assume unimodal for speed
+            is_unimodal=True,
             n_modes=1,
             config=config
         )
-        shape_classes.append(shape)
-        is_bimodal.append(False)
+        return shape, False
+
+    # Parallel execution
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results = list(executor.map(classify_shape_at, range(len(df))))
+
+    shape_classes = [r[0] for r in results]
+    is_bimodal = [r[1] for r in results]
 
     df[f'{prefix}shape'] = shape_classes
     df[f'{prefix}is_bimodal'] = is_bimodal

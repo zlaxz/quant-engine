@@ -1,8 +1,8 @@
 /**
  * Dual Purpose Panel - Dynamic visualization based on context
  * Shows different components based on VisualizationContext state
- * 
- * NO MOCK DATA - Connects to Python API and Supabase
+ *
+ * Refactored: Removed legacy CIO/Research components
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -10,27 +10,25 @@ import { useResearchDisplay } from '@/contexts/ResearchDisplayContext';
 import { useVisualizationContext, VisualizationView } from '@/contexts/VisualizationContext';
 import { ArtifactDisplay } from './ArtifactDisplay';
 import { SystemIntegrityHUD } from '@/components/dashboard/SystemIntegrityHUD';
-import { MissionControl } from '@/components/dashboard/MissionControl';
+import { MissionMonitor } from '@/components/dashboard/MissionMonitor';
 import { SwarmHiveMonitor } from '@/components/swarm/SwarmHiveMonitor';
 import { GraduationTracker } from '@/components/dashboard/GraduationTracker';
 import { BacktestRunner } from '@/components/dashboard/BacktestRunner';
 import { SystemIntegrity } from '@/components/dashboard/SystemIntegrity';
-import { FindingsPanel } from '@/components/research/FindingsPanel';
-import { CIOInsightPanel } from '@/components/insight';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Target, Bug, TrendingUp, Play, Shield, Star, ExternalLink, Eye } from 'lucide-react';
+import { Target, Bug, TrendingUp, Play, Shield, ExternalLink } from 'lucide-react';
 
 // Tab configuration for pop-out
-const TAB_CONFIG: Record<VisualizationView, { id: string; title: string; icon: typeof Star }> = {
-  default: { id: 'findings', title: 'Findings', icon: Star },
+const TAB_CONFIG: Record<VisualizationView, { id: string; title: string; icon: typeof Target }> = {
+  default: { id: 'mission-control', title: 'Mission Control', icon: Target },
   mission: { id: 'mission-control', title: 'Mission Control', icon: Target },
   swarm: { id: 'swarm-monitor', title: 'Swarm Monitor', icon: Bug },
   graduation: { id: 'graduation-pipeline', title: 'Graduation Pipeline', icon: TrendingUp },
   backtest: { id: 'backtest-runner', title: 'Backtest Runner', icon: Play },
   integrity: { id: 'system-integrity', title: 'System Integrity', icon: Shield },
-  insight: { id: 'cio-insight', title: 'CIO Insight', icon: Eye },
+  insight: { id: 'mission-control', title: 'Mission Control', icon: Target },
 };
 
 export const DualPurposePanel = () => {
@@ -62,7 +60,7 @@ export const DualPurposePanel = () => {
     return () => {
       if (autoReturnTimer) clearTimeout(autoReturnTimer);
     };
-  }, [currentArtifact, clearArtifact, autoReturnTimer]);
+  }, [currentArtifact, clearArtifact]);
 
   const handleArtifactClose = () => {
     if (autoReturnTimer) clearTimeout(autoReturnTimer);
@@ -108,15 +106,7 @@ export const DualPurposePanel = () => {
         className="flex-1 flex flex-col min-h-0"
       >
         <div className="flex items-center gap-1 mx-2 mt-2">
-          <TabsList className="grid flex-1 grid-cols-7 h-9 shrink-0">
-            <TabsTrigger value="insight" className="text-xs gap-1">
-              <Eye className="h-3 w-3" />
-              <span className="hidden sm:inline">Insight</span>
-            </TabsTrigger>
-            <TabsTrigger value="default" className="text-xs gap-1">
-              <Star className="h-3 w-3" />
-              <span className="hidden sm:inline">Findings</span>
-            </TabsTrigger>
+          <TabsList className="grid flex-1 grid-cols-5 h-9 shrink-0">
             <TabsTrigger value="mission" className="text-xs gap-1">
               <Target className="h-3 w-3" />
               <span className="hidden sm:inline">Mission</span>
@@ -138,7 +128,7 @@ export const DualPurposePanel = () => {
               <span className="hidden sm:inline">Integrity</span>
             </TabsTrigger>
           </TabsList>
-          
+
           {/* Pop-out button for current tab */}
           <Button
             variant="ghost"
@@ -152,16 +142,12 @@ export const DualPurposePanel = () => {
         </div>
 
         <div className="flex-1 overflow-auto p-2 min-h-0">
-          <TabsContent value="insight" className="h-full mt-0 data-[state=active]:flex data-[state=active]:flex-col">
-            <CIOInsightPanel />
-          </TabsContent>
-
-          <TabsContent value="default" className="h-full mt-0 data-[state=active]:flex data-[state=active]:flex-col">
-            <FindingsPanel />
+          <TabsContent value="default" className="h-full mt-0">
+            <MissionMonitor />
           </TabsContent>
 
           <TabsContent value="mission" className="h-full mt-0">
-            <MissionControl />
+            <MissionMonitor />
           </TabsContent>
 
           <TabsContent value="swarm" className="h-full mt-0">
@@ -178,6 +164,10 @@ export const DualPurposePanel = () => {
 
           <TabsContent value="integrity" className="h-full mt-0">
             <SystemIntegrity />
+          </TabsContent>
+
+          <TabsContent value="insight" className="h-full mt-0">
+            <MissionMonitor />
           </TabsContent>
         </div>
       </Tabs>

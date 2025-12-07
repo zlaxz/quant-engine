@@ -15,12 +15,11 @@ import { Maximize2, Minimize2, RefreshCw, Pin, PinOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Dashboard components for popout
-import { MissionControl } from '@/components/dashboard/MissionControl';
+import { MissionMonitor } from '@/components/dashboard/MissionMonitor';
 import { SwarmHiveMonitor } from '@/components/swarm/SwarmHiveMonitor';
 import { GraduationTracker } from '@/components/dashboard/GraduationTracker';
 import { BacktestRunner } from '@/components/dashboard/BacktestRunner';
 import { SystemIntegrity } from '@/components/dashboard/SystemIntegrity';
-import { FindingsPanel } from '@/components/research/FindingsPanel';
 
 interface PopoutData {
   id: string;
@@ -88,9 +87,9 @@ export default function PopoutVisualization() {
     // Dashboard component types
     switch (visualizationType) {
       case 'default':
-        return <FindingsPanel />;
+        return <MissionMonitor />;
       case 'mission':
-        return <MissionControl />;
+        return <MissionMonitor />;
       case 'swarm':
         return <SwarmHiveMonitor />;
       case 'graduation':

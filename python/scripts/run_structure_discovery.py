@@ -30,6 +30,7 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import List
 
 import pandas as pd
 
@@ -46,7 +47,7 @@ from engine.discovery.structure_dna import (
     format_dna,
     get_seed_structures,
 )
-from engine.discovery.fast_backtester import FastBacktester, compute_fitness
+from engine.discovery.precision_backtester import PrecisionBacktester, compute_fitness
 from engine.discovery.structure_miner import (
     StructureMiner,
     EvolutionConfig,
@@ -126,35 +127,28 @@ def build_payoff_surface(
 # ============================================================================
 
 def run_discovery(
-    surface_path: Path,
+    data_path: Path,
     regime_path: Path,
     output_dir: Path,
-    options_features_path: Path = None,
     population_size: int = 100,
     n_generations: int = 50,
     walk_forward: bool = False,
     n_folds: int = 3
 ) -> List[StructureDNA]:
     """
-    Run genetic algorithm to discover structures.
+    Run genetic algorithm to discover structures using precision backtesting.
     """
     logger.info("=" * 60)
-    logger.info("PHASE 2: Structure Discovery")
+    logger.info("PHASE 2: Structure Discovery (Precision Backtester)")
     logger.info("=" * 60)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Initialize backtester
-    logger.info("Loading payoff surface...")
-    if options_features_path and options_features_path.exists():
-        logger.info(f"Using Hybrid Model with options features: {options_features_path}")
-    else:
-        logger.warning("Running in Stock-Regime ONLY mode (no options features)")
-
-    backtester = FastBacktester(
-        surface_path=surface_path,
+    # Initialize precision backtester
+    logger.info("Initializing precision backtester...")
+    backtester = PrecisionBacktester(
+        data_path=data_path,
         regime_path=regime_path,
-        options_features_path=options_features_path
     )
 
     # Configure evolution
@@ -244,9 +238,8 @@ def save_discovered_structures(
 # ============================================================================
 
 def run_baseline_check(
-    surface_path: Path,
+    data_path: Path,
     regime_path: Path,
-    options_features_path: Path = None
 ):
     """
     Quick check: how do seed structures perform?
@@ -257,31 +250,31 @@ def run_baseline_check(
     logger.info("BASELINE CHECK: Testing Seed Structures")
     logger.info("=" * 60)
 
-    if options_features_path and options_features_path.exists():
-        logger.info(f"Using Hybrid Model with options features: {options_features_path}")
-    
-    backtester = FastBacktester(
-        surface_path=surface_path,
+    backtester = PrecisionBacktester(
+        data_path=data_path,
         regime_path=regime_path,
-        options_features_path=options_features_path
     )
 
     seeds = get_seed_structures()
-    results = []
 
-    for dna in seeds:
-        result = backtester.backtest(dna, include_slippage=True)
+    # Parallel baseline evaluation for M4 Pro
+    from concurrent.futures import ThreadPoolExecutor
+
+    def eval_seed(dna):
+        result = backtester.backtest(dna)
         fitness = compute_fitness(result)
         dna.fitness_score = fitness
-
-        results.append({
+        return {
             'structure': format_dna(dna),
             'sharpe': result.sharpe_ratio,
             'return': result.total_return,
             'max_dd': result.max_drawdown,
             'win_rate': result.win_rate,
             'fitness': fitness,
-        })
+        }
+
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results = list(executor.map(eval_seed, seeds))
 
     df = pd.DataFrame(results)
     df = df.sort_values('fitness', ascending=False)
@@ -400,21 +393,20 @@ def main():
 
         if args.baseline:
             # Quick baseline check
-            run_baseline_check(surface_path, regime_path, options_features_path)
+            run_baseline_check(stock_data, regime_path)
             return
 
         if args.discover or args.full:
             # Phase 2: Discovery
-            if not surface_path.exists():
-                logger.error(f"Surface not found: {surface_path}")
-                logger.error("Run with --build-surface first")
+            if not stock_data.exists():
+                logger.error(f"Stock data not found: {stock_data}")
+                logger.error("Ensure stock data parquet exists")
                 sys.exit(1)
 
             discovered = run_discovery(
-                surface_path=surface_path,
+                data_path=stock_data,
                 regime_path=regime_path,
                 output_dir=output_dir,
-                options_features_path=options_features_path,
                 population_size=args.population,
                 n_generations=args.generations,
                 walk_forward=args.walk_forward,

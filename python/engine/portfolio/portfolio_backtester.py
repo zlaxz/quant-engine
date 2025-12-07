@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from engine.discovery.structure_dna import StructureDNA
-from engine.discovery.fast_backtester import FastBacktester, BacktestResult
+from engine.discovery.precision_backtester import PrecisionBacktester, BacktestResult
 from engine.portfolio.portfolio_dna import PortfolioDNA, RebalanceFrequency, PortfolioObjective
 
 logger = logging.getLogger("AlphaFactory.PortfolioBacktester")
@@ -73,19 +73,19 @@ class PortfolioBacktester:
 
     def __init__(
         self,
-        fast_backtester: FastBacktester,
+        precision_backtester: PrecisionBacktester,
         discovered_structures: List[StructureDNA],
     ):
         """
         Initialize the PortfolioBacktester.
 
         Args:
-            fast_backtester: An initialized FastBacktester instance.
+            precision_backtester: An initialized PrecisionBacktester instance.
             discovered_structures: A list of individual StructureDNA objects.
         """
-        self.fast_backtester = fast_backtester
+        self.precision_backtester = precision_backtester
         self.discovered_structures = discovered_structures
-        self.trading_dates = fast_backtester.trading_dates
+        self.trading_dates = precision_backtester.trading_dates
 
         # Pre-compute daily returns for all discovered structures
         self.strategy_daily_returns: Dict[str, pd.Series] = self._precompute_strategy_returns()
@@ -94,11 +94,11 @@ class PortfolioBacktester:
         self.all_strategy_returns_df = pd.DataFrame(self.strategy_daily_returns).reindex(self.trading_dates).fillna(0.0)
         logger.info(f"Pre-computed daily returns for {len(self.discovered_structures)} strategies over {len(self.trading_dates)} days.")
 
-        self.regimes = fast_backtester.regimes # Access regimes from FastBacktester
+        self.regimes = precision_backtester.regimes # Access regimes from PrecisionBacktester
 
     def _precompute_strategy_returns(self) -> Dict[str, pd.Series]:
         """
-        Run the FastBacktester for each discovered structure to get its daily returns.
+        Run the PrecisionBacktester for each discovered structure to get its daily returns.
         """
         returns = {}
         for i, dna in enumerate(self.discovered_structures):
@@ -107,11 +107,10 @@ class PortfolioBacktester:
             if strategy_id in returns:
                 continue # Avoid re-backtesting identical DNAs if hash collision
 
-            result = self.fast_backtester.backtest(
+            result = self.precision_backtester.backtest(
                 dna,
                 start_date=self.trading_dates.min(),
-                end_date=self.trading_dates.max(),
-                include_slippage=True
+                end_date=self.trading_dates.max()
             )
             if result and result.daily_returns is not None and not result.daily_returns.empty:
                 returns[strategy_id] = result.daily_returns.reindex(self.trading_dates).fillna(0.0)
@@ -140,8 +139,11 @@ class PortfolioBacktester:
 
         sharpe = ann_return / ann_vol if ann_vol > 0 else 0.0
 
-        neg_returns = full_returns[full_returns < 0]
-        downside_vol = neg_returns.std() * np.sqrt(252) if len(neg_returns) > 0 else ann_vol
+        # FIX: Sortino uses LPM2 (Lower Partial Moment), not std of negative returns
+        # Per Gemini audit 2025-12-06: std(neg_returns) measures dispersion around mean loss,
+        # which is wrong. LPM2 = sqrt(mean(min(r, 0)^2)) measures dispersion around zero.
+        downside_returns = np.minimum(full_returns, 0)  # Clip positive returns to 0
+        downside_vol = np.sqrt((downside_returns ** 2).mean()) * np.sqrt(252)
         sortino = ann_return / downside_vol if downside_vol > 0 else 0.0
 
         cum_returns = (1 + full_returns).cumprod()
@@ -266,23 +268,23 @@ class PortfolioBacktester:
 
 
 if __name__ == '__main__':
-    # This block would require mock FastBacktester and StructureDNA objects
+    # This block would require mock PrecisionBacktester and StructureDNA objects
     # for a meaningful test.
     logging.basicConfig(level=logging.INFO)
     logger.info("PortfolioBacktester module loaded.")
     
     # Example of how it would be used:
     # from engine.discovery.structure_dna import StructureDNA
-    # from engine.discovery.fast_backtester import FastBacktester
+    # from engine.discovery.precision_backtester import PrecisionBacktester
     #
     # # Mock data - in real use, these come from StructureMiner output and actual data files
-    # mock_fast_backtester = FastBacktester(
+    # mock_precision_backtester = PrecisionBacktester(
     #     surface_path=Path("mock_surface.parquet"),
     #     regime_path=Path("mock_regimes.parquet")
     # )
     # mock_structures = [StructureDNA(...), StructureDNA(...)]
     #
-    # pb = PortfolioBacktester(mock_fast_backtester, mock_structures)
+    # pb = PortfolioBacktester(mock_precision_backtester, mock_structures)
     #
     # # Mock optimizer function (this would come from PortfolioOptimizer)
     # def mock_optimizer_func(current_date, portfolio_dna, discovered_structures, all_strategy_returns_df, regimes):

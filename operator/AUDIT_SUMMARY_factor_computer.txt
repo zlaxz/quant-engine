@@ -1,0 +1,85 @@
+================================================================================
+QUANT CODE REVIEW: factor_computer.py
+================================================================================
+CRITICAL ISSUES: 1 (HIGH - API contract violation)
+HIGH PRIORITY:   0
+MEDIUM:          1 (Weak validation)
+LOW:             0
+STATUS:          CONDITIONAL PASS (fix BUG-001 before deploy)
+
+================================================================================
+QUICK FINDINGS
+================================================================================
+
+✗ BUG-001: equation_id parameter is IGNORED (lines 295-299)
+  - Function accepts equation_id but never uses it
+  - Always falls back to best_equation instead
+  - Users think they can select equations by ID but can't
+  - FIX: Implement lookup or remove parameter (5 min)
+
+✗ BUG-002: Lookahead validation is WEAK (lines 419-466)
+  - std_ratio test doesn't catch obvious look-ahead bias
+  - Passes for both correct AND incorrect normalization
+  - Threshold of 0.5 is arbitrary
+  - FIX: Strengthen validation or add warning (10 min)
+
+✓ SAFE: Code injection is BLOCKED
+  - eval() uses restricted namespace
+  - __import__ and other dangerous functions not available
+
+✓ SAFE: Expanding window normalization is CORRECT
+  - No look-ahead bias in _zscore_normalize_expanding()
+  - Verified: at time t, only uses data [0:t]
+
+✓ SAFE: Feature name parsing is CORRECT
+  - Word boundaries prevent substring match issues
+  - Sorted by length descending for safety
+
+================================================================================
+CRITICAL FINDINGS
+================================================================================
+
+Line 295-299: equation_id parameter completely ignored
+  # WRONG: Falls through to best_equation regardless
+  equation_str = self.equations.get('best_equation_translated',
+                                   self.equations.get('best_equation_raw'))
+  # CORRECT: Should lookup by equation_id
+  equation_str = self.equations[equation_id]
+
+Line 458: std_ratio threshold is arbitrary, validation is weak
+  if std_ratio < 0.5:  # ← This threshold is not justified
+      logger.warning("Potential lookahead bias detected")
+      return False
+  # ISSUE: This test passes even for full-sample normalization (has bias)
+
+================================================================================
+DEPLOYMENT CHECKLIST
+================================================================================
+
+[ ] FIX BUG-001: Implement equation_id lookup or remove parameter
+[ ] FIX BUG-002: Strengthen validation or add warning
+[ ] RUN: Unit tests for equation_id parameter
+[ ] RUN: Test expanding vs full-sample normalization
+[ ] RUN: Integration test with Math Swarm output
+
+Status: READY TO DEPLOY after BUG-001 is fixed
+
+================================================================================
+EXECUTION SUMMARY
+================================================================================
+
+Core Functionality: VERIFIED CORRECT
+- Expanding window z-score normalization (no look-ahead bias)
+- Safe equation evaluation (code injection blocked)
+- Correct feature mapping and parsing
+
+API Issues: FOUND
+- equation_id parameter non-functional
+- Would cause silent failures in production
+
+Validation: WEAK BUT NOT CRITICAL
+- Lookahead check doesn't catch all bias types
+- Is best-effort, not a guarantee
+- Add warning to documentation
+
+Overall: PASS with 1 HIGH priority fix (equation_id)

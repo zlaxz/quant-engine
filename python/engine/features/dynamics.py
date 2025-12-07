@@ -16,6 +16,7 @@ Author: Market Physics Engine
 Layer: 2 (Dynamics)
 """
 
+import logging
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
@@ -24,6 +25,8 @@ from scipy import stats
 from scipy.optimize import minimize
 from scipy.signal import savgol_filter
 import warnings
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -280,7 +283,7 @@ def estimate_mean_reversion(
 
     # Check for valid data before regression
     if len(X_lag) < 2 or len(X_curr) < 2 or np.all(X_lag == X_lag[0]) or np.all(X_curr == X_curr[0]):
-        return np.nan, np.nan np.nan np.nan np.nan np.nan np.nan np.nan np.nan np.nan np.nan
+        return np.nan, np.nan
 
     try:
         slope, intercept, _, _, _ = stats.linregress(X_lag, X_curr)
@@ -432,23 +435,25 @@ def compute_entropy_dynamics(
             is_decaying=False
         )
 
-    # Compute rolling entropy
-    entropies = []
-    zero_entropy_count = 0  # DYN_R7_9: Track degenerate entropy periods
-    for i in range(lookback, n + 1):
-        window_data = series[i - lookback:i]
+    # Compute rolling entropy - parallelized for M4 Pro
+    from concurrent.futures import ThreadPoolExecutor
 
-        # Histogram-based entropy - use counts and normalize to get probability mass
+    def calc_window_entropy(i):
+        window_data = series[i - lookback:i]
         hist, bin_edges = np.histogram(window_data, bins=n_bins)
-        # Normalize to probability mass function (sum to 1)
         hist = hist / hist.sum() if hist.sum() > 0 else hist
-        hist = hist[hist > 0]  # Remove zeros
+        hist = hist[hist > 0]
         if len(hist) > 0:
-            entropy = -np.sum(hist * np.log(hist))
+            return -np.sum(hist * np.log(hist)), False
         else:
-            entropy = 0
-            zero_entropy_count += 1  # DYN_R7_9: Count degenerate periods
-        entropies.append(entropy)
+            return 0.0, True  # True = zero entropy (degenerate)
+
+    indices = range(lookback, n + 1)
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results = list(executor.map(calc_window_entropy, indices))
+
+    entropies = [r[0] for r in results]
+    zero_entropy_count = sum(1 for r in results if r[1])
 
     # DYN_R7_9: Warn if significant portion of periods have zero entropy
     if zero_entropy_count > len(entropies) * 0.5:
@@ -547,17 +552,19 @@ def compute_shape_velocity(
             shape_transition_prob=np.nan, shape_direction='unknown'
         )
 
-    # Compute rolling skewness and kurtosis
-    skewness = []
-    kurtosis = []
+    # Compute rolling skewness and kurtosis - parallelized for M4 Pro
+    from concurrent.futures import ThreadPoolExecutor
 
-    for i in range(window, n + 1):
+    def calc_shape_at(i):
         window_data = series[i - window:i]
-        skewness.append(stats.skew(window_data))
-        kurtosis.append(stats.kurtosis(window_data))
+        return stats.skew(window_data), stats.kurtosis(window_data)
 
-    skewness = np.array(skewness)
-    kurtosis = np.array(kurtosis)
+    indices = range(window, n + 1)
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results = list(executor.map(calc_shape_at, indices))
+
+    skewness = np.array([r[0] for r in results])
+    kurtosis = np.array([r[1] for r in results])
 
     # Compute velocities
     if len(skewness) >= 5:
@@ -638,13 +645,16 @@ def compute_volatility_dynamics(
             vol_regime='unknown'
         )
 
-    # Compute rolling volatility
-    vol_series = []
-    for i in range(vol_window, n + 1):
-        window_returns = returns[i - vol_window:i]
-        vol_series.append(np.std(window_returns) * np.sqrt(252))  # Annualized
+    # Compute rolling volatility - parallelized for M4 Pro
+    from concurrent.futures import ThreadPoolExecutor
 
-    vol_series = np.array(vol_series)
+    def calc_vol_at(i):
+        window_returns = returns[i - vol_window:i]
+        return np.std(window_returns) * np.sqrt(252)  # Annualized
+
+    indices = range(vol_window, n + 1)
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        vol_series = np.array(list(executor.map(calc_vol_at, indices)))
 
     # Current realized vol
     realized_vol = vol_series[-1]
@@ -798,6 +808,294 @@ def compute_gamma_dynamics(
         charm_effect=time_effect,  # DYN9: Renamed but keeping field name for compatibility
         vanna_effect=spot_effect   # DYN9: Renamed but keeping field name for compatibility
     )
+
+
+# =============================================================================
+# Higher-Order Dynamics (Jerk, Inflection Points)
+# =============================================================================
+
+@dataclass
+class HigherOrderDynamics:
+    """Higher-order derivatives for reversal prediction."""
+    velocity: float           # dX/dt (first derivative)
+    acceleration: float       # d²X/dt² (second derivative)
+    jerk: float               # d³X/dt³ (third derivative - rate of change of acceleration)
+    snap: float               # d⁴X/dt⁴ (fourth derivative - rare but useful)
+    inflection_signal: float  # Normalized signal for inflection points
+    reversal_probability: float  # Probability of reversal based on higher-order dynamics
+
+
+def estimate_higher_order_derivatives(
+    series: np.ndarray,
+    dt: float = 1.0,
+    window: int = 7,
+    smooth: bool = True
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Estimate up to fourth derivative of a time series.
+
+    The key insight: Reversals are predicted by JERK (d³X/dt³).
+    - Positive jerk with negative acceleration → acceleration turning around (bottom)
+    - Negative jerk with positive acceleration → deceleration starting (top)
+
+    Parameters
+    ----------
+    series : np.ndarray
+        Time series data
+    dt : float
+        Time step (default: 1 for daily data)
+    window : int
+        Window for derivative estimation (larger = smoother)
+    smooth : bool
+        Whether to use Savitzky-Golay smoothing
+
+    Returns
+    -------
+    velocity : np.ndarray
+        First derivative (dX/dt)
+    acceleration : np.ndarray
+        Second derivative (d²X/dt²)
+    jerk : np.ndarray
+        Third derivative (d³X/dt³)
+    snap : np.ndarray
+        Fourth derivative (d⁴X/dt⁴)
+    """
+    series = np.asarray(series).flatten()
+    n = len(series)
+
+    # Need enough data for higher-order derivatives
+    min_window = max(window, 7)  # At least 7 for deriv=4
+
+    if smooth and n >= min_window:
+        # Savitzky-Golay requires odd window
+        if min_window % 2 == 0:
+            min_window += 1
+
+        # Polynomial order must be < window size
+        poly_order = min(4, min_window - 1)
+
+        try:
+            velocity = savgol_filter(series, min_window, poly_order, deriv=1, delta=dt)
+            acceleration = savgol_filter(series, min_window, poly_order, deriv=2, delta=dt)
+            jerk = savgol_filter(series, min_window, poly_order, deriv=3, delta=dt)
+            snap = savgol_filter(series, min_window, poly_order, deriv=4, delta=dt)
+        except (ValueError, ZeroDivisionError):
+            # Fallback to chained finite differences
+            velocity = np.gradient(series, dt)
+            acceleration = np.gradient(velocity, dt)
+            jerk = np.gradient(acceleration, dt)
+            snap = np.gradient(jerk, dt)
+    else:
+        # Chain rule with finite differences
+        velocity = np.gradient(series, dt)
+        acceleration = np.gradient(velocity, dt)
+        jerk = np.gradient(acceleration, dt)
+        snap = np.gradient(jerk, dt)
+
+    return velocity, acceleration, jerk, snap
+
+
+def compute_higher_order_dynamics(
+    series: np.ndarray,
+    dt: float = 1.0,
+    window: int = 7
+) -> HigherOrderDynamics:
+    """
+    Compute higher-order dynamics for reversal prediction.
+
+    TRADING SIGNALS:
+    - Jerk > 0 and Acceleration < 0 → Bottom forming (buy signal)
+    - Jerk < 0 and Acceleration > 0 → Top forming (sell signal)
+    - |Jerk| spiking → Regime transition imminent
+
+    Parameters
+    ----------
+    series : np.ndarray
+        Time series data
+    dt : float
+        Time step
+    window : int
+        Smoothing window
+
+    Returns
+    -------
+    HigherOrderDynamics
+        Complete higher-order analysis for latest point
+    """
+    series = np.asarray(series).flatten()
+    n = len(series)
+
+    if n < 15:
+        return HigherOrderDynamics(
+            velocity=np.nan, acceleration=np.nan, jerk=np.nan, snap=np.nan,
+            inflection_signal=np.nan, reversal_probability=np.nan
+        )
+
+    # Compute all derivatives
+    velocity, acceleration, jerk, snap = estimate_higher_order_derivatives(
+        series, dt, window, smooth=True
+    )
+
+    current_velocity = velocity[-1]
+    current_acceleration = acceleration[-1]
+    current_jerk = jerk[-1]
+    current_snap = snap[-1]
+
+    # Inflection point signal
+    # Inflection = where acceleration crosses zero
+    # Jerk tells us HOW FAST we're approaching that crossing
+    if not np.isnan(current_acceleration) and not np.isnan(current_jerk):
+        # Normalized by recent volatility of acceleration
+        acc_std = np.nanstd(acceleration[-20:]) if n >= 20 else np.nanstd(acceleration)
+        if acc_std > 1e-10:
+            # Inflection signal: how many "stds" until we hit zero acceleration
+            # Negative = approaching from above, Positive = approaching from below
+            inflection_signal = -current_acceleration / (acc_std + 1e-10)
+            inflection_signal = np.clip(inflection_signal, -5, 5)
+        else:
+            inflection_signal = 0.0
+    else:
+        inflection_signal = np.nan
+
+    # Reversal probability based on jerk/acceleration alignment
+    # High probability when jerk opposes acceleration (turning point)
+    if not np.isnan(current_jerk) and not np.isnan(current_acceleration):
+        jerk_std = np.nanstd(jerk[-20:]) if n >= 20 else np.nanstd(jerk)
+        if jerk_std > 1e-10 and abs(current_acceleration) > 1e-10:
+            # Jerk opposing acceleration = reversal brewing
+            jerk_normalized = current_jerk / (jerk_std + 1e-10)
+            acc_sign = np.sign(current_acceleration)
+
+            # If jerk opposes acceleration direction, reversal more likely
+            if acc_sign * jerk_normalized < 0:
+                reversal_probability = min(1.0, abs(jerk_normalized) / 3)
+            else:
+                reversal_probability = 0.0
+        else:
+            reversal_probability = 0.0
+    else:
+        reversal_probability = np.nan
+
+    return HigherOrderDynamics(
+        velocity=current_velocity,
+        acceleration=current_acceleration,
+        jerk=current_jerk,
+        snap=current_snap,
+        inflection_signal=inflection_signal,
+        reversal_probability=reversal_probability
+    )
+
+
+def detect_inflection_points(
+    series: np.ndarray,
+    threshold: float = 0.5
+) -> np.ndarray:
+    """
+    Detect inflection points where concavity changes.
+
+    An inflection point is where acceleration crosses zero.
+    These often precede reversals.
+
+    Parameters
+    ----------
+    series : np.ndarray
+        Time series data
+    threshold : float
+        Minimum jerk magnitude to qualify as inflection (avoid noise)
+
+    Returns
+    -------
+    inflection_mask : np.ndarray
+        Boolean array where True = inflection point detected
+    """
+    series = np.asarray(series).flatten()
+    n = len(series)
+
+    if n < 10:
+        return np.zeros(n, dtype=bool)
+
+    # Compute derivatives
+    _, acceleration, jerk, _ = estimate_higher_order_derivatives(series)
+
+    # Inflection = sign change in acceleration
+    acc_sign = np.sign(acceleration)
+    sign_change = np.diff(acc_sign) != 0
+    sign_change = np.concatenate([[False], sign_change])
+
+    # Filter by jerk magnitude (avoid noise)
+    jerk_std = np.nanstd(jerk)
+    significant_jerk = np.abs(jerk) > threshold * jerk_std
+
+    # Inflection = sign change AND significant jerk
+    inflection_mask = sign_change & significant_jerk
+
+    return inflection_mask
+
+
+def add_higher_order_features(
+    df: pd.DataFrame,
+    columns: List[str],
+    prefix: str = 'ho_',
+    dt: float = 1.0,
+    window: int = 7
+) -> pd.DataFrame:
+    """
+    Add higher-order dynamics features (jerk, snap, inflection signals).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame
+    columns : list
+        Columns to compute dynamics for
+    prefix : str
+        Column name prefix
+    dt : float
+        Time step
+    window : int
+        Smoothing window
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with higher-order features added
+    """
+    df = df.copy()
+
+    for col in columns:
+        if col not in df.columns:
+            warnings.warn(f"Column {col} not found")
+            continue
+
+        series = df[col].values
+
+        # Compute all derivatives
+        velocity, acceleration, jerk, snap = estimate_higher_order_derivatives(
+            series, dt, window, smooth=True
+        )
+
+        df[f'{prefix}{col}_velocity'] = velocity
+        df[f'{prefix}{col}_acceleration'] = acceleration
+        df[f'{prefix}{col}_jerk'] = jerk
+        df[f'{prefix}{col}_snap'] = snap
+
+        # Inflection signal
+        inflection_mask = detect_inflection_points(series)
+        df[f'{prefix}{col}_inflection'] = inflection_mask.astype(int)
+
+        # Reversal probability (simplified)
+        # Jerk opposing acceleration = potential reversal
+        jerk_std = pd.Series(jerk).rolling(20).std()
+        jerk_norm = jerk / (jerk_std + 1e-10)
+        acc_sign = np.sign(acceleration)
+        reversal_prob = np.where(
+            acc_sign * jerk_norm < 0,
+            np.minimum(1.0, np.abs(jerk_norm) / 3),
+            0.0
+        )
+        df[f'{prefix}{col}_reversal_prob'] = reversal_prob
+
+    return df
 
 
 # =============================================================================
@@ -969,3 +1267,57 @@ def add_volatility_dynamics_features(
     )
 
     return df
+
+
+# =============================================================================
+# Quick Test
+# =============================================================================
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+
+    print("=" * 60)
+    print("HIGHER-ORDER DYNAMICS TEST")
+    print("=" * 60)
+
+    # Create synthetic price series with a reversal
+    np.random.seed(42)
+    n = 100
+
+    # Simulate: uptrend -> top -> downtrend
+    t = np.arange(n)
+    # Parabolic motion: up then down
+    price = 100 + 10 * np.sin(t * np.pi / 50) + np.random.randn(n) * 0.5
+
+    print("\n--- Computing Higher-Order Dynamics ---")
+    ho = compute_higher_order_dynamics(price)
+    print(f"Velocity (dX/dt):      {ho.velocity:.4f}")
+    print(f"Acceleration (d²X/dt²): {ho.acceleration:.4f}")
+    print(f"Jerk (d³X/dt³):        {ho.jerk:.4f}")
+    print(f"Snap (d⁴X/dt⁴):        {ho.snap:.4f}")
+    print(f"Inflection Signal:      {ho.inflection_signal:.2f}")
+    print(f"Reversal Probability:   {ho.reversal_probability:.2%}")
+
+    print("\n--- Detecting Inflection Points ---")
+    inflections = detect_inflection_points(price)
+    inflection_indices = np.where(inflections)[0]
+    print(f"Inflection points detected at indices: {inflection_indices[:5]}... (showing first 5)")
+
+    print("\n--- Trading Signals Interpretation ---")
+    if ho.jerk > 0 and ho.acceleration < 0:
+        print("SIGNAL: Bottom forming (jerk > 0, acceleration < 0) - BUY")
+    elif ho.jerk < 0 and ho.acceleration > 0:
+        print("SIGNAL: Top forming (jerk < 0, acceleration > 0) - SELL")
+    else:
+        print("SIGNAL: No clear reversal signal")
+
+    if ho.reversal_probability > 0.5:
+        print(f"WARNING: High reversal probability ({ho.reversal_probability:.0%})")
+
+    print("\n--- DataFrame Integration Test ---")
+    df = pd.DataFrame({'price': price})
+    df = add_higher_order_features(df, ['price'], prefix='ho_')
+    print(f"Added columns: {[c for c in df.columns if 'ho_' in c]}")
+    print(f"\nLast 5 rows:")
+    print(df[['price', 'ho_price_velocity', 'ho_price_acceleration',
+              'ho_price_jerk', 'ho_price_reversal_prob']].tail())

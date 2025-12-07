@@ -49,6 +49,7 @@ import Database from 'better-sqlite3';
 import { createClient } from '@supabase/supabase-js';
 import { registerFileOperationHandlers } from './ipc-handlers/fileOperations';
 import { registerPythonExecutionHandlers } from './ipc-handlers/pythonExecution';
+import { registerTradingHandlers } from './ipc-handlers/tradingHandlers';
 import { registerLlmHandlers } from './ipc-handlers/llmClient';
 import { registerMemoryHandlers, setMemoryServices, registerAnalysisHandlers, cleanupMemoryHandlers } from './ipc-handlers/memoryHandlers';
 import { registerDaemonHandlers, stopDaemonOnExit, startDaemon } from './ipc-handlers/daemonManager';
@@ -67,7 +68,7 @@ import { WarningSystem } from './analysis/warningSystem';
 import { PatternDetector } from './analysis/patternDetector';
 import { StaleMemoryInjector } from './memory/staleMemoryInjector';
 import { TriggerRecall } from './memory/triggerRecall';
-import { initClaudeCodeResultWatcher } from './ipc-handlers/claudeCodeResultWatcher';
+import { initClaudeCodeResultWatcher, setWatcherMainWindow } from './ipc-handlers/claudeCodeResultWatcher';
 import { initializeMemoryScribe, MemoryScribe } from './services/MemoryScribe';
 import { initializeThetaTerminal, shutdownThetaTerminal, getThetaTerminalStatus, startThetaTerminal, stopThetaTerminal } from './services/ThetaTerminalService';
 import OpenAI from 'openai';
@@ -417,6 +418,7 @@ app.whenReady().then(() => {
   // Register all IPC handlers
   registerFileOperationHandlers();
   registerPythonExecutionHandlers();
+  registerTradingHandlers();
   registerLlmHandlers();
   registerDaemonHandlers();
   registerDecisionHandlers();
@@ -498,9 +500,10 @@ app.whenReady().then(() => {
     
     createWindow();
     
-    // Set main window reference for popout positioning
+    // Set main window reference for popout positioning and JARVIS events
     if (mainWindow) {
       setMainWindowRef(mainWindow);
+      setWatcherMainWindow(mainWindow);
     }
   }).catch(err => {
     console.error('[Main] Failed to start memory daemon:', err);

@@ -306,15 +306,13 @@ class OptionsDataLoader:
                 f"Requested range {start_day} – {end_day} exceeds coverage."
             )
 
-        rows = []
-        for trade_day in self._stock_dates:
-            if trade_day < start_day:
-                continue
-            if trade_day > end_day:
-                break
-            day_data = self._load_spy_day(trade_day)
-            if day_data is not None:
-                rows.append(day_data)
+        # Filter dates to requested range
+        dates_to_load = [d for d in self._stock_dates if start_day <= d <= end_day]
+
+        # Parallel I/O for M4 Pro (14 cores) - use ThreadPoolExecutor for disk I/O
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=8) as executor:  # 8 threads optimal for disk I/O
+            rows = list(filter(None, executor.map(self._load_spy_day, dates_to_load)))
 
         if not rows:
             raise ValueError(f"No SPY data found between {start_day} and {end_day}")

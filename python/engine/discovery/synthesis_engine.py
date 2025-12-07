@@ -591,14 +591,20 @@ class SynthesisEngine:
         # Create sequences
         df = self.prob_model._create_sequences(df)
 
-        # Get predictions
-        predictions = []
-        for idx, row in df.iterrows():
-            pred = self.prob_model.predict_probability(
-                row['pvsi_sequence'],
-                row['regime']
-            )
-            predictions.append(pred)
+        # Get predictions - vectorized where possible, parallel for complex lookups
+        # Pre-extract arrays for thread-safe parallel access
+        sequences = df['pvsi_sequence'].values
+        regimes = df['regime'].values
+
+        # Parallel prediction using ThreadPoolExecutor
+        from concurrent.futures import ThreadPoolExecutor
+
+        def predict_single(args):
+            seq, regime = args
+            return self.prob_model.predict_probability(seq, regime)
+
+        with ThreadPoolExecutor(max_workers=12) as executor:
+            predictions = list(executor.map(predict_single, zip(sequences, regimes)))
 
         df['pred_prob_up'] = [p['prob_up'] for p in predictions]
         df['pred_edge'] = [p['edge'] for p in predictions]

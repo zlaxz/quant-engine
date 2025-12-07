@@ -1,0 +1,278 @@
+================================================================================
+                    FACTOR COMPUTER AUDIT - FILE INDEX
+================================================================================
+
+Complete audit of /python/engine/factors/factor_computer.py
+Date: 2025-12-06
+Status: CONDITIONAL PASS (1 HIGH priority fix required)
+
+================================================================================
+                          AUDIT DOCUMENTS
+================================================================================
+
+START_HERE_AUDIT.txt (7.8K)
+├─ Purpose: Navigation guide and overview
+├─ Audience: Anyone starting the audit
+├─ Length: 10 min read
+├─ Contains:
+│  ├─ Quick issue summary (2 issues found)
+│  ├─ What's correct/broken/weak
+│  ├─ Three deployment paths (A/B/C)
+│  ├─ Document map
+│  ├─ Trust indicators
+│  └─ Next steps
+└─ Recommendation: Read this FIRST
+
+README_AUDIT.md (3.3K)
+├─ Purpose: Executive summary and status
+├─ Audience: Decision makers, managers
+├─ Length: 5 min read
+├─ Contains:
+│  ├─ Quick status table
+│  ├─ Two issues summary
+│  ├─ What's correct/broken/weak
+│  ├─ Deployment recommendation
+│  ├─ Estimated time to ready
+│  └─ Files in this audit
+└─ Use when: Need quick decision on deployment
+
+AUDIT_SUMMARY_factor_computer.txt (3.4K)
+├─ Purpose: One-page technical summary
+├─ Audience: Developers, technical reviewers
+├─ Length: 3 min read
+├─ Contains:
+│  ├─ Quick findings
+│  ├─ Critical findings with code
+│  ├─ Deployment checklist
+│  ├─ Execution summary
+│  └─ Issues summary table
+└─ Use when: Need quick technical overview
+
+AUDIT_factor_computer.md (14K) ← MAIN REPORT
+├─ Purpose: Complete detailed audit report
+├─ Audience: Full technical review, documentation
+├─ Length: 20 min read
+├─ Contains:
+│  ├─ Executive summary
+│  ├─ TIER 0 bugs (look-ahead) [PASS]
+│  ├─ TIER 1 bugs (calculations) [1 HIGH]
+│  ├─ TIER 2 bugs (execution) [1 MEDIUM]
+│  ├─ TIER 3 bugs (implementation) [PASS]
+│  ├─ Validation checks performed
+│  ├─ Manual verifications
+│  ├─ Summary table
+│  ├─ Recommendations
+│  └─ Conclusion
+└─ Use when: Need complete technical details
+
+FIXES_factor_computer.md (13K)
+├─ Purpose: Exact code changes required
+├─ Audience: Developers implementing fixes
+├─ Length: 15 min read
+├─ Contains:
+│  ├─ FIX #1: equation_id parameter (5 min fix)
+│  │  ├─ Current code (BROKEN)
+│  │  ├─ Fixed code (CORRECTED)
+│  │  ├─ What changed
+│  │  └─ Testing after fix
+│  ├─ FIX #2: Lookahead validation (2 min fix)
+│  │  ├─ Current code
+│  │  ├─ Option A: Documentation fix (recommended)
+│  │  ├─ Option B: Stronger validation (optional)
+│  │  └─ Recommendation
+│  ├─ Summary of changes
+│  └─ Verification after fixes
+└─ Use when: Ready to implement fixes
+
+AUDIT_INDEX.txt (this file)
+├─ Purpose: Navigation and cross-reference
+├─ Audience: Anyone working with audit
+├─ Contents: File descriptions and usage
+└─ Use when: Need to find specific information
+
+================================================================================
+                         QUICK REFERENCE MATRIX
+================================================================================
+
+Question                              Best Document
+─────────────────────────────────────────────────────────────────────────────
+What are the 2 issues?                START_HERE_AUDIT.txt or README_AUDIT.md
+Can this module be deployed?          README_AUDIT.md (deployment recommendation)
+What's the critical bug?              AUDIT_SUMMARY_factor_computer.txt
+How do I fix the bugs?                FIXES_factor_computer.md
+What's the full technical story?      AUDIT_factor_computer.md
+What evidence supports findings?      AUDIT_factor_computer.md (verification section)
+How long will fixes take?             README_AUDIT.md (estimated time)
+Is look-ahead bias a problem?         AUDIT_factor_computer.md (TIER 0 section)
+Is code injection possible?           AUDIT_factor_computer.md (TIER 3 section)
+Where do I start reading?             START_HERE_AUDIT.txt
+What should I do next?                README_AUDIT.md (next steps)
+
+================================================================================
+                         READING PATHS BY ROLE
+================================================================================
+
+EXECUTIVE (Time: 10 min)
+1. START_HERE_AUDIT.txt - Get oriented
+2. README_AUDIT.md - See status
+Decision: Deploy after fixes? YES
+
+DEVELOPER (Time: 30 min)
+1. AUDIT_SUMMARY_factor_computer.txt - Technical overview
+2. AUDIT_factor_computer.md - Details section relevant to your area
+3. FIXES_factor_computer.md - See proposed fixes
+Outcome: Understand issues and solutions
+
+IMPLEMENTER (Time: 30 min)
+1. FIXES_factor_computer.md - Read completely
+2. Apply changes to code
+3. Run tests from "Testing After Fix"
+Result: Module is fixed and tested
+
+AUDITOR/REVIEWER (Time: 60 min)
+1. AUDIT_factor_computer.md - Complete from top to bottom
+2. Run verification code from the audit
+3. Check FIXES_factor_computer.md solutions
+4. Verify fixes are appropriate
+Outcome: Complete understanding and confidence
+
+================================================================================
+                        ISSUE QUICK REFERENCE
+================================================================================
+
+BUG-001: equation_id Parameter Ignored [HIGH]
+├─ Files mentioning this:
+│  ├─ START_HERE_AUDIT.txt (lines 54-57)
+│  ├─ README_AUDIT.md (lines 16-22)
+│  ├─ AUDIT_SUMMARY_factor_computer.txt (lines 14-18)
+│  ├─ AUDIT_factor_computer.md (lines 112-180)
+│  └─ FIXES_factor_computer.md (lines 1-132)
+├─ Location: factor_computer.py:295-299
+├─ Impact: Users cannot select equations by ID
+└─ Fix: 5 minutes
+
+BUG-002: Lookahead Validation Weak [MEDIUM]
+├─ Files mentioning this:
+│  ├─ START_HERE_AUDIT.txt (lines 59-62)
+│  ├─ README_AUDIT.md (lines 24-30)
+│  ├─ AUDIT_SUMMARY_factor_computer.txt (lines 20-24)
+│  ├─ AUDIT_factor_computer.md (lines 195-290)
+│  └─ FIXES_factor_computer.md (lines 134-240)
+├─ Location: factor_computer.py:419-466
+├─ Impact: Weak validation but core code is correct
+└─ Fix: 2 minutes
+
+================================================================================
+                       VERIFICATION MATRIX
+================================================================================
+
+Verification Type                  Status    File Reference
+─────────────────────────────────────────────────────────────────────────────
+Look-ahead bias check               PASS      AUDIT:TIER-0
+Code injection check                PASS      AUDIT:TIER-3
+Expanding window logic              VERIFIED  AUDIT:Manual Verifications
+Feature name parsing                VERIFIED  AUDIT:TIER-3
+NaN handling                        VERIFIED  AUDIT:TIER-3
+Constant factor handling            VERIFIED  AUDIT:TIER-3
+Division by zero protection         VERIFIED  AUDIT:TIER-3
+API contract (equation_id)          FAIL      AUDIT:TIER-1
+Validation logic strength           WEAK      AUDIT:TIER-2
+
+================================================================================
+                         CODE LOCATION GUIDE
+================================================================================
+
+Function/Section                    Lines    Issue(s)    File(s)
+─────────────────────────────────────────────────────────────────────────────
+__init__()                         43-72     None        AUDIT
+_load_equations()                  74-83     None        AUDIT
+_load_features()                   85-93     None        AUDIT
+_build_feature_mapping()           95-123    None        AUDIT
+_parse_equation()                  125-167   None        AUDIT
+_evaluate_equation()               169-219   None        AUDIT
+_zscore_normalize_expanding()      221-246   None        AUDIT
+compute_factor()                   248-315   BUG-001     AUDIT,FIXES
+compute_all_factors()              317-367   None        AUDIT
+get_feature_mapping()              369-376   None        AUDIT
+get_equation_metadata()            378-417   None        AUDIT
+validate_no_lookahead()            419-466   BUG-002     AUDIT,FIXES
+compute_factors() [function]       470-496   None        AUDIT
+
+================================================================================
+                        DEPLOYMENT CHECKLIST
+================================================================================
+
+Pre-Deployment Tasks:
+  [ ] Read START_HERE_AUDIT.txt
+  [ ] Read README_AUDIT.md
+  [ ] Read AUDIT_SUMMARY_factor_computer.txt
+  [ ] Review AUDIT_factor_computer.md
+  [ ] Understand FIXES_factor_computer.md
+
+Fix Application:
+  [ ] Apply FIX #1 (equation_id parameter)
+  [ ] Apply FIX #2 (lookahead validation warning)
+
+Testing:
+  [ ] Run unit test for equation_id parameter
+  [ ] Test with actual Math Swarm output
+  [ ] Verify expanding window still used
+  [ ] Run full module tests
+
+Deployment:
+  [ ] All tests pass
+  [ ] Documentation updated
+  [ ] Code review approved
+  [ ] Ready for production
+
+================================================================================
+                          KEY STATISTICS
+================================================================================
+
+Lines of code audited:          497
+Issues per 100 lines:           0.4 (very low)
+Critical bugs:                  0
+High priority bugs:             1
+Medium priority bugs:           1
+False positives checked:        4
+False positives confirmed:      0
+
+Confidence level:               HIGH
+Time to deployment-ready:       7 minutes (fix + test)
+Total documentation:            41.5KB
+Documentation lines:            ~1,600
+
+================================================================================
+                      NEXT IMMEDIATE ACTIONS
+================================================================================
+
+CHOICE A: Quick Decision (Total: 5 min)
+  → Read START_HERE_AUDIT.txt
+  → Read README_AUDIT.md
+  → Decision: Deploy after fixes? YES
+
+CHOICE B: Technical Review (Total: 30 min)
+  → Read AUDIT_SUMMARY_factor_computer.txt
+  → Skim AUDIT_factor_computer.md
+  → Review FIXES_factor_computer.md
+  → Assessment: Are fixes correct? YES
+
+CHOICE C: Full Implementation (Total: 30 min)
+  → Read FIXES_factor_computer.md completely
+  → Apply all fixes to code
+  → Run verification tests
+  → Result: Module ready for production
+
+CHOICE D: Complete Understanding (Total: 60 min)
+  → Read all audit documents in order
+  → Run verification code from AUDIT
+  → Understand full methodology
+  → Outcome: Complete confidence in findings
+
+================================================================================
+
+RECOMMENDATION: Start with START_HERE_AUDIT.txt
+
+It will guide you through the rest of this audit systematically.
+
+================================================================================

@@ -39,7 +39,7 @@ from .structure_dna import (
     format_dna,
     get_seed_structures,
 )
-from .fast_backtester import FastBacktester, BacktestResult, compute_fitness
+from .precision_backtester import PrecisionBacktester, BacktestResult, compute_fitness
 
 logger = logging.getLogger("AlphaFactory.StructureMiner")
 
@@ -77,7 +77,6 @@ class EvolutionConfig:
     sortino_weight: float = 0.2
     calmar_weight: float = 0.2
     win_rate_weight: float = 0.1
-    complexity_penalty: float = 0.02
 
     # Early stopping
     patience: int = 10              # Stop if no improvement for N generations
@@ -132,7 +131,7 @@ class StructureMiner:
     def __init__(
         self,
         config: EvolutionConfig,
-        backtester: FastBacktester,
+        backtester: PrecisionBacktester,
         random_seed: int = 42
     ):
         """
@@ -140,7 +139,7 @@ class StructureMiner:
 
         Args:
             config: Evolution configuration
-            backtester: Pre-initialized FastBacktester
+            backtester: Pre-initialized PrecisionBacktester
             random_seed: For reproducibility
         """
         self.config = config
@@ -206,8 +205,7 @@ class StructureMiner:
         result = self.backtester.backtest(
             dna,
             start_date=self.train_dates[0],
-            end_date=self.train_dates[1],
-            include_slippage=True
+            end_date=self.train_dates[1]
         )
 
         # Compute fitness with safe handling
@@ -217,9 +215,8 @@ class StructureMiner:
             sortino_weight=self.config.sortino_weight,
             calmar_weight=self.config.calmar_weight,
             win_rate_weight=self.config.win_rate_weight,
-            complexity_penalty=self.config.complexity_penalty
         )
-        
+
         # Ensure fitness is a valid number
         if not np.isfinite(fitness):
             fitness = -np.inf
@@ -263,8 +260,7 @@ class StructureMiner:
                 result = self.backtester.backtest(
                     dna,
                     start_date=self.train_dates[0],
-                    end_date=self.train_dates[1],
-                    include_slippage=True
+                    end_date=self.train_dates[1]
                 )
                 fitness = compute_fitness(
                     result,
@@ -272,7 +268,6 @@ class StructureMiner:
                     sortino_weight=self.config.sortino_weight,
                     calmar_weight=self.config.calmar_weight,
                     win_rate_weight=self.config.win_rate_weight,
-                    complexity_penalty=self.config.complexity_penalty
                 )
                 return fitness
 
@@ -478,8 +473,7 @@ class StructureMiner:
             result = self.backtester.backtest(
                 dna,
                 start_date=self.val_dates[0],
-                end_date=self.val_dates[1],
-                include_slippage=True
+                end_date=self.val_dates[1]
             )
 
             val_fitness = compute_fitness(
@@ -488,7 +482,6 @@ class StructureMiner:
                 sortino_weight=self.config.sortino_weight,
                 calmar_weight=self.config.calmar_weight,
                 win_rate_weight=self.config.win_rate_weight,
-                complexity_penalty=self.config.complexity_penalty
             )
 
             # Check for overfitting (train >> val)
@@ -541,8 +534,7 @@ class StructureMiner:
             result = self.backtester.backtest(
                 dna,
                 start_date=self.test_dates[0],
-                end_date=self.test_dates[1],
-                include_slippage=True
+                end_date=self.test_dates[1]
             )
 
             results.append({
@@ -669,8 +661,8 @@ if __name__ == '__main__':
     )
 
     parser = argparse.ArgumentParser(description='Structure Miner - Discover Options Structures')
-    parser.add_argument('--surface', type=str, required=True,
-                        help='Path to payoff surface parquet')
+    parser.add_argument('--data', type=str, required=True,
+                        help='Path to price data parquet')
     parser.add_argument('--regimes', type=str, required=True,
                         help='Path to regime assignments parquet')
     parser.add_argument('--output', type=str, default='./discovered_structures',
@@ -687,8 +679,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Initialize backtester
-    backtester = FastBacktester(
-        surface_path=Path(args.surface),
+    backtester = PrecisionBacktester(
+        data_path=Path(args.data),
         regime_path=Path(args.regimes)
     )
 

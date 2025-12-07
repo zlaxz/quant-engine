@@ -223,7 +223,7 @@ function SwarmHiveMonitorComponent() {
     } finally {
       setLaunchingSwarm(false);
     }
-  }, [connected, swarmObjectiveInput, fetchSwarmData]);
+  }, [connected, swarmObjectiveInput]);
 
   // Stats
   const [stats, setStats] = useState({

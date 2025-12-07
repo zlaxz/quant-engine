@@ -10,30 +10,27 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { RefreshCw, ArrowLeft, Moon, Activity, Database } from 'lucide-react';
+import { RefreshCw, Moon, Activity, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { AppHeader } from '@/components/layout';
 
 import { RegimeDisplay, type RegimeState, type ConvexityBias } from '@/components/dashboard/RegimeDisplay';
 import { SymphonyOrchestra, type StrategySlot } from '@/components/dashboard/SymphonyOrchestra';
-import { BriefingDeck, type BriefingCard } from '@/components/dashboard/BriefingDeck';
+import { type BriefingCard } from '@/components/dashboard/BriefingDeck';
 
-// New dashboard components
+// Dashboard components
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
-import { ShadowPositionMonitor } from '@/components/dashboard/ShadowPositionMonitor';
 import { MorningBriefingViewer } from '@/components/dashboard/MorningBriefingViewer';
 import { DataInventory } from '@/components/dashboard/DataInventory';
-import { StrategyGenomeBrowser } from '@/components/dashboard/StrategyGenomeBrowser';
-import { BacktestRunner } from '@/components/dashboard/BacktestRunner';
 import { TokenSpendTracker } from '@/components/dashboard/TokenSpendTracker';
 import { MemoryBrowser } from '@/components/dashboard/MemoryBrowser';
 
 // Guardian Architecture components
-import { MissionControl } from '@/components/dashboard/MissionControl';
+import { MissionMonitor } from '@/components/dashboard/MissionMonitor';
 import { GraduationTracker } from '@/components/dashboard/GraduationTracker';
 import { SystemIntegrity } from '@/components/dashboard/SystemIntegrity';
 import { SwarmHiveMonitor } from '@/components/swarm/SwarmHiveMonitor';
@@ -241,7 +238,6 @@ function determineCurrentRegime(strategies: StrategySlot[]): RegimeState['regime
 // ============================================================================
 
 export default function Dashboard() {
-  const navigate = useNavigate();
   const {
     regimeState,
     convexityBias,
@@ -283,72 +279,58 @@ export default function Dashboard() {
     }
   };
 
+  // Custom header actions
+  const headerActions = (
+    <div className="flex items-center gap-3">
+      {/* Daemon Status */}
+      <div className="hidden md:flex items-center gap-2">
+        <div
+          className={cn(
+            'w-2 h-2 rounded-full',
+            daemonStatus.isRunning
+              ? 'bg-green-500 animate-pulse'
+              : 'bg-gray-500'
+          )}
+        />
+        <span className="text-xs text-muted-foreground flex items-center gap-1">
+          <Moon className="w-3 h-3" />
+          Night Shift
+        </span>
+        <Badge variant="outline" className="text-[10px]">
+          <Database className="w-3 h-3 mr-1" />
+          {daemonStatus.poolSize}
+        </Badge>
+        {daemonStatus.pendingBacktests > 0 && (
+          <Badge variant="secondary" className="text-[10px]">
+            <Activity className="w-3 h-3 mr-1 animate-pulse" />
+            {daemonStatus.pendingBacktests}
+          </Badge>
+        )}
+      </div>
+
+      {/* Refresh Button */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleRefresh}
+        disabled={isRefreshing}
+        className="h-7 px-2 text-xs"
+      >
+        <RefreshCw
+          className={cn('w-3 h-3 mr-1', isRefreshing && 'animate-spin')}
+        />
+        Refresh
+      </Button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate('/')}
-              title="Back to Chat"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">
-                Conductor's Dashboard
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Autonomous Research OS Status
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {/* Daemon Status */}
-            <div className="flex items-center gap-2 border-l pl-4">
-              <div
-                className={cn(
-                  'w-2 h-2 rounded-full',
-                  daemonStatus.isRunning
-                    ? 'bg-green-500 animate-pulse'
-                    : 'bg-gray-500'
-                )}
-              />
-              <span className="text-sm text-muted-foreground flex items-center gap-1">
-                <Moon className="w-4 h-4" />
-                Night Shift
-              </span>
-              <Badge variant="outline" className="text-xs">
-                <Database className="w-3 h-3 mr-1" />
-                {daemonStatus.poolSize} strategies
-              </Badge>
-              {daemonStatus.pendingBacktests > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  <Activity className="w-3 h-3 mr-1 animate-pulse" />
-                  {daemonStatus.pendingBacktests} pending
-                </Badge>
-              )}
-            </div>
-
-            {/* Refresh Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-            >
-              <RefreshCw
-                className={cn('w-4 h-4 mr-2', isRefreshing && 'animate-spin')}
-              />
-              Refresh
-            </Button>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        title="Dashboard"
+        subtitle="Autonomous Research OS"
+        actions={headerActions}
+      />
 
       {/* Main Content */}
       <main className="p-6">
@@ -370,8 +352,6 @@ export default function Dashboard() {
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="guardian">Guardian</TabsTrigger>
-              <TabsTrigger value="strategies">Strategies</TabsTrigger>
-              <TabsTrigger value="trading">Trading</TabsTrigger>
               <TabsTrigger value="infrastructure">Infrastructure</TabsTrigger>
             </TabsList>
 
@@ -412,7 +392,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Mission Control - The Input */}
                 <div className="lg:col-span-2 h-[400px]">
-                  <MissionControl />
+                  <MissionMonitor />
                 </div>
 
                 {/* System Integrity - The Safety */}
@@ -429,45 +409,6 @@ export default function Dashboard() {
               {/* Bottom Row: Swarm Hive Monitor */}
               <div className="h-[450px]">
                 <SwarmHiveMonitor />
-              </div>
-            </TabsContent>
-
-            {/* Strategies Tab */}
-            <TabsContent value="strategies" className="space-y-4">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {/* Strategy Browser */}
-                <div className="lg:col-span-2 h-[600px]">
-                  <StrategyGenomeBrowser />
-                </div>
-
-                {/* Backtest Runner */}
-                <div className="h-[600px]">
-                  <BacktestRunner />
-                </div>
-              </div>
-
-              {/* Briefing Deck */}
-              <div className="h-[400px]">
-                <BriefingDeck
-                  briefings={briefings}
-                  onBriefingClick={handleBriefingClick}
-                  onPromote={handlePromote}
-                />
-              </div>
-            </TabsContent>
-
-            {/* Trading Tab */}
-            <TabsContent value="trading" className="space-y-4">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Shadow Position Monitor */}
-                <div className="h-[500px]">
-                  <ShadowPositionMonitor />
-                </div>
-
-                {/* Activity Feed */}
-                <div className="h-[500px]">
-                  <ActivityFeed />
-                </div>
               </div>
             </TabsContent>
 

@@ -2,13 +2,42 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last Updated:** 2025-12-01 (Post-Epic Refactor - All systems bulletproof)
+**Last Updated:** 2025-12-05
 
-## Project Overview
+---
 
-Quant Engine is a **general-purpose quantitative research workbench** built as an Electron desktop app. It supports research on ANY quantitative strategy (momentum, mean reversion, ML models, options, futures, whatever) through a flexible, data-driven visualization system.
+## READ FIRST: The Clear Path
 
-**Multi-Model Architecture:** Integrates Gemini 3 Pro (reasoning), Claude Code CLI (execution), and DeepSeek (massive parallel) for cost-optimized AI-assisted research.
+**This project is a Market Physics Engine + JARVIS Observatory.**
+
+### 1. Market Physics Engine
+Discover causal market mechanics (the "F=ma of markets") using physics, math, and AI swarms.
+- Core code: `python/engine/features/` and `python/engine/discovery/`
+- Authoritative doc: Obsidian `01-Architecture/MARKET-PHYSICS-ENGINE.md`
+
+### 2. JARVIS UI
+The Electron app is an **observatory** displaying Claude Code activity in real-time.
+- Work happens in Claude Code terminal, NOT in Electron chat
+- UI shows what we're doing via `emit_ui_event()`
+- Authoritative doc: Obsidian `01-Architecture/JARVIS-UI-ARCHITECTURE.md`
+
+### 3. AI Swarms
+DeepSeek parallel agents for discovery at scale.
+- Location: `scripts/deepseek_agent.py`
+
+### Noise to Ignore
+Sessions went off-track and added these - NOT the focus:
+- `python/engine/trading/*.py` (mean_reversion, gamma_scalping, etc.)
+- Old CIO/Gemini chat features
+- "Research IDE" framing
+
+**Focus: Physics Engine + JARVIS. That's it.**
+
+---
+
+## Technical Overview
+
+The Electron app infrastructure exists but the primary interaction is via Claude Code terminal.
 
 ## Development Commands
 

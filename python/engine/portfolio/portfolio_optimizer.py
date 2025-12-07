@@ -17,7 +17,7 @@ import pandas as pd
 from scipy.optimize import minimize
 
 from engine.discovery.structure_dna import StructureDNA
-from engine.discovery.fast_backtester import BacktestResult # Used for fitness metrics
+from engine.discovery.precision_backtester import BacktestResult  # Used for fitness metrics
 from engine.portfolio.portfolio_dna import PortfolioDNA, WeightingMethod, RebalanceFrequency, PortfolioObjective
 
 logger = logging.getLogger("AlphaFactory.PortfolioOptimizer")
@@ -64,13 +64,12 @@ class PortfolioOptimizer:
             return -sharpe # Minimize negative Sharpe
 
         elif objective == PortfolioObjective.SORTINO_RATIO:
-            # Downside deviation
-            downside_returns = portfolio_returns[portfolio_returns < 0]
-            if downside_returns.empty:
-                downside_std_dev = 0 # No downside, so no risk
-            else:
-                downside_std_dev = downside_returns.std() * np.sqrt(ann_factor)
-            
+            # FIX: Sortino uses LPM2 (Lower Partial Moment), not std of negative returns
+            # Per Gemini audit 2025-12-06: std(neg_returns) measures dispersion around mean loss,
+            # which is wrong. LPM2 = sqrt(mean(min(r, 0)^2)) measures dispersion around zero.
+            downside_returns = np.minimum(portfolio_returns, 0)  # Clip positive to 0
+            downside_std_dev = np.sqrt((downside_returns ** 2).mean()) * np.sqrt(ann_factor)
+
             if downside_std_dev == 0:
                 return -1e9 # Avoid division by zero if mean_return is negative, or if no downside risk -> infinite sortino
             sortino = mean_return / downside_std_dev

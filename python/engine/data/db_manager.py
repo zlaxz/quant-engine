@@ -9,7 +9,8 @@ class DataEngine:
     Connects directly to Parquet files for zero-copy queries.
     """
     def __init__(self, db_path=":memory:"):
-        self.con = duckdb.connect(db_path)
+        # M4 Pro optimization: use all 14 cores for parallel query execution
+        self.con = duckdb.connect(db_path, config={'threads': 14})
         self.con.execute("INSTALL parquet; LOAD parquet;")
 
         # 1. Detect Data Path (VelocityData or Local)

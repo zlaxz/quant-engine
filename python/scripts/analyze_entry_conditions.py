@@ -334,23 +334,34 @@ def main():
 
     all_data = load_trades(data_file)
 
-    # Analyze each profile
-    analysis_results = {}
+    # Analyze each profile - parallelized for M4 Pro
+    from concurrent.futures import ThreadPoolExecutor
 
-    for profile_id, profile_data in all_data.items():
+    def analyze_single_profile(args):
+        profile_id, profile_data = args
         if 'trades' not in profile_data:
-            continue
-
+            return None
         trades = profile_data['trades']
-        print(f"\nAnalyzing {profile_id}: {len(trades)} trades...")
-
         results = analyze_profile(profile_id, trades)
+        return (profile_id, results, len(trades))
+
+    profile_items = list(all_data.items())
+
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        results_list = list(executor.map(analyze_single_profile, profile_items))
+
+    # Collect results
+    analysis_results = {}
+    for result in results_list:
+        if result is None:
+            continue
+        profile_id, results, n_trades = result
         analysis_results[profile_id] = results
 
         # Quick preview
         summary = results['summary']
-        print(f"  Win rate: {summary['win_rate']*100:.1f}%")
-        print(f"  Recommendations: {len(results['recommendations'])} entry gates")
+        print(f"  {profile_id}: {n_trades} trades, Win rate: {summary['win_rate']*100:.1f}%, "
+              f"Recommendations: {len(results['recommendations'])} entry gates")
 
     # Generate outputs
     print("\n" + "="*80)

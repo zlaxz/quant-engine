@@ -22,6 +22,7 @@ Research Source: CORRELATION-DYNAMICS-RESEARCH.md
 """
 
 import logging
+import warnings
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -242,7 +243,7 @@ def dcc_garch_filter(
 
     # Stage 2: DCC dynamics
     Q_list = [Q_bar.copy()]
-    R_list = [Q_bar.copy()]]]]]]]]
+    R_list = [Q_bar.copy()]
     H_list = []
 
     # Initial covariance
@@ -400,7 +401,7 @@ def rolling_absorption_ratio(
     n_factors: int = None
 ) -> pd.Series:
     """
-    Calculate rolling Absorption Ratio.
+    Calculate rolling Absorption Ratio - PARALLELIZED for M4 Pro.
 
     Args:
         returns: DataFrame with asset returns
@@ -410,15 +411,25 @@ def rolling_absorption_ratio(
     Returns:
         Series of Absorption Ratios
     """
+    from concurrent.futures import ThreadPoolExecutor
+
     returns_arr = returns.values
     T = len(returns)
 
-    ar_values = np.full(T, np.nan)
-
-    for t in range(window, T):
+    def calc_ar_at_t(t):
+        """Calculate absorption ratio at time t."""
         window_returns = returns_arr[t-window:t]
         cov = np.cov(window_returns.T)
-        ar_values[t] = absorption_ratio(cov, n_factors)
+        return absorption_ratio(cov, n_factors)
+
+    # Parallel eigenvalue decomposition for M4 Pro
+    indices = range(window, T)
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        ar_computed = list(executor.map(calc_ar_at_t, indices))
+
+    ar_values = np.full(T, np.nan)
+    for i, t in enumerate(indices):
+        ar_values[t] = ar_computed[i]
 
     return pd.Series(ar_values, index=returns.index, name='absorption_ratio')
 

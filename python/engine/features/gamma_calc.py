@@ -41,22 +41,31 @@ def black_scholes_greeks(
     is_call: bool = True
 ) -> Dict[str, float]:
     """
-    Calculate Black-Scholes Greeks.
+    Calculate Black-Scholes Greeks including second-order Greeks.
 
-    Returns dict with: delta, gamma, theta, vega
+    Returns dict with: delta, gamma, theta, vega, vanna, charm
+
+    Second-order Greeks:
+    - Vanna: dDelta/dIV = dVega/dSpot - How delta changes with volatility
+    - Charm: dDelta/dTime - How delta decays over time (delta bleed)
+
+    These drive MECHANICAL dealer hedging flows:
+    - When IV spikes, dealers must adjust delta hedges (vanna flow)
+    - As time passes, delta changes and dealers must rebalance (charm flow)
     """
     # Validate inputs - all must be positive to avoid div/0 and log(negative)
     if spot <= 0 or strike <= 0 or tte <= 0 or iv <= 0:
-        return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0}
+        return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0, 'vanna': 0, 'charm': 0}
 
     sqrt_t = np.sqrt(tte)
     # Avoid division by zero: check iv * sqrt_t > 0
     denominator = iv * sqrt_t
     if denominator <= 1e-12:
-        return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0}
-    
+        return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0, 'vanna': 0, 'charm': 0}
+
     d1 = (np.log(spot / strike) + (rate + 0.5 * iv**2) * tte) / denominator
     d2 = d1 - iv * sqrt_t
+    phi_d1 = norm.pdf(d1)
 
     # Gamma (same for calls and puts)
     # Avoid division by zero: check spot * iv * sqrt_t > 0
@@ -64,7 +73,7 @@ def black_scholes_greeks(
     if gamma_denominator <= 1e-12:
         gamma = 0
     else:
-        gamma = norm.pdf(d1) / gamma_denominator
+        gamma = phi_d1 / gamma_denominator
 
     # Delta
     if is_call:
@@ -76,21 +85,44 @@ def black_scholes_greeks(
     # NOTE: Vega is normalized to per-1%-IV change (divided by 100)
     # This is different from gamma which is per-$1 move in underlying
     # If mixing Greeks, ensure consistent scaling. Gamma is NOT normalized.
-    vega = spot * norm.pdf(d1) * sqrt_t / 100  # $ per 1% IV change
+    vega = spot * phi_d1 * sqrt_t / 100  # $ per 1% IV change
 
     # Theta
-    theta_common = -(spot * norm.pdf(d1) * iv) / (2 * sqrt_t)
+    theta_common = -(spot * phi_d1 * iv) / (2 * sqrt_t)
     if is_call:
         theta = theta_common - rate * strike * np.exp(-rate * tte) * norm.cdf(d2)
     else:
         theta = theta_common + rate * strike * np.exp(-rate * tte) * norm.cdf(-d2)
     theta = theta / 365  # Per day
 
+    # ==========================================================================
+    # SECOND-ORDER GREEKS - THE MECHANICAL EDGE
+    # ==========================================================================
+
+    # Vanna: dDelta/dIV = dVega/dSpot
+    # Vanna = phi(d1) * sqrt(T) * (1 - d1 / (sigma * sqrt(T)))
+    # Same for calls and puts
+    # Measures how delta changes when IV changes - drives vol-spike hedging flows
+    vanna = phi_d1 * sqrt_t * (1 - d1 / (iv * sqrt_t)) if iv * sqrt_t > 1e-12 else 0
+
+    # Charm: dDelta/dTime (delta decay/bleed)
+    # For calls: charm = -phi(d1) * (2*r*T - d2*sigma*sqrt(T)) / (2*T*sigma*sqrt(T))
+    # For puts: charm_put = charm_call (same formula, different sign convention)
+    # Measures daily delta decay - drives EOD and expiration hedging flows
+    charm_denom = 2 * tte * iv * sqrt_t
+    if abs(charm_denom) > 1e-12:
+        charm = -phi_d1 * (2 * rate * tte - d2 * iv * sqrt_t) / charm_denom
+    else:
+        charm = 0
+    charm = charm / 365  # Per day (like theta)
+
     return {
         'delta': delta,
         'gamma': gamma,
         'theta': theta,
-        'vega': vega
+        'vega': vega,
+        'vanna': vanna,
+        'charm': charm
     }
 
 
@@ -100,7 +132,21 @@ def black_scholes_greeks(
 
 @dataclass
 class GammaExposure:
-    """Gamma exposure calculation result."""
+    """
+    Greeks exposure calculation result.
+
+    Includes first-order (GEX) and second-order (VEX, CEX) exposures.
+
+    GEX (Gamma Exposure): How much dealers must hedge for a $1 move
+    VEX (Vanna Exposure): How much delta changes if IV moves 1%
+    CEX (Charm Exposure): How much delta decays per day
+
+    These drive MECHANICAL flows:
+    - GEX: Dealers hedge gamma → mean reversion vs momentum
+    - VEX: Vol spike → forced delta adjustment → predictable flow
+    - CEX: Time decay → EOD/expiration flows → predictable rebalancing
+    """
+    # Gamma Exposure (first-order)
     net_gex: float                    # Net gamma exposure (notional $)
     call_gex: float                   # Call gamma exposure
     put_gex: float                    # Put gamma exposure
@@ -109,6 +155,24 @@ class GammaExposure:
     max_put_wall: float               # Strike with highest put gamma
     dealer_position: str              # 'LONG_GAMMA' or 'SHORT_GAMMA'
     gex_by_strike: Dict[float, float] # GEX at each strike
+
+    # Vanna Exposure (second-order) - NEW
+    net_vex: float = 0.0              # Net vanna exposure (delta change per 1% IV)
+    call_vex: float = 0.0             # Call vanna exposure
+    put_vex: float = 0.0              # Put vanna exposure
+    vex_by_strike: Dict[float, float] = None  # VEX at each strike
+
+    # Charm Exposure (second-order) - NEW
+    net_cex: float = 0.0              # Net charm exposure (delta decay per day)
+    call_cex: float = 0.0             # Call charm exposure
+    put_cex: float = 0.0              # Put charm exposure
+    cex_by_strike: Dict[float, float] = None  # CEX at each strike
+
+    def __post_init__(self):
+        if self.vex_by_strike is None:
+            self.vex_by_strike = {}
+        if self.cex_by_strike is None:
+            self.cex_by_strike = {}
 
 
 class GammaCalculator:
@@ -192,36 +256,35 @@ class GammaCalculator:
         else:
             df['tte'] = 30 / 365  # Default 30 days
 
-        # Calculate gamma if not provided
-        if 'gamma' not in df.columns:
-            iv_col = 'implied_volatility' if 'implied_volatility' in df.columns else None
-            df['gamma'] = df.apply(
-                lambda row: self._calc_gamma(
+        # Calculate Greeks if not provided
+        iv_col = 'implied_volatility' if 'implied_volatility' in df.columns else None
+
+        if 'gamma' not in df.columns or 'vanna' not in df.columns or 'charm' not in df.columns:
+            # Calculate all Greeks at once for efficiency
+            def calc_all_greeks(row):
+                iv = row.get(iv_col, 0.25) if iv_col else 0.25
+                return black_scholes_greeks(
                     spot_price,
                     row['strike'],
                     row['tte'],
-                    row.get(iv_col, 0.25) if iv_col else 0.25
-                ),
-                axis=1
-            )
-            # Handle NaN values from gamma calculation
-            df['gamma'] = df['gamma'].fillna(0)
-            # Handle NaN values from gamma calculation
-            df['gamma'] = df['gamma'].fillna(0)
-            # Handle NaN values from gamma calculation
-            df['gamma'] = df['gamma'].fillna(0)
-            # Handle NaN values from gamma calculation
-            df['gamma'] = df['gamma'].fillna(0)
-            # Handle NaN values from gamma calculation
-            df['gamma'] = df['gamma'].fillna(0)
-            # Handle NaN values from gamma calculation
-            df['gamma'] = df['gamma'].fillna(0)
-            # Handle NaN values from gamma calculation
-            df['gamma'] = df['gamma'].fillna(0)
-            # Handle NaN values from gamma calculation
-            df['gamma'] = df['gamma'].fillna(0)
-            # Handle NaN values from gamma calculation
-            df['gamma'] = df['gamma'].fillna(0)
+                    self.risk_free_rate,
+                    iv,
+                    row['is_call']
+                )
+
+            greeks_df = df.apply(calc_all_greeks, axis=1, result_type='expand')
+
+            if 'gamma' not in df.columns:
+                df['gamma'] = greeks_df['gamma'].fillna(0)
+            if 'vanna' not in df.columns:
+                df['vanna'] = greeks_df['vanna'].fillna(0)
+            if 'charm' not in df.columns:
+                df['charm'] = greeks_df['charm'].fillna(0)
+
+        # Ensure no NaN values
+        df['gamma'] = df['gamma'].fillna(0)
+        df['vanna'] = df['vanna'].fillna(0)
+        df['charm'] = df['charm'].fillna(0)
 
         # Calculate GEX per contract (Dollar Gamma)
         # GEX = Gamma * OI * 100 * Spot
@@ -254,6 +317,54 @@ class GammaCalculator:
         call_gex = df[df['is_call']]['dealer_gex'].sum()
         put_gex = df[~df['is_call']]['dealer_gex'].sum()
         net_gex = call_gex + put_gex
+
+        # ======================================================================
+        # VEX (Vanna Exposure) - How delta changes if IV moves 1%
+        # ======================================================================
+        # VEX = Vanna * OI * 100
+        # Vanna is dDelta/dIV, so VEX tells us: if IV moves 1%, how much
+        # delta do dealers need to hedge?
+        df['vex_per_strike'] = (
+            df['vanna'] *
+            df['open_interest'] *
+            100  # Shares per contract
+        )
+
+        # Dealer VEX (same sign logic as GEX)
+        df['dealer_vex'] = np.where(
+            df['is_call'],
+            -df['vex_per_strike'] if self.DEALER_SHORT_CALLS else df['vex_per_strike'],
+            df['vex_per_strike'] if self.DEALER_SHORT_PUTS else -df['vex_per_strike']
+        )
+
+        vex_by_strike = df.groupby('strike')['dealer_vex'].sum().to_dict()
+        call_vex = df[df['is_call']]['dealer_vex'].sum()
+        put_vex = df[~df['is_call']]['dealer_vex'].sum()
+        net_vex = call_vex + put_vex
+
+        # ======================================================================
+        # CEX (Charm Exposure) - How delta decays per day
+        # ======================================================================
+        # CEX = Charm * OI * 100
+        # Charm is dDelta/dTime, so CEX tells us: how much delta decays
+        # each day that dealers must rebalance?
+        df['cex_per_strike'] = (
+            df['charm'] *
+            df['open_interest'] *
+            100  # Shares per contract
+        )
+
+        # Dealer CEX (same sign logic as GEX)
+        df['dealer_cex'] = np.where(
+            df['is_call'],
+            -df['cex_per_strike'] if self.DEALER_SHORT_CALLS else df['cex_per_strike'],
+            df['cex_per_strike'] if self.DEALER_SHORT_PUTS else -df['cex_per_strike']
+        )
+
+        cex_by_strike = df.groupby('strike')['dealer_cex'].sum().to_dict()
+        call_cex = df[df['is_call']]['dealer_cex'].sum()
+        put_cex = df[~df['is_call']]['dealer_cex'].sum()
+        net_cex = call_cex + put_cex
 
         # Find gamma walls (strikes with highest GEX)
         # Call wall = highest gamma strike ABOVE spot (resistance)
@@ -290,6 +401,7 @@ class GammaCalculator:
         dealer_position = 'LONG_GAMMA' if net_gex > 0 else 'SHORT_GAMMA'
 
         return GammaExposure(
+            # First-order (Gamma)
             net_gex=net_gex,
             call_gex=call_gex,
             put_gex=put_gex,
@@ -297,7 +409,17 @@ class GammaCalculator:
             max_call_wall=max_call_wall,
             max_put_wall=max_put_wall,
             dealer_position=dealer_position,
-            gex_by_strike=gex_by_strike
+            gex_by_strike=gex_by_strike,
+            # Second-order (Vanna)
+            net_vex=net_vex,
+            call_vex=call_vex,
+            put_vex=put_vex,
+            vex_by_strike=vex_by_strike,
+            # Second-order (Charm)
+            net_cex=net_cex,
+            call_cex=call_cex,
+            put_cex=put_cex,
+            cex_by_strike=cex_by_strike
         )
 
     def _calc_gamma(
@@ -361,15 +483,27 @@ class GammaCalculator:
 
 class GammaFeatures:
     """
-    Generate gamma-based features from options chain data.
+    Generate Greeks exposure features from options chain data.
 
-    Features:
+    First-Order Features (Gamma):
     - net_gex: Net gamma exposure
     - gex_normalized: GEX as % of average daily volume
     - distance_to_call_wall: % distance to nearest call wall
     - distance_to_put_wall: % distance to nearest put wall
     - zero_gamma_distance: % distance to zero gamma level
     - dealer_position: 1 = long gamma (stable), 0 = short gamma (volatile)
+
+    Second-Order Features (Vanna/Charm) - NEW:
+    - net_vex: Net vanna exposure (delta change per 1% IV move)
+    - vex_normalized: VEX as % of average daily volume
+    - vex_zscore: How extreme is current VEX vs 20-day history
+    - net_cex: Net charm exposure (delta decay per day)
+    - cex_normalized: CEX as % of average daily volume
+    - cex_zscore: How extreme is current CEX vs 20-day history
+
+    Why these matter:
+    - VEX predicts flows during vol spikes/drops (mechanical hedging)
+    - CEX predicts EOD and expiration flows (time decay hedging)
     """
 
     def __init__(self, lag: int = 1):
@@ -411,34 +545,53 @@ class GammaFeatures:
                 logger.warning("Options data missing date column")
                 return result
 
-        # Calculate GEX for each date
-        gex_records = []
+        # Pre-compute spot prices for all dates (thread-safe lookup)
+        unique_dates = options_chain_df['date'].unique()
+        spot_by_date = {}
+        for date in unique_dates:
+            matches = result[result.index.date == date]
+            if len(matches) > 0:
+                spot_by_date[date] = matches[price_col].iloc[0]
 
-        for date in options_chain_df['date'].unique():
-            date_chain = options_chain_df[options_chain_df['date'] == date]
+        # Pre-group options data by date for parallel processing
+        options_by_date = {date: options_chain_df[options_chain_df['date'] == date]
+                          for date in unique_dates}
 
-            # Get spot price for this date
-            spot = result[result.index.date == date][price_col].iloc[0] if len(
-                result[result.index.date == date]
-            ) > 0 else None
-
+        def calc_gex_for_date(date):
+            """Calculate GEX for a single date - designed for parallel execution."""
+            spot = spot_by_date.get(date)
             if spot is None:
-                continue
-
+                return None
+            date_chain = options_by_date[date]
             try:
                 gex = self.calculator.calculate_gex(date_chain, spot, pd.Timestamp(date))
-                gex_records.append({
+                return {
                     'date': date,
+                    # First-order (Gamma)
                     'net_gex': gex.net_gex,
                     'call_gex': gex.call_gex,
                     'put_gex': gex.put_gex,
                     'zero_gamma_level': gex.zero_gamma_level,
                     'max_call_wall': gex.max_call_wall,
                     'max_put_wall': gex.max_put_wall,
-                    'dealer_long_gamma': 1 if gex.dealer_position == 'LONG_GAMMA' else 0
-                })
+                    'dealer_long_gamma': 1 if gex.dealer_position == 'LONG_GAMMA' else 0,
+                    # Second-order (Vanna)
+                    'net_vex': gex.net_vex,
+                    'call_vex': gex.call_vex,
+                    'put_vex': gex.put_vex,
+                    # Second-order (Charm)
+                    'net_cex': gex.net_cex,
+                    'call_cex': gex.call_cex,
+                    'put_cex': gex.put_cex,
+                }
             except Exception as e:
                 logger.warning(f"GEX calculation failed for {date}: {e}")
+                return None
+
+        # Parallel GEX calculation for M4 Pro (14 cores)
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=12) as executor:
+            gex_records = list(filter(None, executor.map(calc_gex_for_date, unique_dates)))
 
         if not gex_records:
             logger.warning("No GEX data calculated")
@@ -461,10 +614,16 @@ class GammaFeatures:
         result = result.merge(gex_df, on='date', how='left')
         result = result.ffill()  # Forward fill GEX values
 
-        # Apply lag
-        gex_cols = ['net_gex', 'call_gex', 'put_gex', 'zero_gamma_level',
-                    'max_call_wall', 'max_put_wall', 'dealer_long_gamma']
-        for col in gex_cols:
+        # Apply lag to all exposure columns
+        exposure_cols = [
+            # First-order
+            'net_gex', 'call_gex', 'put_gex', 'zero_gamma_level',
+            'max_call_wall', 'max_put_wall', 'dealer_long_gamma',
+            # Second-order
+            'net_vex', 'call_vex', 'put_vex',
+            'net_cex', 'call_cex', 'put_cex'
+        ]
+        for col in exposure_cols:
             if col in result.columns:
                 result[col] = result[col].shift(lag)
 
@@ -493,6 +652,42 @@ class GammaFeatures:
                 (result['net_gex'] - result['net_gex'].rolling(20).mean()) /
                 (result['net_gex'].rolling(20).std() + 1e-10)
             )
+
+        # ======================================================================
+        # VEX (Vanna Exposure) Features - NEW
+        # ======================================================================
+        if 'net_vex' in result.columns:
+            # VEX normalized by volume
+            if volume_col in result.columns:
+                avg_vol = result[volume_col].rolling(20).mean()
+                result['vex_normalized'] = result['net_vex'] / (avg_vol * spot + 1e-10)
+
+            # VEX z-score (how extreme is current vanna exposure?)
+            result['vex_zscore'] = (
+                (result['net_vex'] - result['net_vex'].rolling(20).mean()) /
+                (result['net_vex'].rolling(20).std() + 1e-10)
+            )
+
+            # VEX momentum
+            result['vex_change_1d'] = result['net_vex'].pct_change()
+
+        # ======================================================================
+        # CEX (Charm Exposure) Features - NEW
+        # ======================================================================
+        if 'net_cex' in result.columns:
+            # CEX normalized by volume
+            if volume_col in result.columns:
+                avg_vol = result[volume_col].rolling(20).mean()
+                result['cex_normalized'] = result['net_cex'] / (avg_vol * spot + 1e-10)
+
+            # CEX z-score (how extreme is current charm exposure?)
+            result['cex_zscore'] = (
+                (result['net_cex'] - result['net_cex'].rolling(20).mean()) /
+                (result['net_cex'].rolling(20).std() + 1e-10)
+            )
+
+            # CEX momentum
+            result['cex_change_1d'] = result['net_cex'].pct_change()
 
         # Drop helper column
         if 'date' in result.columns:
@@ -566,7 +761,7 @@ if __name__ == '__main__':
     calc = GammaCalculator()
     gex = calc.calculate_gex(chain_df, spot, pd.Timestamp('2024-01-15'))
 
-    print(f"\n=== GEX Results ===")
+    print(f"\n=== GEX Results (First-Order: Gamma) ===")
     print(f"Net GEX:          ${gex.net_gex:,.0f}")
     print(f"Call GEX:         ${gex.call_gex:,.0f}")
     print(f"Put GEX:          ${gex.put_gex:,.0f}")
@@ -575,7 +770,29 @@ if __name__ == '__main__':
     print(f"Max Call Wall:    ${gex.max_call_wall:.0f}")
     print(f"Max Put Wall:     ${gex.max_put_wall:.0f}")
 
+    print(f"\n=== VEX Results (Second-Order: Vanna) ===")
+    print(f"Net VEX:          ${gex.net_vex:,.0f}")
+    print(f"Call VEX:         ${gex.call_vex:,.0f}")
+    print(f"Put VEX:          ${gex.put_vex:,.0f}")
+    print("(VEX = Vanna * OI * 100 - predicts flows during IV changes)")
+
+    print(f"\n=== CEX Results (Second-Order: Charm) ===")
+    print(f"Net CEX:          ${gex.net_cex:,.0f}")
+    print(f"Call CEX:         ${gex.call_cex:,.0f}")
+    print(f"Put CEX:          ${gex.put_cex:,.0f}")
+    print("(CEX = Charm * OI * 100 - predicts EOD/expiration flows)")
+
     print("\nGEX by strike (top 5):")
     sorted_gex = sorted(gex.gex_by_strike.items(), key=lambda x: abs(x[1]), reverse=True)
     for strike, g in sorted_gex[:5]:
         print(f"  ${strike:.0f}: ${g:,.0f}")
+
+    print("\nVEX by strike (top 5):")
+    sorted_vex = sorted(gex.vex_by_strike.items(), key=lambda x: abs(x[1]), reverse=True)
+    for strike, v in sorted_vex[:5]:
+        print(f"  ${strike:.0f}: ${v:,.0f}")
+
+    print("\nCEX by strike (top 5):")
+    sorted_cex = sorted(gex.cex_by_strike.items(), key=lambda x: abs(x[1]), reverse=True)
+    for strike, c in sorted_cex[:5]:
+        print(f"  ${strike:.0f}: ${c:,.0f}")

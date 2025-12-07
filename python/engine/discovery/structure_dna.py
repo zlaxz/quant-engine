@@ -143,33 +143,6 @@ class StructureDNA:
         if self.min_term_struct > self.max_term_struct:
             self.min_term_struct, self.max_term_struct = self.max_term_struct, self.min_term_struct
         if self.min_vol_pcr > self.max_vol_pcr:
-            self.min_vol_pcr, self.max_vol_pcr = self.max_vol_pcr, self.min_vol_pcr> self.max_vol_pcr:
-            self.min_vol_pcr, self.max_vol_pcr = self.max_vol_pcr, self.min_vol_pcr
-        # Ensure min/max bounds are valid
-        if self.min_iv_rank > self.max_iv_rank:
-            self.min_iv_rank, self.max_iv_rank = self.max_iv_rank, self.min_iv_rank
-        if self.min_vix > self.max_vix:
-            self.min_vix, self.max_vix = self.max_vix, self.min_vix
-        if self.min_atm_cost > self.max_atm_cost:
-            self.min_atm_cost, self.max_atm_cost = self.max_atm_cost, self.min_atm_cost
-        if self.min_skew > self.max_skew:
-            self.min_skew, self.max_skew = self.max_skew, self.min_skew
-        if self.min_term_struct > self.max_term_struct:
-            self.min_term_struct, self.max_term_struct = self.max_term_struct, self.min_term_struct
-        if self.min_vol_pcr > self.max_vol_pcr:
-            self.min_vol_pcr, self.max_vol_pcr = self.max_vol_pcr, self.min_vol_pcr
-        # Ensure min/max bounds are valid
-        if self.min_iv_rank > self.max_iv_rank:
-            self.min_iv_rank, self.max_iv_rank = self.max_iv_rank, self.min_iv_rank
-        if self.min_vix > self.max_vix:
-            self.min_vix, self.max_vix = self.max_vix, self.min_vix
-        if self.min_atm_cost > self.max_atm_cost:
-            self.min_atm_cost, self.max_atm_cost = self.max_atm_cost, self.min_atm_cost
-        if self.min_skew > self.max_skew:
-            self.min_skew, self.max_skew = self.max_skew, self.min_skew
-        if self.min_term_struct > self.max_term_struct:
-            self.min_term_struct, self.max_term_struct = self.max_term_struct, self.min_term_struct
-        if self.min_vol_pcr > self.max_vol_pcr:
             self.min_vol_pcr, self.max_vol_pcr = self.max_vol_pcr, self.min_vol_pcr
 
     @property

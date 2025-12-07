@@ -1,260 +1,195 @@
-# SYSTEM STATE - 2025-12-03
+# Session Handoff
 
-**Last Updated:** 2025-12-03 (Very Late Night)
-**Status:** FEATURE PIPELINE COMPLETE + 400M ROWS DOWNLOADED
-
----
-
-## THE COMPLETE PICTURE
-
-This document is the single source of truth for what's built and how to use it.
-
-### What Exists
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         UI LAYER                             │
-│  Electron App + React + Chat + Dashboards                   │
-│  CIO (Gemini) lives here - can spawn agents, request work   │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      PYTHON ENGINE                           │
-│  server.py (port 5001) + Feature Pipeline + Backtester      │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                         DATA LAKE                            │
-│  /Volumes/VelocityData/velocity_om/massive                  │
-│  13M stock rows + 394M options rows (2020-2025)             │
-└─────────────────────────────────────────────────────────────┘
-```
+**Last Updated:** 2025-12-07
+**Project:** quant-engine
+**Status:** Major architecture evolution - Multi-layer swarm + Futures pivot
 
 ---
 
-## FEATURE PIPELINE (Audited 2025-12-03)
+## This Session (Dec 7) - FLEET ARCHITECTURE + FUTURES PIVOT
 
-**Location:** `python/engine/features/`
+### Big Picture Decisions
 
-All 7 files audited. ~86 bugs fixed. All pass integration tests.
+1. **Futures First** - Pivoting from options complexity to futures simplicity
+   - ES/NQ for validation (simpler: price up/down, no Greeks)
+   - MES for live forward testing ($50 risk per trade)
+   - Options become "advanced mode" overlay once futures edge proven
 
-| File | Purpose | Key Features |
-|------|---------|--------------|
-| `raw_features.py` | OHLCV-derived features | Returns (1-60d), volatility, volume, microstructure, gaps |
-| `regime.py` | Market regime classification | VIX regime (PAUSE/SUBOPTIMAL/OPTIMAL), trend (STRONG_DOWN to STRONG_UP), combined 4-state |
-| `sector_regime.py` | Sector rotation signals | Per-sector regime, rotation patterns, relative strength |
-| `domain_features.py` | VIX term structure | Backwardation/contango, vol crush/spike signals, VIX dynamics |
-| `momentum_logic.py` | Momentum scoring | Velocity scores, trend state (DYING/STEADY/ACCELERATING), MTF alignment |
-| `cross_asset.py` | Cross-asset relationships | Price ratios, rolling correlations, relative strength vs SPY |
-| `gamma_calc.py` | Options gamma exposure | GEX calculation, zero gamma levels, dealer positioning |
+2. **Autonomous Claude Fleet** - Zach building secret sauce for autonomous Claude operation
+   - Removes human-in-the-loop constraint
+   - Enables 24/7 operation
 
-### How to Use Features
+3. **Multi-Layer Swarm Architecture** - See FLEET ARCHITECTURE section below
 
-**Option 1: main_harvest.py (Recommended)**
-```bash
-# Process single symbol
-python scripts/main_harvest.py --symbol SPY --start 2020-01-01 --end 2025-12-01
+### Actions Taken
 
-# Process all Liquid 16
-python scripts/main_harvest.py --all-symbols --start 2020-01-01 --end 2025-12-01
+- Created `MissionControl.tsx` - ADHD-friendly focus tracker in Observatory
+- Created `mission_control` Supabase table for persistence
+- Split Launchpad into Trading vs Discovery sections
+- Created `JournalView.tsx` + `pipeline_journal` table for activity tracking
+- Signed up for Databento (futures data)
+- Created `download_futures_databento.py` (symbology needs fixing)
+- Added `DATABENTO_API_KEY` to .env
 
-# Output: /Volumes/VelocityData/velocity_om/features/{SYMBOL}_master_features.parquet
-```
-
-**Option 2: Programmatic API**
-```python
-from engine.features.raw_features import RawFeatureGenerator
-from engine.features.regime import add_regime_features
-from engine.features.domain_features import add_domain_features
-
-# Load your OHLCV data (must include 'vix' column)
-df = load_data(...)
-
-# Add features (lag=1 prevents lookahead bias)
-raw_gen = RawFeatureGenerator()
-df = raw_gen.generate(df, include_targets=False)
-df = add_regime_features(df, spy_col='close', lag=1)
-df = add_domain_features(df, vix_col='vix', lag=1)
-```
-
-### Critical Pattern: Epsilon Floors
-
-**NEVER use `1e-10` for division protection.** Use proportional floors:
-
-```python
-# BAD - causes explosion
-result = value / max(denom, 1e-10)
-
-# GOOD - proportional floor
-floor = np.maximum(denom, value.abs() * 0.01)
-result = value / floor
-```
-
-See: `08-Learnings/what-worked/epsilon-floor-pattern.md`
-
----
-
-## DATA LAKE (Downloaded 2025-12-03)
-
-**Location:** `/Volumes/VelocityData/velocity_om/massive`
-
-| Dataset | Rows | Format | Status |
-|---------|------|--------|--------|
-| Stocks | 13,154,539 | Daily parquet | ✅ Complete |
-| Options | 394,130,862 | Daily parquet | ✅ Complete |
-| Futures | 0 | - | ❌ 403 (subscription tier) |
-
-**Symbols (Liquid 16):**
-SPY, QQQ, IWM, DIA, GLD, SLV, TLT, LQD, HYG, USO, VXX, XLF, XLK, XLE, EEM, EFA
-
-**Date Range:** 2020-01-01 to 2025-12-03 (1,546 trading days)
-
-### Data Structure
+### Files Created/Modified
 
 ```
-/Volumes/VelocityData/velocity_om/massive/
-├── stocks/
-│   ├── 2020-01-02.parquet
-│   └── ... (1,486 files)
-└── options/
-    ├── 2020-01-02.parquet
-    └── ... (1,488 files, ~260K rows each)
-```
-
-### How to Load Data
-
-```python
-import duckdb
-
-# Query stocks
-con = duckdb.connect()
-df = con.execute("""
-    SELECT * FROM read_parquet('/Volumes/VelocityData/velocity_om/massive/stocks/*.parquet')
-    WHERE symbol = 'SPY'
-""").df()
-
-# Query options
-df = con.execute("""
-    SELECT * FROM read_parquet('/Volumes/VelocityData/velocity_om/massive/options/*.parquet')
-    WHERE underlying = 'SPY' AND dte BETWEEN 7 AND 45
-""").df()
+src/components/observatory/MissionControl.tsx  (NEW)
+src/components/observatory/JournalView.tsx     (NEW)
+src/pages/Observatory.tsx                      (MissionControl added)
+src/pages/Launchpad.tsx                        (Trading/Discovery split)
+python/scripts/download_futures_databento.py   (NEW - needs symbology fix)
 ```
 
 ---
 
-## DAEMON SYSTEM (Autonomous)
+## FLEET ARCHITECTURE (The Vision)
 
-**Location:** `python/daemon.py`
-
-The daemon runs autonomously:
+### Hierarchy
 
 ```
-Loop (continuous):
-  0. DISCOVERY (30 min)  - MorphologyScanner finds opportunities
-  1. MISSION (1 hour)    - Hunts for target strategies
-  2. HARVEST (5 min)     - Collects mutations
-  3. EXECUTE (10 min)    - Runs backtests
-  4. PUBLISH (6 AM)      - Morning briefings
-  5. SHADOW (continuous) - Live paper trading
+LAYER 0: Zach (strategic direction)
+         │
+LAYER 1: 5 Claude Sessions (autonomous via secret sauce)
+         │  - HUNTER: Opportunity detection
+         │  - GUARDIAN: Risk/execution
+         │  - ANALYST: Post-trade learning
+         │  - ARBITER: Cross-validation
+         │  - SYNTHESIS: Combines findings
+         │
+LAYER 2: 5 DeepSeek Captains per Claude = 25 total
+         │  - Domain specialists within each Claude's focus
+         │
+LAYER 3: 5 DeepSeek Supervisors per Captain = 125 total
+         │  - Timeframe or task specialists
+         │
+LAYER 4: 50 DeepSeek Workers per Supervisor = 6,250 total
+            - Atomic task executors (scan, price, backtest)
 ```
 
----
+### Math
 
-## WHAT'S WORKING (Don't Break)
-
-### Core Systems
-- ✅ Electron app + React UI
-- ✅ Python API (port 5001)
-- ✅ Feature pipeline (7 files, audited)
-- ✅ Data lake (400M rows)
-- ✅ TradeSimulator (timezone-aware)
-- ✅ Greeks (edge cases handled)
-- ✅ MorphologyScanner (autonomous discovery)
-- ✅ ThetaTerminal integration
-- ✅ Memory systems (MCP Obsidian, Supabase)
-
-### Infrastructure
-- ✅ Build compiles (`npm run build`)
-- ✅ All Python files pass syntax check
-- ✅ IPC handlers have error handling
-
----
-
-## WHAT'S NOT CONNECTED (Known Gaps)
-
-| Gap | Status | Notes |
-|-----|--------|-------|
-| Feature pipeline → Backtest UI | ❓ Needs verification | Can BacktestRunner use these features? |
-| Data lake → Data loaders | ❓ Needs verification | Do loaders know about `/Volumes/VelocityData`? |
-| ProfileDetectors | ❌ Stub only | Class doesn't exist, using fallback |
-| MissionControl UI | ❌ Not built | Backend exists, no frontend |
-
----
-
-## FOR THE CIO (Gemini)
-
-When the user asks for research:
-
-1. **Feature Pipeline Ready:** You can request features from `python/engine/features/`
-2. **400M Options Rows:** Data is at `/Volumes/VelocityData/velocity_om/massive/options/`
-3. **Use DuckDB:** Query parquet files directly, don't load into memory
-4. **Epsilon Floor Pattern:** Any division operations must use proportional floors
-
-Example prompt the user might give:
-> "Analyze gamma exposure patterns in SPY options during VIX spikes"
-
-What you should do:
-1. Query options data for SPY
-2. Use `gamma_calc.py` for GEX calculations
-3. Use `regime.py` to identify VIX spikes
-4. Correlate GEX with price moves
-
----
-
-## FOR CLAUDE CODE
-
-When starting a session:
-
-1. **Read this file first** - It's the complete picture
-2. **Check SESSION_STATE.md** - For what's broken/in-progress
-3. **Query memory** - `memory_recall "quant-engine: [topic]"`
-4. **Don't break working code** - Feature pipeline is audited and stable
-
-When doing development:
-1. **After editing Electron files:** Rebuild with `npx vite build --config vite.config.electron.ts`
-2. **Python server:** Port 5001 (not 5000, AirPlay conflict)
-3. **New division operations:** Use epsilon floor pattern
-
----
-
-## QUICK START
-
-```bash
-# Start the app
-npm run electron:dev
-
-# Start Python server (in separate terminal)
-cd python && python3 server.py 5001
-
-# Verify data is accessible
-python3 -c "import duckdb; print(duckdb.query(\"SELECT COUNT(*) FROM read_parquet('/Volumes/VelocityData/velocity_om/massive/stocks/*.parquet')\").df())"
+```
+5 Claude × 5 Captains × 5 Supervisors × 50 Workers = 6,250 parallel workers
 ```
 
+### Communication
+
+- Workers → Supervisors (aggregate results)
+- Supervisors → Captains (synthesize findings)
+- Captains → Claude (report to coordinator)
+- Claude sessions → Fleet message bus (inter-Claude coordination)
+- Synthesis Claude → combines all findings → reports to Zach
+
+### Use Cases
+
+| Scenario | How Fleet Handles It |
+|----------|---------------------|
+| Scan all options | HUNTER deploys 6,250 workers across chains |
+| Validate trade thesis | ARBITER swarm attacks thesis from all angles |
+| Monitor live positions | GUARDIAN swarm tracks Greeks in parallel |
+| Learn from trades | ANALYST swarm runs micro-backtests on outcomes |
+| 3am opportunity | System takes MES trade autonomously, you wake to data |
+
+### Cost Estimate
+
+DeepSeek at $0.14/M input, $0.28/M output:
+- Full fleet scan (6,250 workers × 1500 tokens): ~$2-3
+- Can run hundreds of scans daily for <$100
+
+### Key Insight
+
+The constraint isn't compute or cost - it's **how much edge can you extract before you ARE the market?**
+
 ---
 
-## DOCUMENTATION LOCATIONS
+## FUTURES PIVOT PLAN
 
-| What | Where |
-|------|-------|
-| System state | This file (`HANDOFF.md`) |
-| Architecture decisions | `DECISIONS.md` |
-| Session work log | `python/SESSION_STATE.md` |
-| CIO knowledge base | Obsidian `~/ObsidianVault/Projects/quant-engine/` |
-| Feature patterns | Obsidian `08-Learnings/what-worked/epsilon-floor-pattern.md` |
-| Data status | Obsidian `03-Research/data-download-status-2025-12-03.md` |
+### Why Futures First
+
+| Options (current) | Futures (pivot target) |
+|-------------------|----------------------|
+| Strike selection | Just price |
+| Expiration mgmt | Roll 4x/year |
+| Greeks (δγθν...) | Linear P&L |
+| Vol surfaces | N/A |
+| Wide spreads | Tight spreads |
+| Complex backtesting | Simple backtesting |
+
+### Target Instruments
+
+**Primary:**
+- ES (E-mini S&P) - $50/point
+- MES (Micro E-mini) - $5/point (for testing)
+- NQ (E-mini NASDAQ)
+
+**Secondary:**
+- CL (Crude), GC (Gold), ZN (10yr Treasury)
+
+### Validation Path
+
+```
+1. Backtest on historical (Databento data)
+2. Forward test live (1 MES contract, $50 risk)
+3. Scale: 5 MES → 1 ES → 5 ES
+4. Add options overlay for vol harvesting
+```
+
+### Data Source
+
+- **Databento** - signed up, API key in .env
+- Need to fix symbol format (ES.FUT not working)
+- Target: 2015-2024 data for ES, NQ, MES, major futures
 
 ---
 
-**This file is the single source of truth. Keep it updated.**
+## Previous Session Context
+
+### Physics Engine Status
+- Feature modules hardened (88+ bugs fixed)
+- 56 tests passing
+- MTF Physics: 1,291 features across 4 timeframes
+- Scout/Math/Jury swarms operational
+
+### JARVIS UI Status
+- ✅ Complete pipeline wired
+- Observatory with Orchestration, Foundation, Journal tabs
+- MissionControl added for focus tracking
+
+### Factor Strategy Engine
+- Design complete (see `.claude/docs/FACTOR_STRATEGY_ENGINE.md`)
+- Key decision: Regimes don't work → Factor-based approach
+- Interleaved sampling: odd/even months 2020-2024
+
+---
+
+## For Next Session
+
+### If Continuing Fleet Build
+1. Zach is building autonomous Claude operation
+2. Build on `~/.claude/scripts/team_orchestrator.py` pattern
+3. Add layer for Claude→Claude coordination
+
+### If Continuing Futures Pivot
+1. Fix Databento symbology (check their docs for CME symbol format)
+2. Download ES/NQ historical data
+3. Build simple futures backtester
+4. Adapt existing features for futures (remove options-specific)
+
+### If Operating (Running Analysis)
+→ Go to `operator/CLAUDE.md` for commands
+
+---
+
+## Key Documents
+
+| Document | Purpose |
+|----------|---------|
+| `HANDOFF.md` | This file - session state |
+| `operator/CLAUDE.md` | How to operate/run things |
+| `.claude/CLAUDE.md` | Project config for building |
+| `~/.claude/scripts/team_orchestrator.py` | DeepSeek swarm pattern |
+
+---
+
+**Focus: Fleet Architecture + Futures. Options become advanced mode.**
