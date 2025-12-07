@@ -403,6 +403,346 @@ emit_ui_event(
 
 ---
 
+## FUTURES TRADING PIPELINE
+
+### Overview
+
+Production-grade futures trading system built for live trading via Interactive Brokers. Trades 15 contracts across equity indices, micros, energy, metals, treasuries, and currencies.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                FUTURES ENGINE ARCHITECTURE                   │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  FuturesDataLoader ──▶ FuturesFeatureEngine                 │
+│         │                     │                              │
+│         ▼                     ▼                              │
+│  Raw OHLCV Data      150 Features (pre-computed)            │
+│         │                     │                              │
+│         └────────┬────────────┘                              │
+│                  ▼                                           │
+│          SignalGenerator                                     │
+│                  │                                           │
+│                  ▼                                           │
+│       FuturesRiskManager ────▶ Position Sizing              │
+│                  │                                           │
+│                  ▼                                           │
+│       ┌──────────────────────┐                              │
+│       │   FuturesBacktester  │ ◀── Strategy Functions       │
+│       └──────────────────────┘                              │
+│                  │                                           │
+│                  ▼                                           │
+│       ┌──────────────────────┐                              │
+│       │   ExecutionEngine    │                              │
+│       │   ├── Backtest Mode  │                              │
+│       │   └── IB Live Mode   │ ──▶ Interactive Brokers      │
+│       └──────────────────────┘                              │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Quick Start
+
+```bash
+# Verify futures engine works
+cd /Users/zstoc/GitHub/quant-engine/python
+python3.11 scripts/test_futures_engine.py
+
+# Expected output:
+# 1. Data Loader: ~5,894 bars
+# 2. Feature Engine: 150 features
+# 3. Signal Generator: ~5,600 signals
+# 4. Risk Manager: Position sizing check
+# 5. Backtester: ~172 trades
+# 6. Execution Engine: Order fills
+# ALL TESTS PASSED ✓
+```
+
+### Futures Pipeline Commands
+
+```bash
+cd /Users/zstoc/GitHub/quant-engine/python
+
+# Step 1: Download data (ONLY IF NEEDED - already done)
+python scripts/download_futures_databento.py --symbols ES,MES,NQ --start 2015-01-01
+
+# Step 2: Pre-compute features (ONLY IF NEEDED - already done, 24GB)
+python scripts/precompute_futures_features.py --symbol ES
+
+# Step 3: Run test suite (DO THIS FIRST)
+python3.11 scripts/test_futures_engine.py
+
+# Step 4: Run custom backtest (example)
+python3.11 -c "
+from engine.futures import FuturesDataLoader, FuturesBacktester
+from engine.futures.backtester import BacktestConfig, Order, OrderSide, OrderType
+
+loader = FuturesDataLoader('/Volumes/VelocityData/velocity_om/futures')
+df = loader.load_symbol('ES', '1h', '2023-01-01', '2023-12-31')
+
+config = BacktestConfig(initial_capital=100000)
+bt = FuturesBacktester(config=config)
+
+def my_strategy(data, backtester):
+    # Your strategy logic here
+    pass
+
+results = bt.run(df, my_strategy, 'ES')
+print(results)
+"
+```
+
+### Futures Data Locations
+
+```
+/Volumes/VelocityData/velocity_om/futures/
+├── ES_1m.parquet     ← 3.5M rows (2015-2024)
+├── ES_1h.parquet     ← ~90K rows
+├── ES_1d.parquet     ← ~2,500 rows
+├── NQ_*.parquet      ← Same structure
+├── RTY_*.parquet
+├── YM_*.parquet
+├── MES_*.parquet     ← Micros
+├── MNQ_*.parquet
+├── CL_*.parquet      ← Energy
+├── NG_*.parquet
+├── GC_*.parquet      ← Metals
+├── SI_*.parquet
+├── ZB_*.parquet      ← Treasuries
+├── ZN_*.parquet
+├── ZF_*.parquet
+├── 6E_*.parquet      ← Currencies
+└── 6J_*.parquet
+
+/Volumes/VelocityData/velocity_om/futures_features/
+├── ES_1m_features.parquet  ← 150 features per file
+├── ES_1h_features.parquet  ← Total: 24GB pre-computed
+└── ... (45 files total)
+```
+
+### Futures Engine Modules
+
+| Module | Location | Purpose |
+|--------|----------|---------|
+| `FuturesDataLoader` | `python/engine/futures/data_loader.py` | Load multi-timeframe parquet data |
+| `FuturesFeatureEngine` | `python/engine/futures/feature_engine.py` | Generate 150 features |
+| `SignalGenerator` | `python/engine/futures/signal_generator.py` | Composite trading signals |
+| `FuturesRiskManager` | `python/engine/futures/risk_manager.py` | Position sizing, risk limits |
+| `FuturesBacktester` | `python/engine/futures/backtester.py` | Event-driven backtesting |
+| `ExecutionEngine` | `python/engine/futures/execution_engine.py` | Order execution (backtest/IB) |
+
+### Contract Specifications
+
+```python
+CONTRACT_SPECS = {
+    # Equity Index
+    'ES':  {'tick_size': 0.25, 'tick_value': 12.50, 'multiplier': 50},   # S&P 500
+    'NQ':  {'tick_size': 0.25, 'tick_value': 5.00,  'multiplier': 20},   # Nasdaq
+    'RTY': {'tick_size': 0.10, 'tick_value': 5.00,  'multiplier': 50},   # Russell
+    'YM':  {'tick_size': 1.00, 'tick_value': 5.00,  'multiplier': 5},    # Dow
+
+    # Micros (1/10 size - good for forward testing)
+    'MES': {'tick_size': 0.25, 'tick_value': 1.25, 'multiplier': 5},
+    'MNQ': {'tick_size': 0.25, 'tick_value': 0.50, 'multiplier': 2},
+
+    # Energy
+    'CL':  {'tick_size': 0.01, 'tick_value': 10.00, 'multiplier': 1000}, # Crude
+    'NG':  {'tick_size': 0.001, 'tick_value': 10.00, 'multiplier': 10000}, # Nat Gas
+
+    # Metals
+    'GC':  {'tick_size': 0.10, 'tick_value': 10.00, 'multiplier': 100},  # Gold
+    'SI':  {'tick_size': 0.005, 'tick_value': 25.00, 'multiplier': 5000}, # Silver
+
+    # Treasuries
+    'ZB':  {'tick_size': 0.03125, 'tick_value': 31.25, 'multiplier': 1000}, # 30Y
+    'ZN':  {'tick_size': 0.015625, 'tick_value': 15.625, 'multiplier': 1000}, # 10Y
+    'ZF':  {'tick_size': 0.0078125, 'tick_value': 7.8125, 'multiplier': 1000}, # 5Y
+
+    # Currencies
+    '6E':  {'tick_size': 0.00005, 'tick_value': 6.25, 'multiplier': 125000}, # Euro
+    '6J':  {'tick_size': 0.0000005, 'tick_value': 6.25, 'multiplier': 12500000}, # Yen
+}
+```
+
+### Risk Limits (Defaults)
+
+```python
+RiskLimits = {
+    # Position limits
+    'max_position_size': 10,          # Max contracts per position
+    'max_portfolio_exposure': 0.20,   # 20% of capital
+    'max_single_position_pct': 0.05,  # 5% of capital per position
+
+    # Loss limits
+    'max_daily_loss': 0.02,           # 2% daily stop
+    'max_weekly_loss': 0.05,          # 5% weekly stop
+    'max_drawdown': 0.10,             # 10% max drawdown
+
+    # Correlation limits
+    'max_correlated_exposure': 0.15,  # Max exposure to correlated positions
+
+    # Correlation groups
+    'equity_index': ['ES', 'NQ', 'RTY', 'YM', 'MES', 'MNQ'],
+    'energy': ['CL', 'NG'],
+    'metals': ['GC', 'SI'],
+    'bonds': ['ZN', 'ZB', 'ZF'],
+    'currencies': ['6E', '6J'],
+}
+```
+
+### Interactive Brokers Integration
+
+```python
+from engine.futures import ExecutionEngine, IBExecutionHandler
+
+# Paper trading
+handler = IBExecutionHandler(
+    host="127.0.0.1",
+    port=7497,      # ⚠️ PAPER TRADING PORT
+    client_id=1
+)
+engine = ExecutionEngine(handler=handler)
+await engine.connect()
+
+# Submit order
+order = await engine.submit_order(
+    symbol="MES",        # Use micros for testing
+    side=OrderSide.BUY,
+    quantity=1,
+    order_type=OrderType.LIMIT,
+    limit_price=5000.00
+)
+
+# EMERGENCY FLATTEN ALL
+await engine.kill_switch()
+```
+
+**⚠️ CRITICAL: IB Port Configuration**
+
+| Port | Purpose | DANGER LEVEL |
+|------|---------|--------------|
+| 7497 | TWS Paper Trading | Safe for testing |
+| 7496 | TWS **LIVE** Trading | ⚠️ REAL MONEY |
+| 4002 | IB Gateway Paper | Safe for testing |
+| 4001 | IB Gateway **LIVE** | ⚠️ REAL MONEY |
+
+**Connecting to wrong port = trading wrong account = real money at risk**
+
+### MES Risk Calculation (Forward Testing)
+
+```
+MES = $1.25 per tick ($5 per point)
+1 contract at SPX 6000 = ~$30K notional
+Margin required = ~$1,500
+10 point stop loss = $50 risk
+
+→ Negligible risk for forward testing real strategies
+```
+
+### ⚠️ CRITICAL WARNINGS
+
+1. **KILL SWITCH IS UNTESTED** - Test in paper trading before live
+2. **IB ports matter** - Wrong port = wrong account = real money
+3. **Databento symbology** - Use `ES.v.0` format, NOT bare `ES`
+4. **Commission bug was fixed** - Double-counting removed, but audit any changes
+5. **Daily loss includes unrealized** - Fixed, but verify if modifying
+
+### Bugs Found and Fixed (Audit History)
+
+| Bug | Impact | Status |
+|-----|--------|--------|
+| Commission double-counting | P&L error | ✅ Fixed |
+| RSI confirmation inverted | Wrong signals | ✅ Fixed |
+| Sortino ratio formula | Wrong risk metric | ✅ Fixed |
+| Margin ignored existing positions | Unlimited leverage | ✅ Fixed |
+| Daily loss ignored unrealized | Could exceed limit | ✅ Fixed |
+| Division by zero (7 locations) | Feature crashes | ✅ Fixed |
+
+### Databento Data Source
+
+```python
+# API key in .env
+DATABENTO_API_KEY=db-XXX
+
+# Symbology (CRITICAL - use continuous contracts)
+symbols = ["ES.v.0", "NQ.v.0", "MES.v.0"]  # .v.0 = front month
+stype_in = "continuous"
+dataset = "GLBX.MDP3"  # CME Globex
+
+# Data range available
+start = "2015-01-01"
+end = "2024-12-06"
+
+# Cost: $176.59 one-time for 10 years
+```
+
+### Strategy Development Pattern
+
+```python
+from engine.futures import FuturesDataLoader, FuturesBacktester
+from engine.futures.backtester import BacktestConfig, Order, OrderSide, OrderType
+
+# Strategy function signature
+def my_strategy(
+    current_data: pd.DataFrame,    # Historical data up to current bar
+    bt: FuturesBacktester          # Backtester for position access
+) -> Optional[Order]:
+    """
+    Args:
+        current_data: OHLCV data up to current bar (NO lookahead)
+        bt: Backtester instance for position queries
+
+    Returns:
+        Order to execute, or None
+    """
+    if len(current_data) < 20:
+        return None  # Not enough data
+
+    close = current_data['close'].iloc[-1]
+    sma = current_data['close'].rolling(20).mean().iloc[-1]
+
+    pos = bt.get_position("ES")
+
+    if close > sma * 1.001 and (pos is None or pos.side.value == "FLAT"):
+        return Order(
+            order_id=f"order_{bt._order_counter}",
+            symbol="ES",
+            side=OrderSide.BUY,
+            quantity=1,
+            order_type=OrderType.MARKET
+        )
+
+    return None
+
+# Run backtest
+loader = FuturesDataLoader('/Volumes/VelocityData/velocity_om/futures')
+df = loader.load_symbol('ES', '1h', '2023-01-01', '2023-12-31')
+
+config = BacktestConfig(initial_capital=100000, commission_per_contract=2.50)
+bt = FuturesBacktester(config=config)
+results = bt.run(df, my_strategy, 'ES')
+
+print(f"Total trades: {results['total_trades']}")
+print(f"Return: {results['total_return_pct']:.2f}%")
+print(f"Sharpe: {results['sharpe_ratio']:.2f}")
+print(f"Max DD: {results['max_drawdown_pct']:.2f}%")
+```
+
+### Futures vs Options Comparison
+
+| Aspect | Options | Futures |
+|--------|---------|---------|
+| Greeks | Delta, gamma, theta, vega, vanna, charm | None |
+| Structure selection | 18+ types (straddle, condor, etc.) | Long/short only |
+| Roll frequency | Weekly/monthly | Quarterly |
+| Leverage | Varies by strike | Fixed |
+| Bid/ask | Wide on illiquid strikes | Tight |
+| Complexity | High | Low |
+
+**Why futures was built:** "We should have built for futures first" - simpler, transfers swarm/JARVIS infrastructure 100%
+
+---
+
 ## FILE LOCATIONS QUICK REFERENCE
 
 | What | Where |
@@ -410,7 +750,10 @@ emit_ui_event(
 | Features | `python/engine/features/` |
 | Discovery | `python/engine/discovery/` |
 | Factors | `python/engine/factors/` |
+| **Futures** | `python/engine/futures/` |
 | Scripts | `python/scripts/` |
+| Futures Data | `/Volumes/VelocityData/velocity_om/futures/` |
+| Futures Features | `/Volumes/VelocityData/velocity_om/futures_features/` |
 | UI Bridge | `python/engine/ui_bridge.py` |
 | React Pages | `src/pages/` |
 | Components | `src/components/` |

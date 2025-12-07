@@ -1,7 +1,7 @@
 # Quant-Engine Operational Map
 
 **Last Updated:** 2025-12-07
-**Map Version:** 2.0
+**Map Version:** 2.1
 **Purpose:** Enable a Claude operator to fully understand and operate this system
 
 ---
@@ -32,6 +32,7 @@ Every component is documented at THREE layers:
 - **Debugging UI issues?** Section 5: JARVIS EVENT SYSTEM
 - **Understanding architecture?** Section 2: SYSTEM TERRAIN
 - **What agents exist?** Section 4: CLAUDE AGENTS
+- **Futures Trading?** Section 7, Runbook 7 + `REFERENCE_MANUAL.md` → FUTURES TRADING PIPELINE
 
 ---
 
@@ -630,177 +631,14 @@ StructureDNA system. What's the proper architecture?
 
 ## SECTION 5: JARVIS EVENT SYSTEM
 
-### How JARVIS Works
+**See:** `REFERENCE_MANUAL.md` → JARVIS UI EVENTS section
 
-```
-Claude Code (you) --- does the work
-        |
-        v emit events
-Python emit_ui_event() -> JSON file
-        |
-        v
-/tmp/claude-code-results/event_*.json
-        |
-        v
-ClaudeCodeResultWatcher (fs.watch)
-        |
-        v IPC 'jarvis-event'
-React useJarvisEvents() hook
-        |
-        v
-Components re-render
-```
+**Key files:**
+- Emitter: `python/engine/ui_bridge.py`
+- Watcher: `src/electron/ipc-handlers/claudeCodeResultWatcher.ts`
+- Hook: `src/hooks/useJarvisEvents.ts`
 
-### Key Files
-
-| Component | File | Responsibility |
-|-----------|------|----------------|
-| **Emitter** | `/Users/zstoc/GitHub/quant-engine/python/engine/ui_bridge.py` | Writes event JSON files |
-| **Watcher** | `/Users/zstoc/GitHub/quant-engine/src/electron/ipc-handlers/claudeCodeResultWatcher.ts` | Watches directory, sends IPC |
-| **Hook** | `/Users/zstoc/GitHub/quant-engine/src/hooks/useJarvisEvents.ts` | React hook, processes events |
-| **Context** | `/Users/zstoc/GitHub/quant-engine/src/contexts/VisualizationContext.tsx` | Manages active view |
-| **Types** | `/Users/zstoc/GitHub/quant-engine/src/types/jarvis.ts` | TypeScript interfaces |
-
-### Emitting Events from Python
-
-#### Basic Usage
-
-```python
-from engine.ui_bridge import emit_ui_event
-
-# Simple message
-emit_ui_event(
-    view="swarm",
-    message="Starting analysis swarm...",
-    activity_type="swarm_work"
-)
-
-# With progress bar
-emit_ui_event(
-    view="backtest",
-    message="Running backtest...",
-    activity_type="backtest",
-    progress=45
-)
-
-# With notification
-emit_ui_event(
-    view="default",
-    message="Analysis complete",
-    activity_type="discovery",
-    notification={
-        "type": "success",
-        "title": "Complete",
-        "message": "Found 3 high-probability setups"
-    }
-)
-```
-
-#### Convenience Functions (Preferred)
-
-```python
-from engine.ui_bridge import (
-    ui_swarm_started,
-    ui_swarm_progress,
-    ui_swarm_complete,
-    ui_backtest_started,
-    ui_backtest_progress,
-    ui_backtest_complete,
-    ui_gamma_analysis,
-    ui_regime_detected,
-    ui_discovery,
-    ui_error,
-    ui_table,
-    ui_pnl_chart,
-    ui_heatmap,
-    ui_candlestick,
-    ui_gauge,
-    ui_multi_gauge,
-    ui_waterfall,
-    ui_treemap,
-    ui_payoff,
-)
-
-# Swarm workflow
-ui_swarm_started(agent_count=100, objective="Find gamma anomalies")
-for i in range(100):
-    ui_swarm_progress(completed=i, total=100, current_task=f"Analyzing {symbol}")
-ui_swarm_complete("Found 12 anomalies across 5 symbols")
-
-# Backtest workflow
-ui_backtest_started("SPY", "gamma_scalp", "2024-01-01", "2024-12-31")
-# ... run backtest ...
-ui_backtest_complete(sharpe=1.85, total_return=0.234, max_dd=-0.12)
-```
-
-#### Visualization Functions
-
-```python
-# Data table
-ui_table(
-    title="Top Opportunities",
-    columns=[
-        {"key": "symbol", "label": "Symbol", "type": "string"},
-        {"key": "sharpe", "label": "Sharpe", "type": "number"},
-    ],
-    rows=[
-        {"symbol": "TSLA", "sharpe": 2.3},
-        {"symbol": "NVDA", "sharpe": 1.8}
-    ],
-    message="Scan complete"
-)
-
-# Equity curve
-ui_pnl_chart(
-    dates=["2024-01", "2024-02", "2024-03"],
-    equity_curve=[100, 102, 105],
-    symbol="My Strategy"
-)
-
-# Heatmap
-ui_heatmap(
-    title="Correlation Matrix",
-    x_labels=["SPY", "QQQ"],
-    y_labels=["SPY", "QQQ"],
-    values=[[1.0, 0.92], [0.92, 1.0]]
-)
-```
-
-### View Types
-
-| View | Use When | Activity Type |
-|------|----------|---------------|
-| `swarm` | Running AI swarms, parallel agents | `swarm_work` |
-| `backtest` | Running backtests, showing P&L | `backtest` |
-| `insight` | Displaying analysis, charts, findings | `gamma_analysis`, `regime_detection` |
-| `mission` | Task queue, orchestration | `swarm_work` |
-| `graduation` | Pipeline progress | `discovery` |
-| `integrity` | System health, errors | `idle` |
-| `default` | General findings, tables | `discovery`, `code_writing`, `data_loading` |
-
-### Troubleshooting JARVIS
-
-**Symptom:** Python script runs, no UI updates
-
-**Debug Steps:**
-```bash
-# 1. Check event files are being written
-ls -la /tmp/claude-code-results/
-
-# 2. Check file contents
-cat /tmp/claude-code-results/event_*.json | jq
-
-# 3. Check Electron console for watcher logs
-# Look for: [ClaudeCodeWatcher] Processing result file...
-
-# 4. Check React console for hook logs
-# Look for: [JARVIS] Received event...
-```
-
-**Common Fixes:**
-- Restart Electron app (file watcher may be stale)
-- Check `/tmp/claude-code-results/` permissions
-- Verify `RESULTS_DIR` matches in ui_bridge.py and watcher
+**Quick test:** `python scripts/demo_jarvis.py`
 
 ---
 
@@ -1091,6 +929,14 @@ cat scripts/reports/repair_*.json | jq .
 
 ---
 
+### Runbook 7: Futures Trading Pipeline
+
+**See:** `REFERENCE_MANUAL.md` → FUTURES TRADING PIPELINE section
+
+**Quick test:** `python3.11 scripts/test_futures_engine.py`
+
+---
+
 ## SECTION 8: STATUS BOARD
 
 ### Current Status (2025-12-07)
@@ -1104,8 +950,8 @@ cat scripts/reports/repair_*.json | jq .
 | **AI-Native Pipeline** | [VALIDATED] | 2025-12-05 | Full pipeline runs |
 | **Structure Discovery** | [EXPERIMENTAL] | 2025-12-05 | Results suspicious, needs validation |
 | **Factor Strategy Engine** | [IN_DEV] | 2025-12-06 | Design complete, implementation pending |
-| **Futures Engine** | [EXPERIMENTAL] | 2025-12-06 | Infrastructure exists, not validated |
-| **IBKR Client** | [EXPERIMENTAL] | 2025-12-06 | Code exists, needs TWS |
+| **Futures Engine** | [VALIDATED] | 2025-12-07 | All 6 modules tested, full runbook in REFERENCE_MANUAL.md |
+| **IBKR Client** | [EXPERIMENTAL] | 2025-12-07 | Code exists, kill switch UNTESTED |
 | **JARVIS UI** | [VALIDATED] | 2025-12-07 | Full pipeline wired and working |
 | **Electron IPC** | [VALIDATED] | 2025-12-07 | All handlers registered |
 | **Flask API** | [VALIDATED] | 2025-12-07 | Responds to health check |
@@ -1158,41 +1004,9 @@ cat scripts/reports/repair_*.json | jq .
 
 ## SECTION 10: DATA LOCATIONS
 
-### Raw Data
+**See:** `REFERENCE_MANUAL.md` → DATA LOCATIONS section
 
-| Data | Location | Size |
-|------|----------|------|
-| Options chain data | `/Volumes/VelocityData/velocity_om/massive/options/` | 394M rows |
-| Stock minute data | `/Volumes/VelocityData/velocity_om/massive/stocks/` | Multi-year |
-| VIX data | `/Volumes/VelocityData/velocity_om/massive/stocks/VXX/` | - |
-
-### Generated Features
-
-| Data | Location |
-|------|----------|
-| Cross-asset features | `/Volumes/VelocityData/velocity_om/features/cross_asset_features.parquet` |
-| Master features | `/Volumes/VelocityData/velocity_om/features/SPY_master_features.parquet` |
-| MTF physics | `/Volumes/VelocityData/velocity_om/features/SPY_mtf_physics.parquet` |
-| Options features | `/Volumes/VelocityData/velocity_om/massive/features/SPY_options_features.parquet` |
-
-### Discovery Outputs
-
-| Data | Location |
-|------|----------|
-| Scout results | `/Volumes/VelocityData/velocity_om/features/scout_swarm_results.json` |
-| Math results | `/Volumes/VelocityData/velocity_om/features/math_swarm_results.json` |
-| Jury results | `/Volumes/VelocityData/velocity_om/features/jury_swarm_results.json` |
-| Regime assignments | `/Volumes/VelocityData/velocity_om/features/regime_assignments.parquet` |
-| Payoff surfaces | `/Volumes/VelocityData/velocity_om/payoff_surfaces/` |
-| Discovered structures | `/Volumes/VelocityData/velocity_om/discovered_structures/` |
-
-### Runtime Files
-
-| Data | Location |
-|------|----------|
-| JARVIS event files | `/tmp/claude-code-results/` |
-| Electron logs | `~/Library/Logs/quant-chat-workbench/` |
-| Session state | `/Users/zstoc/GitHub/quant-engine/HANDOFF.md` |
+**Data root:** `/Volumes/VelocityData/velocity_om/`
 
 ---
 
@@ -1271,29 +1085,7 @@ Key packages:
 
 ## QUICK REFERENCE
 
-### Integration Cheat Sheet
-
-**Emit UI Event from Python:**
-```python
-from engine.ui_bridge import emit_ui_event
-emit_ui_event(view="swarm", message="Working...", progress=50)
-```
-
-**Subscribe to Events in React:**
-```typescript
-const { lastEvent, progress, currentActivity } = useJarvisEvents();
-```
-
-**Check System Health:**
-```bash
-# Python server
-curl http://localhost:5001/health
-
-# Event files
-ls /tmp/claude-code-results/
-
-# Electron console - look for [ClaudeCodeWatcher] and [JARVIS] logs
-```
+**See:** `REFERENCE_MANUAL.md` for commands and code snippets
 
 ### Critical Files
 
@@ -1301,21 +1093,13 @@ ls /tmp/claude-code-results/
 |---------|------|
 | Session state | `HANDOFF.md` |
 | This map | `operator/CLAUDE.md` |
-| System inventory | `operator/SYSTEM_INVENTORY.md` |
-| Runbooks | `operator/RUNBOOKS.md` |
+| Reference manual | `REFERENCE_MANUAL.md` |
 | Factor Strategy Design | `.claude/docs/FACTOR_STRATEGY_ENGINE.md` |
-| JARVIS bridge | `python/engine/ui_bridge.py` |
-| Event watcher | `src/electron/ipc-handlers/claudeCodeResultWatcher.ts` |
-| Event hook | `src/hooks/useJarvisEvents.ts` |
-| IPC types | `src/types/electron.d.ts` |
-| JARVIS types | `src/types/jarvis.ts` |
+| Futures archaeology | `operator/FUTURES_PIPELINE_ARCHAEOLOGY.md` |
 
 ---
 
 ## END OF OPERATIONAL MAP
 
-**Map Version:** 2.0
+**Map Version:** 2.1
 **Last Updated:** 2025-12-07
-**Cartographer:** system-cartographer agent
-
-**To update this map:** Invoke the `system-cartographer` agent or manually edit `/Users/zstoc/GitHub/quant-engine/operator/CLAUDE.md`
