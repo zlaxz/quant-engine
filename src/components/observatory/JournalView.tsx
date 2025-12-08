@@ -12,7 +12,7 @@
  * - Quick metrics summary
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
   Activity,
@@ -341,12 +341,18 @@ export function JournalView() {
   const [starredOnly, setStarredOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // FIX: Track request ID to prevent race conditions
+  const requestIdRef = useRef(0);
+
   // Fetch entries
   const fetchEntries = useCallback(async () => {
     if (!isSupabaseConfigured) {
       setLoading(false);
       return;
     }
+
+    // Increment request ID to track this request
+    const currentRequestId = ++requestIdRef.current;
 
     setLoading(true);
     try {
@@ -364,12 +370,25 @@ export function JournalView() {
       }
 
       const { data, error } = await query;
+
+      // FIX: Only update state if this is still the latest request
+      if (currentRequestId !== requestIdRef.current) {
+        console.log('[Journal] Ignoring stale response');
+        return;
+      }
+
       if (error) throw error;
       setEntries(data || []);
     } catch (err) {
-      console.error('[Journal] Failed to fetch entries:', err);
+      // Only log error if this is still the latest request
+      if (currentRequestId === requestIdRef.current) {
+        console.error('[Journal] Failed to fetch entries:', err);
+      }
     } finally {
-      setLoading(false);
+      // Only clear loading if this is still the latest request
+      if (currentRequestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [filter, starredOnly]);
 

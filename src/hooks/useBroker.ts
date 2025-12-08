@@ -1,6 +1,11 @@
 /**
  * useBroker Hook
  * React hook for broker connection and trading operations
+ *
+ * CRITICAL WARNING: This hook currently returns STUB DATA.
+ * DO NOT use for real trading until connected to actual broker API.
+ *
+ * TODO: Implement actual Electron IPC calls to broker service
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -12,6 +17,10 @@ import type {
   Quote,
   BrokerStatus,
 } from '@/services/broker';
+
+// CRITICAL: Flag indicating stub data is in use
+const IS_STUB_DATA = true;
+const STUB_DATA_WARNING = 'DEMO MODE: Using simulated data - NOT connected to real broker';
 
 interface UseBrokerOptions {
   autoConnect?: boolean;
@@ -40,6 +49,10 @@ interface UseBrokerReturn {
   isLoading: boolean;
   error: string | null;
 
+  // CRITICAL: Stub data indicators
+  isStubData: boolean;
+  stubDataWarning: string | null;
+
   // Refresh
   refresh: () => Promise<void>;
 }
@@ -65,15 +78,23 @@ export function useBroker(options: UseBrokerOptions = {}): UseBrokerReturn {
     setError(null);
 
     try {
+      // CRITICAL: Log warning when using stub data
+      if (IS_STUB_DATA) {
+        console.warn('[useBroker] ⚠️ STUB DATA MODE - NOT connected to real broker');
+        console.warn('[useBroker] All positions, account data, and trades are SIMULATED');
+      }
+
       // TODO: Implement actual broker connection via Electron IPC
       // For now, simulate connection
       await new Promise(resolve => setTimeout(resolve, 500));
 
       setStatus({
         connected: true,
-        broker: 'schwab',
-        accountId: 'demo-account',
+        broker: IS_STUB_DATA ? 'demo' : 'schwab',
+        accountId: IS_STUB_DATA ? 'DEMO-STUB-DATA' : 'demo-account',
         lastUpdate: new Date(),
+        // Add warning to status for UI consumption
+        ...(IS_STUB_DATA && { warning: STUB_DATA_WARNING }),
       });
 
       // Fetch initial data
@@ -263,6 +284,9 @@ export function useBroker(options: UseBrokerOptions = {}): UseBrokerReturn {
     getQuote,
     isLoading,
     error,
+    // CRITICAL: Always expose stub data status
+    isStubData: IS_STUB_DATA,
+    stubDataWarning: IS_STUB_DATA ? STUB_DATA_WARNING : null,
     refresh,
   };
 }

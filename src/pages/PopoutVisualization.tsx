@@ -21,6 +21,19 @@ import { GraduationTracker } from '@/components/dashboard/GraduationTracker';
 import { BacktestRunner } from '@/components/dashboard/BacktestRunner';
 import { SystemIntegrity } from '@/components/dashboard/SystemIntegrity';
 
+// Phase 5 Observatory components
+import { PnLDashboard } from '@/components/money/PnLDashboard';
+import { EquityCurve } from '@/components/money/EquityCurve';
+import { TradeLog } from '@/components/money/TradeLog';
+import { RiskMonitor } from '@/components/risk/RiskMonitor';
+import { StrategyLibrary } from '@/components/strategy/StrategyLibrary';
+import { StrategyDetail } from '@/components/strategy/StrategyDetail';
+import { PipelineMonitor } from '@/components/operations/PipelineMonitor';
+import { SwarmMonitor } from '@/components/operations/SwarmMonitor';
+import { BacktestMonitor } from '@/components/operations/BacktestMonitor';
+import { AlertCenter } from '@/components/alerts/AlertCenter';
+import { MissionControl } from '@/components/observatory/MissionControl';
+
 interface PopoutData {
   id: string;
   visualizationType: string;
@@ -106,6 +119,29 @@ export default function PopoutVisualization() {
         return <MetricsDashboard data={data} />;
       case 'code':
         return <CodeDisplay data={data} />;
+      // Phase 5 Observatory components
+      case 'pnl-dashboard':
+        return <PnLDashboard {...(data || {})} />;
+      case 'equity-curve':
+        return <EquityCurve {...(data || {})} />;
+      case 'trade-log':
+        return <TradeLog {...(data || {})} />;
+      case 'risk-monitor':
+        return <RiskMonitor {...(data || {})} />;
+      case 'strategy-library':
+        return <StrategyLibrary {...(data || {})} />;
+      case 'strategy-detail':
+        return <StrategyDetail {...(data || {})} />;
+      case 'pipeline-monitor':
+        return <PipelineMonitor {...(data || {})} />;
+      case 'swarm-monitor':
+        return <SwarmMonitor {...(data || {})} />;
+      case 'backtest-monitor':
+        return <BacktestMonitor {...(data || {})} />;
+      case 'alert-center':
+        return <AlertCenter {...(data || {})} />;
+      case 'mission-control':
+        return <MissionControl {...(data || {})} />;
       default:
         // Try to auto-detect from data
         if (data?.type && data?.data) {

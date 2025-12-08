@@ -19,6 +19,8 @@ import { isRunningInElectron } from './lib/electronClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { JarvisEventHandler } from '@/components/JarvisEventHandler';
+import { SafetyLayout } from '@/components/layout/SafetyLayout';
+import { PWAInstallBanner } from '@/components/pwa/PWAInstallBanner';
 
 // Lazy load popout pages for code splitting
 const PopoutVisualization = lazy(() => import('./pages/PopoutVisualization'));
@@ -83,24 +85,26 @@ const App = () => {
                 <Sonner />
                 <HashRouter>
                   <CommandPalette />
-                  <Routes>
-                    <Route path="/" element={<Launchpad />} />
-                    <Route path="/settings" element={<Settings />} />
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/terminal" element={<TradingTerminal />} />
-                    <Route path="/strategies" element={<Strategies />} />
-                    <Route path="/observatory" element={<Observatory />} />
-                    <Route
-                      path="/popout/:id"
-                      element={
-                        <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
-                          <PopoutVisualization />
-                        </Suspense>
-                      }
-                    />
-                    {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
+                  <SafetyLayout>
+                    <Routes>
+                      <Route path="/" element={<Launchpad />} />
+                      <Route path="/settings" element={<Settings />} />
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/terminal" element={<TradingTerminal />} />
+                      <Route path="/strategies" element={<Strategies />} />
+                      <Route path="/observatory" element={<Observatory />} />
+                      <Route
+                        path="/popout/:id"
+                        element={
+                          <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
+                            <PopoutVisualization />
+                          </Suspense>
+                        }
+                      />
+                      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </SafetyLayout>
                 </HashRouter>
 
                 {showFirstLaunch && (
@@ -109,6 +113,9 @@ const App = () => {
                     onComplete={handleFirstLaunchComplete}
                   />
                 )}
+
+                {/* PWA Install Banner - shows on mobile when installable */}
+                <PWAInstallBanner />
               </VisualizationProvider>
             </ResearchDisplayProvider>
           </TooltipProvider>

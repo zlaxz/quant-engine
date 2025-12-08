@@ -67,7 +67,7 @@ export function MissionControl() {
   // Load state from Supabase
   useEffect(() => {
     async function loadState() {
-      if (!isSupabaseConfigured()) {
+      if (!isSupabaseConfigured) {
         setLoading(false);
         return;
       }
@@ -101,7 +101,7 @@ export function MissionControl() {
 
   // Save state to Supabase
   const saveState = useCallback(async (newState: MissionState) => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured) return;
 
     try {
       await supabase
@@ -135,7 +135,6 @@ export function MissionControl() {
       ...state,
       ideas: [idea, ...state.ideas]
     };
-
     setState(newState);
     saveState(newState);
     setNewIdea('');

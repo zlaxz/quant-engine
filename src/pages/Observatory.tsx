@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useCallback } from 'react';
-import { Activity, Eye, Zap, BarChart3, RefreshCw, BookOpen } from 'lucide-react';
+import { Activity, Eye, Zap, BarChart3, RefreshCw, BookOpen, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,6 +25,12 @@ import { JournalView } from '@/components/observatory/JournalView';
 import { MissionControl } from '@/components/observatory/MissionControl';
 import { DynamicRenderer } from '@/components/visualizations/DynamicRenderer';
 import { useJarvisEvents } from '@/hooks/useJarvisEvents';
+
+// Phase 5: Operational Excellence components
+import { PipelineMonitor } from '@/components/operations/PipelineMonitor';
+import { SwarmMonitor } from '@/components/operations/SwarmMonitor';
+import { BacktestMonitor } from '@/components/operations/BacktestMonitor';
+import { PopoutButton } from '@/components/popout/PopoutButton';
 
 // ============================================================================
 // Main Component
@@ -254,6 +260,10 @@ export default function Observatory() {
               <BookOpen className="h-4 w-4" />
               Journal
             </TabsTrigger>
+            <TabsTrigger value="operations" className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4" />
+              Operations
+            </TabsTrigger>
           </TabsList>
 
           {/* Orchestrated View - Dynamic canvas + JARVIS visualizations */}
@@ -273,6 +283,45 @@ export default function Observatory() {
           {/* Journal View - Persistent record of activity */}
           <TabsContent value="journal" className="space-y-4">
             <JournalView />
+          </TabsContent>
+
+          {/* Operations View - Phase 5: Operational Excellence */}
+          <TabsContent value="operations" className="space-y-4">
+            {/* Top row: Pipeline and Swarm monitors with popout buttons */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="relative">
+                <div className="absolute top-2 right-2 z-10">
+                  <PopoutButton preset="pipelineMonitor" />
+                </div>
+                <PipelineMonitor
+                  currentTask={null}
+                  queue={[]}
+                  completions={[]}
+                  errors={[]}
+                  compact
+                />
+              </div>
+              <div className="relative">
+                <div className="absolute top-2 right-2 z-10">
+                  <PopoutButton preset="swarmMonitor" />
+                </div>
+                <SwarmMonitor
+                  agents={[]}
+                  compact
+                />
+              </div>
+            </div>
+
+            {/* Bottom: Backtest monitor */}
+            <div className="relative">
+              <div className="absolute top-2 right-2 z-10">
+                <PopoutButton preset="backtestMonitor" />
+              </div>
+              <BacktestMonitor
+                backtests={[]}
+                compact
+              />
+            </div>
           </TabsContent>
         </Tabs>
       </main>

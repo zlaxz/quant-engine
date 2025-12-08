@@ -10,7 +10,7 @@
  * - Daily P&L tracking (by account or aggregated)
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Wifi,
   WifiOff,
@@ -151,8 +151,8 @@ export function LiveTradingPanel({ className }: { className?: string }) {
   const [limitPrice, setLimitPrice] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Polling interval
-  const [pollInterval, setPollInterval] = useState<ReturnType<typeof setInterval> | null>(null);
+  // Polling interval - use ref to avoid stale closures
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Derived state
   const hasAnyConnected = accounts.some(a => a.connected);
@@ -498,23 +498,30 @@ export function LiveTradingPanel({ className }: { className?: string }) {
   }, [checkHealth, fetchAccounts]);
 
   // Start polling when any account is connected
+  // FIX: Use refs to avoid stale closure memory leak
   useEffect(() => {
-    if (hasAnyConnected && !pollInterval) {
-      const interval = setInterval(() => {
-        fetchAccounts(); // Keep account statuses fresh
+    // Clear any existing interval first
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
+    if (hasAnyConnected) {
+      pollIntervalRef.current = setInterval(() => {
+        fetchAccounts();
         fetchPositions();
         fetchDailyPnl();
       }, 2000);
-      setPollInterval(interval);
-    } else if (!hasAnyConnected && pollInterval) {
-      clearInterval(pollInterval);
-      setPollInterval(null);
     }
 
+    // Cleanup on unmount or when dependencies change
     return () => {
-      if (pollInterval) clearInterval(pollInterval);
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
     };
-  }, [hasAnyConnected, pollInterval, fetchAccounts, fetchPositions, fetchDailyPnl]);
+  }, [hasAnyConnected, fetchAccounts, fetchPositions, fetchDailyPnl]);
 
   // Listen for kill switch events
   useEffect(() => {

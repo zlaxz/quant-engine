@@ -4,3 +4,6 @@
  */
 
 export { AppHeader } from './AppHeader';
+export { SafetyLayout } from './SafetyLayout';
+export { MainLayout } from './MainLayout';
+export { SystemHealthBar } from '../header/SystemHealthBar';
