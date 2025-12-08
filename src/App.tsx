@@ -10,7 +10,7 @@ import { useEffect, useState, lazy, Suspense } from 'react';
 import Launchpad from "./pages/Launchpad";
 import Settings from "./pages/Settings";
 import Dashboard from "./pages/Dashboard";
-import TradingTerminal from "./pages/TradingTerminal";
+import Trading from "./pages/Trading";
 import Strategies from "./pages/Strategies";
 import Observatory from "./pages/Observatory";
 import NotFound from "./pages/NotFound";
@@ -90,7 +90,7 @@ const App = () => {
                       <Route path="/" element={<Launchpad />} />
                       <Route path="/settings" element={<Settings />} />
                       <Route path="/dashboard" element={<Dashboard />} />
-                      <Route path="/terminal" element={<TradingTerminal />} />
+                      <Route path="/terminal" element={<Trading />} />
                       <Route path="/strategies" element={<Strategies />} />
                       <Route path="/observatory" element={<Observatory />} />
                       <Route
